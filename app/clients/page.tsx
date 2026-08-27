@@ -4,10 +4,23 @@ import { ClientBrowser } from "@/components/client-browser";
 export default async function ClientsPage() {
   const supabase = await createClient();
 
-  const { data: clients, error } = await supabase
-    .from("clients")
-    .select("id, codename, username, member_code, points_balance")
-    .order("codename", { ascending: true });
+  const [{ data: clients, error }, { data: services }, { data: staff }] =
+    await Promise.all([
+      supabase
+        .from("clients")
+        .select("id, codename, username, member_code, points_balance")
+        .order("codename", { ascending: true }),
+      supabase
+        .from("services")
+        .select("id, name, price, points_earned")
+        .eq("active", true)
+        .order("name", { ascending: true }),
+      supabase
+        .from("staff")
+        .select("id, name, position")
+        .eq("active", true)
+        .order("name", { ascending: true }),
+    ]);
 
   return (
     <div className="p-8">
@@ -22,7 +35,11 @@ export default async function ClientsPage() {
           No clients yet.
         </div>
       ) : (
-        <ClientBrowser clients={clients} />
+        <ClientBrowser
+          clients={clients}
+          services={services ?? []}
+          staff={staff ?? []}
+        />
       )}
     </div>
   );
