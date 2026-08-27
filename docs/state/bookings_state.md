@@ -55,9 +55,7 @@
 
 ## Implemented (app level)
 
-**Correction, `ohm#8r3n6y1q` (2026-08-27)** — reverses part of the
-Bookings phase's (`ohm#9k4p7w2z`) original Squad Goals/Quick Walk-in
-scope below; not a new feature.
+**Correction, `ohm#5q9x2m4p` (2026-08-27)** — aligns `BookingFormModal` to full HTML mockup parity (following Squad Goals/Quick Walk-in correction `ohm#8r3n6y1q`).
 
 - `app/bookings/page.tsx` — server component, real (was an 8-line stub).
   Fetches clients (`id, codename, username`), active services, non-archived
@@ -66,27 +64,27 @@ scope below; not a new feature.
   live day-view list of active-status bookings for that date (client-side
   Supabase query, re-run on date change or after a create). "New Booking"
   and "Quick Walk-in" buttons open the two modals below.
-- `components/booking-form-modal.tsx` — **New Booking** form: client
-  search/select (registered clients only — same inline filter pattern as
-  Client Profile, not a shared component), service select (drives
-  duration), date, hourly slot picker (`lib/bookings/slots.ts` —
-  `SLOT_START_TIMES`, confirmed with the user: open 4:30 PM, hourly grid,
-  last call 1:00 AM as the final, shorter slot), therapist/room selects
-  that grey out (native `disabled` option, labeled "(booked)") any
-  resource whose existing active booking on that date overlaps the
-  selected slot + service duration — a UX layer only, not the source of
-  truth. **(Corrected, `ohm#8r3n6y1q`)** Squad Goals is no longer a
-  standalone checkbox/pax-stepper — it's selected via a Promo dropdown
-  (`Squad Goals 3pax`/`4pax`, plus the other active promos), hidden for
-  "Wet Area" (mirrors the mockup's massage-only promo visibility; no
-  `category`/`requires_therapist` column exists on `services`, so this is
-  a name check same as the therapist-conflict logic elsewhere). Selecting
-  a Squad Goals promo derives `pax_count` (3 or 4) at submit time — no
-  separate UI control, no schema change. A non-blocking amber warning
-  banner still shows when a Squad Goals promo is selected on a weekday
-  (same behavior as before, re-keyed off the promo instead of the
-  checkbox). Placeholder staff picker (`// TEMP: placeholder actor pending
-  Staff Auth phase`) sets `created_by`, same pattern as Core Loop.
+- `components/booking-form-modal.tsx` — **New Booking** form (updated to full
+  HTML mockup parity):
+  - Client selector dropdown (`<select id="bClient">`) with `— Walk-in / No account —`
+    at the top plus registered clients. When `__walkin__` is selected, reveals the
+    `Client Name (walk-in / no account)` free-text input field (`guest_label`).
+  - Service select (drives duration). When "Wet Area" is selected, therapist, promo,
+    time slot grid, custom time toggle, and room assignment fields are cleanly hidden.
+  - Therapist select (2-column row alongside Service).
+  - Promo dropdown (massage services only), supporting Squad Goals derivation (`squad3`→3,
+    `squad4`→4) and displaying the non-blocking amber weekday warning banner.
+  - Date input with past date validation check ("Cannot book a date in the past.").
+  - Interactive Time Slot Grid (`SLOT_START_TIMES` from `lib/bookings/slots.ts`)
+    with taken/conflicting slots struck through (`line-through opacity-50 cursor-not-allowed`)
+    and gold active selection state.
+  - "Use a custom time instead" checkbox toggle with time input and live therapist/room
+    availability summary text.
+  - Room & Assignment mode dropdowns (`Auto (recommended)` vs `Manual`), where Auto
+    automatically assigns the first free room from live conflict calculations.
+  - Placeholder staff picker (`// TEMP: placeholder actor pending Staff Auth phase`)
+    for audit tracking (`created_by`).
+  - Triggers SMS preview modal for registered clients upon creation; walk-ins complete directly.
 - `components/quick-walkin-modal.tsx` — **(Rebuilt, `ohm#8r3n6y1q`) Quick
   Walk-in**: full mockup parity, scoped to the mockup's `openQuickWalkin()`
   flow only (instant, one-step, no pre-existing booking) —
@@ -119,15 +117,15 @@ scope below; not a new feature.
   wired into this repo — this is a compose/preview + copy-to-clipboard
   step only, not a real send.
 - `app/bookings/actions.ts` — `createBooking(input)` server action for
-  **New Booking** (now also passes `promo_id` through, see correction
-  above), and (`ohm#8r3n6y1q`) a separate `quickWalkin(input)` server
-  action for **Quick Walk-in** that calls the `public.quick_walkin(...)`
-  RPC. Both parse Postgres `23P01` (exclusion violation) into a specific
-  "that room/therapist is already booked" message the same way;
-  `quickWalkin` additionally parses `23505` (unique violation) into a
-  locker- or room-occupancy conflict message. Any other error passes
-  through the raw Postgres message. Both revalidate `/bookings` and
-  `/dashboard` on success.
+  **New Booking** (now allows nullable `therapistId` and `roomNumber` for
+  services like Wet Area and passes `promo_id`/`pax_count`), and
+  (`ohm#8r3n6y1q`) `quickWalkin(input)` server action for **Quick Walk-in**
+  that calls the `public.quick_walkin(...)` RPC. Both parse Postgres
+  `23P01` (exclusion violation) into a specific "that room/therapist is
+  already booked" message the same way; `quickWalkin` additionally parses
+  `23505` (unique violation) into a locker- or room-occupancy conflict
+  message. Any other error passes through the raw Postgres message. Both
+  revalidate `/bookings` and `/dashboard` on success.
 
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 

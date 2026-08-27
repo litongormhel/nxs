@@ -10,8 +10,8 @@ export type CreateBookingInput = {
   clientId: string | null;
   guestLabel: string | null;
   serviceId: string;
-  therapistId: string;
-  roomNumber: number;
+  therapistId: string | null;
+  roomNumber: number | null;
   bookingDate: string; // YYYY-MM-DD
   startTime: string; // HH:MM
   status: BookingStatus;

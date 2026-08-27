@@ -5,6 +5,32 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Correction (`ohm#5q9x2m4p`) — New Booking Modal Full Mockup Parity** —
+  **complete** as of 2026-08-27. Explicitly corrects part of the Bookings
+  phase's (`ohm#9k4p7w2z`) original New Booking modal scope (which followed
+  the Squad Goals/Quick Walk-in correction `ohm#8r3n6y1q`) to match the HTML
+  mockup (`#bookingModalScrim`):
+  - **Client selection**: Replaced inline search with the mockup's dropdown
+    select (`<select id="bClient">` with `— Walk-in / No account —` at top and
+    registered clients) plus a conditional `Client Name (walk-in / no account)`
+    text input shown when walk-in is selected.
+  - **Service & Therapist**: Organized into a 2-column row, with Therapist
+    cleanly hidden when "Wet Area" is selected.
+  - **Promo dropdown**: Positioned below Service/Therapist (hidden for Wet Area),
+    preserving Squad Goals promo derivation and the weekday soft-warning banner.
+  - **Date validation**: Enforces past-date validation ("Cannot book a date in the past.").
+  - **Time Slot Grid & Custom Time**: Interactive time slot grid with taken/conflicting
+    slots struck through (`line-through opacity-50 cursor-not-allowed`) and gold
+    active selection state; "Use a custom time instead" toggle with time input
+    and live therapist/room availability hint.
+  - **Room & Assignment Mode**: Room selector paired with `Assignment` mode
+    (`Auto (recommended)` vs `Manual`), where Auto automatically selects the
+    first available room from live conflict calculations.
+  - **Server Actions**: `CreateBookingInput` updated in `app/bookings/actions.ts`
+    to allow `therapistId: string | null` and `roomNumber: number | null`
+    for non-therapist services like Wet Area.
+  - **SMS Preview**: Re-verified that creating a booking for a registered client
+    opens the SMS preview modal, while walk-in guest bookings complete directly.
 - **Correction (`ohm#8r3n6y1q`) — Squad Goals via Promo Dropdown + Quick
   Walk-in Full Mockup Parity** — **complete** as of 2026-08-27. This
   explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`)

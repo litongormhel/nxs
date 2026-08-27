@@ -87,7 +87,24 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-27 — Correction: Squad Goals via Promo Dropdown + Quick Walk-in
+1. **2026-08-27 — Correction: New Booking Modal Full Mockup Parity** (`ohm#5q9x2m4p`).
+   Explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`) original
+   New Booking modal scope to achieve full HTML mockup parity.
+   **Client selection**: replaced inline search with the mockup's dropdown select
+   (`— Walk-in / No account —` + registered clients) with conditional guest name
+   input field for walk-ins without accounts.
+   **Layout**: organized into 2-column Service & Therapist row (therapist hidden
+   for Wet Area), Promo dropdown below (massage-only, with Squad Goals derivation
+   and weekday soft warning banner), and Date picker with past date validation
+   ("Cannot book a date in the past.").
+   **Time & Rooms**: implemented visual Time Slot Grid with struck-through
+   disabled styling for conflicting slots (`taken`) and gold active selection,
+   "Use a custom time instead" toggle with live availability indicator, and
+   Room & Assignment Mode (`Auto (recommended)` vs `Manual`) row with auto-selection
+   of free rooms.
+   **Submission**: allows nullable therapist and room for Wet Area bookings;
+   triggers SMS preview modal for registered clients upon creation.
+2. **2026-08-27 — Correction: Squad Goals via Promo Dropdown + Quick Walk-in
    Full Mockup Parity** (`ohm#8r3n6y1q`). Explicitly corrects part of the
    Bookings phase's (`ohm#9k4p7w2z`) original scope — this reverses that
    phase's Squad Goals checkbox/pax-stepper decision, not a new feature.
@@ -133,7 +150,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Walk-in for Wet Area (fields correctly hidden, no therapist/room) — all
    three confirmed via direct DB read, then cleaned up. Regression-checked:
    New Booking's conflict-greying and SMS preview still work.
-2. **2026-08-27 — Version-Controlled Migration Files: retroactive baseline +
+3. **2026-08-27 — Version-Controlled Migration Files: retroactive baseline +
    going-forward convention** (`ohm#2m6x9j5f`). Closed the gap flagged
    across Core Loop, Bookings, and the original schema audit: no migration
    files existed anywhere, so all DB-layer changes lived only in Supabase
@@ -155,7 +172,7 @@ Full invariant list: [[nxs-architecture-locks]].
    every DB change now ships its own migration file in the same commit as
    the dependent app code, and this is a standing Approval & Regression
    Gate check going forward.
-3. **2026-08-27 — Bookings Phase: New Booking form, 90-min overlap engine,
+4. **2026-08-27 — Bookings Phase: New Booking form, 90-min overlap engine,
    Quick Walk-in** (`ohm#9k4p7w2z`). Plan + regression assessment presented
    and approved before any code, per the prompt's mandatory gate; four open
    architectural questions (Quick Walk-in write path, operating hours/slot
@@ -182,7 +199,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Verified live in a browser: New Booking with SMS preview, a forced
    double-booking showing the specific conflict error, and Quick Walk-in —
    plus regression-checked Dashboard and Client Profile/Log Visit.
-4. **2026-08-27 — Core Loop: Client Profile Actions, Points Ledger, Log
+5. **2026-08-27 — Core Loop: Client Profile Actions, Points Ledger, Log
    Visit Modal** (`ohm#7f3k9d2m`). Plan presented and approved before any
    code, per the prompt's mandatory gate. Added `public.log_visit(...)`
    (atomic ledger + optional sale + action log insert in one transaction),
@@ -194,10 +211,3 @@ Full invariant list: [[nxs-architecture-locks]].
    redemption, insufficient-balance guard, redemption-with-upgrade,
    immutability) before writing app code, then re-verified live through the
    real UI in a browser. Staff Auth still deferred; not a regression.
-5. **2026-08-27 — Bootstrap shared context doc system** (`ohm#3q8n5t1x`).
-   Created `.ai/` + `docs/state/` + `docs/architecture/` doc scaffold by
-   reading the live Supabase schema (migrations, constraints, triggers, RLS
-   policies) and the actual Next.js app tree, rather than assuming prior
-   OHMployee-pattern content. Found and corrected one assumption in the
-   original prompt (RLS is enabled + mostly closed, not "open"). No app code,
-   schema, or migrations touched.
