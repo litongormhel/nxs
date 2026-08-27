@@ -17,6 +17,8 @@ export type Service = {
 };
 export type Therapist = { id: string; name: string };
 export type Staff = { id: string; name: string; position: string };
+export type Promo = { id: string; label: string; discount: number };
+export type Addon = { id: string; name: string; price: number };
 
 type BookingRow = {
   id: string;
@@ -47,12 +49,18 @@ export function BookingBrowser({
   therapists,
   rooms,
   staff,
+  promos,
+  addons,
+  lockers,
 }: {
   clients: Client[];
   services: Service[];
   therapists: Therapist[];
   rooms: number[];
   staff: Staff[];
+  promos: Promo[];
+  addons: Addon[];
+  lockers: number[];
 }) {
   const router = useRouter();
   const [date, setDate] = useState(todayIso());
@@ -173,6 +181,7 @@ export function BookingBrowser({
           therapists={therapists}
           rooms={rooms}
           staff={staff}
+          promos={promos}
           defaultDate={date}
           onClose={() => setShowNewBooking(false)}
           onCreated={() => {
@@ -190,6 +199,9 @@ export function BookingBrowser({
           therapists={therapists}
           rooms={rooms}
           staff={staff}
+          promos={promos}
+          addons={addons}
+          lockers={lockers}
           onClose={() => setShowWalkin(false)}
           onCreated={() => {
             setShowWalkin(false);

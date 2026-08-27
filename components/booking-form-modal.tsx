@@ -5,8 +5,17 @@ import { createClient } from "@/lib/supabase/client";
 import { createBooking } from "@/app/bookings/actions";
 import { SLOT_START_TIMES, slotsOverlap } from "@/lib/bookings/slots";
 import { SmsPreviewModal } from "@/components/sms-preview-modal";
-import type { Client, Service, Staff, Therapist } from "@/components/booking-browser";
+import type { Client, Promo, Service, Staff, Therapist } from "@/components/booking-browser";
 import type { Database } from "@/lib/types/database";
+
+const SQUAD_PAX_PATTERN = /^Squad Goals (\d)pax$/i;
+
+function squadPaxFromPromo(promo: Promo | undefined): 3 | 4 | null {
+  const match = promo?.label.match(SQUAD_PAX_PATTERN);
+  if (!match) return null;
+  const pax = Number(match[1]);
+  return pax === 3 || pax === 4 ? pax : null;
+}
 
 type ConflictRow = {
   therapist_id: string | null;
@@ -31,6 +40,7 @@ export function BookingFormModal({
   therapists,
   rooms,
   staff,
+  promos,
   defaultDate,
   onClose,
   onCreated,
@@ -40,6 +50,7 @@ export function BookingFormModal({
   therapists: Therapist[];
   rooms: number[];
   staff: Staff[];
+  promos: Promo[];
   defaultDate: string;
   onClose: () => void;
   onCreated: () => void;
@@ -51,8 +62,7 @@ export function BookingFormModal({
   const [roomNumber, setRoomNumber] = useState<number | null>(rooms[0] ?? null);
   const [date, setDate] = useState(defaultDate);
   const [startTime, setStartTime] = useState(SLOT_START_TIMES[0]);
-  const [isGroupBooking, setIsGroupBooking] = useState(false);
-  const [paxCount, setPaxCount] = useState<3 | 4>(3);
+  const [promoId, setPromoId] = useState<string>("none");
   const [staffId, setStaffId] = useState(staff[0]?.id ?? "");
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +87,9 @@ export function BookingFormModal({
 
   const selectedService = services.find((s) => s.id === serviceId);
   const duration = selectedService?.duration_minutes ?? 0;
+  const isMassageService = selectedService?.name !== "Wet Area";
+  const selectedPromo = promos.find((p) => p.id === promoId);
+  const squadPax = isMassageService ? squadPaxFromPromo(selectedPromo) : null;
 
   const conflictingTherapists = useMemo(() => {
     const taken = new Set<string>();
@@ -134,7 +147,8 @@ export function BookingFormModal({
         bookingDate: date,
         startTime,
         status: "Booked",
-        paxCount: isGroupBooking ? paxCount : null,
+        paxCount: squadPax,
+        promoId: promoId === "none" ? null : promoId,
         createdBy: staffId,
       });
 
@@ -224,7 +238,12 @@ export function BookingFormModal({
               <select
                 id="service"
                 value={serviceId}
-                onChange={(e) => setServiceId(e.target.value)}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  setServiceId(nextId);
+                  const nextService = services.find((s) => s.id === nextId);
+                  if (nextService?.name === "Wet Area") setPromoId("none");
+                }}
                 className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
               >
                 {services.map((s) => (
@@ -307,32 +326,28 @@ export function BookingFormModal({
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={isGroupBooking}
-              onChange={(e) => setIsGroupBooking(e.target.checked)}
-            />
-            Squad Goals (group booking)
-          </label>
-
-          {isGroupBooking && (
+          {isMassageService && (
             <div>
-              <label className="text-xs text-muted" htmlFor="pax">
-                Pax
+              <label className="text-xs text-muted" htmlFor="promo">
+                Promo <span className="opacity-70">(optional — massage services only)</span>
               </label>
               <select
-                id="pax"
-                value={paxCount}
-                onChange={(e) => setPaxCount(Number(e.target.value) as 3 | 4)}
+                id="promo"
+                value={promoId}
+                onChange={(e) => setPromoId(e.target.value)}
                 className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
               >
-                <option value={3}>3</option>
-                <option value={4}>4</option>
+                <option value="none">No Promo</option>
+                {promos.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label} (−₱{p.discount})
+                  </option>
+                ))}
               </select>
-              {isWeekday && (
+              {squadPax != null && isWeekday && (
                 <p className="mt-2 rounded-md border border-amber-800 bg-amber-950/30 px-3 py-2 text-xs text-amber-300">
-                  Squad Goals booked on a weekday — heads up, not blocked.
+                  Squad Goals is normally weekend-only. This booking will still save — just
+                  confirm the discount with the client before applying it.
                 </p>
               )}
             </div>

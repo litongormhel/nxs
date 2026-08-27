@@ -945,6 +945,31 @@ export type Database = {
           sale_id: string
         }[]
       }
+      quick_walkin: {
+        Args: {
+          p_addon_ids: string[] | null
+          p_amount: number
+          p_booking_date: string
+          p_client_id: string | null
+          p_guest_label: string | null
+          p_locker_number: number
+          p_manual_discount_type: string | null
+          p_manual_discount_value: number | null
+          p_payment_method: string
+          p_payment_ref: string | null
+          p_promo_id: string | null
+          p_room_number: number | null
+          p_service_id: string
+          p_staff_id: string
+          p_start_time: string
+          p_therapist_id: string | null
+        }
+        Returns: {
+          booking_id: string
+          ledger_id: string
+          sale_id: string
+        }[]
+      }
     }
     Enums: {
       booking_status:

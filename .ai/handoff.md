@@ -5,6 +5,80 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Correction (`ohm#8r3n6y1q`) — Squad Goals via Promo Dropdown + Quick
+  Walk-in Full Mockup Parity** — **complete** as of 2026-08-27. This
+  explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`)
+  original scope, not a new feature: reverses that phase's Squad Goals
+  checkbox/pax-stepper decision. Plan (including the "which Quick Walk-in
+  flow is in scope" design question) was presented and approved before any
+  code, per the prompt's mandatory gate. The mockup file the prompt cited
+  didn't match on first check — the only `nxs-spa-portal.html` findable
+  on disk had no Quick Walk-in modal at all and a different Squad Goals
+  UI; flagged to the user and blocked until they supplied the correct
+  file, rather than guessing from the prompt's text alone.
+  - **Squad Goals**: removed the standalone checkbox/pax-stepper from
+    `components/booking-form-modal.tsx`. Squad Goals is now selected via
+    the Promo dropdown (`Squad Goals 3pax`/`4pax`, already present in the
+    live `promos` table at −₱150/−₱200 — no promo data change needed),
+    hidden for non-massage services (Wet Area) same as the mockup.
+    `pax_count` is derived app-side from the selected promo's label
+    (`squad3`→3, `squad4`→4, else `null`) at submit time — the existing
+    `pax_count` check constraint (3 or 4) needed no schema change or
+    rollback. The weekday soft-warning banner is preserved, now keyed off
+    "Squad Goals promo selected + weekday" instead of the old checkbox.
+  - **Quick Walk-in**: `components/quick-walkin-modal.tsx` rebuilt to full
+    mockup parity — client search with guest-name fallback (one modal, not
+    a two-toggle split), conditional therapist/room (hidden for Wet Area),
+    time-slot grid + "use a custom time instead" toggle (reusing
+    `lib/bookings/slots.ts`, not duplicated), room auto-suggested from a
+    live same-day conflict query, locker assignment (required), promo
+    (mutually exclusive with manual discount — selecting one disables the
+    other), manual discount (pct/fixed), add-ons (multi-select), an
+    auto-computed read-only Amount Paid field, Payment Method, and a GCash
+    reference field shown only for GCash. Scoped to the mockup's
+    `openQuickWalkin()` flow only — `completeWalkinBooking()` ("Complete
+    Walk-in Visit," for converting an existing `Booked` row) was
+    explicitly excluded and confirmed with the user before building: it
+    depends on the booking-status-transition `UPDATE` path the Bookings
+    phase deliberately left unopened, and building it here would silently
+    reopen that gate as a side effect.
+  - **DB change** (own migration file,
+    `supabase/migrations/20260827133448_quick_walkin_promo_rls.sql`,
+    smoke-tested via a rolled-back transaction — registered-client walk-in
+    with promo+addon, guest walk-in with manual discount, and confirming
+    the GiST exclusion constraint still fires through the new path — before
+    applying for real): narrow additive `anon` SELECT policies on
+    `promos`/`addons`/`locker_occupancy` and INSERT policies on
+    `locker_occupancy`/`sale_addons`; new `public.quick_walkin(...)`
+    function modeled directly on `log_visit()`'s atomic-transaction
+    pattern (not `SECURITY DEFINER` — reachable via the same anon
+    INSERT-policy shape already granted) that writes booking (status
+    `Completed`) + sale + optional `sale_addons` + optional points-ledger
+    EARN entry (only when a registered client was found — guests get no
+    ledger entry) + `locker_occupancy` + `action_logs`, all in one
+    transaction. `app/bookings/actions.ts` gained a `quickWalkin()` server
+    action calling this RPC, parsing the same `23P01` exclusion-violation
+    cases as `createBooking` plus a new `23505` case for locker/room
+    occupancy conflicts. No change to `bookings.pax_count` or its check
+    constraint.
+  - Regenerated `lib/types/database.ts` from the live schema after
+    applying the migration (new `quick_walkin` RPC + updated table types);
+    hand-adjusted the generated `quick_walkin` `Args` type to mark the
+    genuinely-nullable parameters `| null` since Supabase's codegen
+    doesn't infer that from a plain (non-`default`) SQL parameter.
+  - Verified live in a browser (not just typecheck — `npx tsc --noEmit`
+    passes clean): a Squad Goals promo booking on today's (weekday) date
+    showed the warning banner and saved with correct `pax_count`/
+    `promo_id`; a Quick Walk-in for a massage service exercised
+    therapist/room conflict-greying, an add-on, a promo, and locker
+    assignment, with the amount auto-computing correctly at each step; a
+    Quick Walk-in for Wet Area correctly hid therapist/room/promo and
+    booked with `therapist_id`/`room_number` both `null`. All three
+    confirmed by reading the actual `bookings`/`sales`/`sale_addons`/
+    `locker_occupancy`/`action_logs` rows directly, then the test rows
+    were cleaned up from the live DB. Regression-checked and confirmed
+    intact: New Booking's therapist/room conflict-greying and the SMS
+    preview step for registered-client bookings.
 - **Migration files (`ohm#2m6x9j5f`) — retroactive baseline + going-forward
   convention** — **complete** as of 2026-08-27. Tooling decision (Supabase
   CLI installed but project not CLI-linked here, no `supabase/` directory)

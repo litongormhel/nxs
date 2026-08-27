@@ -87,7 +87,53 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-27 — Version-Controlled Migration Files: retroactive baseline +
+1. **2026-08-27 — Correction: Squad Goals via Promo Dropdown + Quick Walk-in
+   Full Mockup Parity** (`ohm#8r3n6y1q`). Explicitly corrects part of the
+   Bookings phase's (`ohm#9k4p7w2z`) original scope — this reverses that
+   phase's Squad Goals checkbox/pax-stepper decision, not a new feature.
+   Plan (including which Quick Walk-in flow is in scope) presented and
+   approved before any code, per the prompt's mandatory gate. The mockup
+   the prompt cited (`nxs-spa-portal.html`) didn't match — the only copy
+   findable on disk had no Quick Walk-in modal at all; flagged and blocked
+   until the user supplied the correct file. **Squad Goals**: removed the
+   checkbox/pax-stepper from New Booking; Squad Goals is now selected via
+   the existing Promo dropdown (`Squad Goals 3pax`/`4pax`, already seeded
+   in the live `promos` table at −₱150/−₱200 — no promo data change
+   needed). `pax_count` is derived app-side from the selected promo label
+   at submit time, so the existing `pax_count` check constraint (3 or 4)
+   needed no schema change. The weekday soft-warning banner is preserved,
+   now triggered by "Squad Goals promo selected + weekday" instead of the
+   checkbox. **Quick Walk-in**: rebuilt to full mockup parity — client
+   search with guest-name fallback, conditional therapist/room (hidden for
+   Wet Area), time-slot grid + custom-time toggle (reusing
+   `lib/bookings/slots.ts`), room auto-suggested from live conflicts,
+   locker assignment, promo (mutually exclusive with manual discount),
+   add-ons, auto-computed read-only Amount Paid, Payment Method, and a
+   GCash reference field. Scoped to the mockup's `openQuickWalkin()` flow
+   only — `completeWalkinBooking()` ("Complete Walk-in Visit," converting
+   an existing `Booked` row) was explicitly excluded since it depends on
+   the booking-status-transition UPDATE path the Bookings phase
+   deliberately left unbuilt; confirmed with the user before scoping.
+   **DB**: one new migration
+   (`supabase/migrations/20260827133448_quick_walkin_promo_rls.sql`),
+   smoke-tested via a rolled-back transaction (registered + guest walk-in,
+   addon, ledger-only-for-registered, and the GiST exclusion constraint
+   still firing through the new path) before applying for real. Adds
+   narrow anon SELECT policies on `promos`/`addons`/`locker_occupancy` and
+   INSERT policies on `locker_occupancy`/`sale_addons`, plus a new
+   `public.quick_walkin(...)` function modeled directly on
+   `log_visit()`'s atomic-transaction pattern (not `SECURITY DEFINER` —
+   reachable via the same anon INSERT-policy shape) that writes booking +
+   sale + optional sale_addons + optional ledger entry (registered clients
+   only) + locker_occupancy + action_log in one transaction. No change to
+   `bookings.pax_count` or its check constraint. Verified live in a
+   browser: Squad Goals promo booking (weekday warning, correct
+   `pax_count`/`promo_id`), Quick Walk-in for a massage service
+   (therapist/room conflict-greying, addon, promo, locker), and Quick
+   Walk-in for Wet Area (fields correctly hidden, no therapist/room) — all
+   three confirmed via direct DB read, then cleaned up. Regression-checked:
+   New Booking's conflict-greying and SMS preview still work.
+2. **2026-08-27 — Version-Controlled Migration Files: retroactive baseline +
    going-forward convention** (`ohm#2m6x9j5f`). Closed the gap flagged
    across Core Loop, Bookings, and the original schema audit: no migration
    files existed anywhere, so all DB-layer changes lived only in Supabase
@@ -109,7 +155,7 @@ Full invariant list: [[nxs-architecture-locks]].
    every DB change now ships its own migration file in the same commit as
    the dependent app code, and this is a standing Approval & Regression
    Gate check going forward.
-2. **2026-08-27 — Bookings Phase: New Booking form, 90-min overlap engine,
+3. **2026-08-27 — Bookings Phase: New Booking form, 90-min overlap engine,
    Quick Walk-in** (`ohm#9k4p7w2z`). Plan + regression assessment presented
    and approved before any code, per the prompt's mandatory gate; four open
    architectural questions (Quick Walk-in write path, operating hours/slot
@@ -136,7 +182,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Verified live in a browser: New Booking with SMS preview, a forced
    double-booking showing the specific conflict error, and Quick Walk-in —
    plus regression-checked Dashboard and Client Profile/Log Visit.
-3. **2026-08-27 — Core Loop: Client Profile Actions, Points Ledger, Log
+4. **2026-08-27 — Core Loop: Client Profile Actions, Points Ledger, Log
    Visit Modal** (`ohm#7f3k9d2m`). Plan presented and approved before any
    code, per the prompt's mandatory gate. Added `public.log_visit(...)`
    (atomic ledger + optional sale + action log insert in one transaction),
@@ -148,7 +194,7 @@ Full invariant list: [[nxs-architecture-locks]].
    redemption, insufficient-balance guard, redemption-with-upgrade,
    immutability) before writing app code, then re-verified live through the
    real UI in a browser. Staff Auth still deferred; not a regression.
-4. **2026-08-27 — Bootstrap shared context doc system** (`ohm#3q8n5t1x`).
+5. **2026-08-27 — Bootstrap shared context doc system** (`ohm#3q8n5t1x`).
    Created `.ai/` + `docs/state/` + `docs/architecture/` doc scaffold by
    reading the live Supabase schema (migrations, constraints, triggers, RLS
    policies) and the actual Next.js app tree, rather than assuming prior

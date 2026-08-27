@@ -10,6 +10,9 @@ export default async function BookingsPage() {
     { data: therapists },
     { data: rooms },
     { data: staff },
+    { data: promos },
+    { data: addons },
+    { data: lockers },
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -35,6 +38,21 @@ export default async function BookingsPage() {
       .select("id, name, position")
       .eq("active", true)
       .order("name", { ascending: true }),
+    supabase
+      .from("promos")
+      .select("id, label, discount")
+      .eq("active", true)
+      .order("label", { ascending: true }),
+    supabase
+      .from("addons")
+      .select("id, name, price")
+      .eq("active", true)
+      .order("name", { ascending: true }),
+    supabase
+      .from("lockers")
+      .select("number")
+      .eq("active", true)
+      .order("number", { ascending: true }),
   ]);
 
   return (
@@ -52,6 +70,9 @@ export default async function BookingsPage() {
           therapists={therapists ?? []}
           rooms={(rooms ?? []).map((r) => r.number)}
           staff={staff ?? []}
+          promos={promos ?? []}
+          addons={addons ?? []}
+          lockers={(lockers ?? []).map((l) => l.number)}
         />
       )}
     </div>
