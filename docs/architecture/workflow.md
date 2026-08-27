@@ -35,3 +35,24 @@ any of the following are true:
 When none of the above apply — new stub pages, new `docs/state/` content,
 additive read-only features on already-stub routes — proceed without
 stopping.
+
+## Migration Files (mandatory going forward)
+
+Starting from the retroactive baseline (`ohm#2m6x9j5f`,
+`supabase/migrations/20260827130641_baseline_snapshot.sql`), every DB-layer
+change — schema, RLS, triggers, functions — ships as its own migration file
+in `supabase/migrations/`, committed in the **same commit** as the app code
+that depends on it. Applying a change live-only and writing the migration
+file after the fact is not acceptable, even for a "quick" additive column
+or policy.
+
+This is now a standing check in the Approval & Regression Gate: when a plan
+involves a DB change, the plan must name the migration file path up front —
+not just describe a smoke-test-then-apply-directly flow.
+
+Generating a new migration file: hand-author it following the numbered/dated
+naming convention already in `supabase/migrations/` (see
+`docs/architecture/system.md` for where these live and how to generate
+them), since this project is not yet CLI-linked to Supabase. If the project
+gets linked (`supabase link`) in the future, prefer `supabase db diff` for
+drafting the file instead of hand-authoring from scratch.

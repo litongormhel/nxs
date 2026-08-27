@@ -87,7 +87,29 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-27 — Bookings Phase: New Booking form, 90-min overlap engine,
+1. **2026-08-27 — Version-Controlled Migration Files: retroactive baseline +
+   going-forward convention** (`ohm#2m6x9j5f`). Closed the gap flagged
+   across Core Loop, Bookings, and the original schema audit: no migration
+   files existed anywhere, so all DB-layer changes lived only in Supabase
+   with no version-controlled history. Tooling decision (presented and
+   approved before generating anything): Supabase CLI is installed locally
+   but this repo has no `supabase/` directory and isn't CLI-linked, so the
+   baseline was hand-authored rather than generated via `supabase db diff`
+   — written to the same path/naming convention (`supabase/migrations/`,
+   timestamp-prefixed) so it stays compatible if the project is linked
+   later. Live schema was pulled directly via the Supabase connector (not
+   reconstructed from docs) and verified to match ADR-001's count: 18
+   tables + 1 view (`loginable_staff`). Baseline file
+   (`20260827130641_baseline_snapshot.sql`) covers all tables, both GiST
+   exclusion constraints, the ledger immutability triggers, the
+   `SECURITY DEFINER` fix on `apply_points_delta()`, `log_visit()`,
+   `pax_count` + its check constraint, and all 12 current RLS policies —
+   confirmed snapshot-only, not applied/re-run against the live DB.
+   Documented the going-forward rule in `docs/architecture/workflow.md`:
+   every DB change now ships its own migration file in the same commit as
+   the dependent app code, and this is a standing Approval & Regression
+   Gate check going forward.
+2. **2026-08-27 — Bookings Phase: New Booking form, 90-min overlap engine,
    Quick Walk-in** (`ohm#9k4p7w2z`). Plan + regression assessment presented
    and approved before any code, per the prompt's mandatory gate; four open
    architectural questions (Quick Walk-in write path, operating hours/slot
@@ -114,7 +136,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Verified live in a browser: New Booking with SMS preview, a forced
    double-booking showing the specific conflict error, and Quick Walk-in —
    plus regression-checked Dashboard and Client Profile/Log Visit.
-2. **2026-08-27 — Core Loop: Client Profile Actions, Points Ledger, Log
+3. **2026-08-27 — Core Loop: Client Profile Actions, Points Ledger, Log
    Visit Modal** (`ohm#7f3k9d2m`). Plan presented and approved before any
    code, per the prompt's mandatory gate. Added `public.log_visit(...)`
    (atomic ledger + optional sale + action log insert in one transaction),
@@ -126,7 +148,7 @@ Full invariant list: [[nxs-architecture-locks]].
    redemption, insufficient-balance guard, redemption-with-upgrade,
    immutability) before writing app code, then re-verified live through the
    real UI in a browser. Staff Auth still deferred; not a regression.
-3. **2026-08-27 — Bootstrap shared context doc system** (`ohm#3q8n5t1x`).
+4. **2026-08-27 — Bootstrap shared context doc system** (`ohm#3q8n5t1x`).
    Created `.ai/` + `docs/state/` + `docs/architecture/` doc scaffold by
    reading the live Supabase schema (migrations, constraints, triggers, RLS
    policies) and the actual Next.js app tree, rather than assuming prior

@@ -5,6 +5,26 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Migration files (`ohm#2m6x9j5f`) — retroactive baseline + going-forward
+  convention** — **complete** as of 2026-08-27. Tooling decision (Supabase
+  CLI installed but project not CLI-linked here, no `supabase/` directory)
+  was presented and approved before generating anything. Pulled the live
+  schema directly from Supabase (not from docs — those can drift) and
+  confirmed it matches ADR-001: 18 tables + 1 view (`loginable_staff`), both
+  GiST exclusion constraints, ledger immutability triggers, `pax_count`,
+  the `SECURITY DEFINER` fix on `apply_points_delta()`, `log_visit()`, and
+  all 12 current RLS policies. Wrote one hand-authored snapshot file,
+  `supabase/migrations/20260827130641_baseline_snapshot.sql` — **DB
+  migrations are now version-controlled starting from this baseline.** This
+  file is a snapshot only: everything in it is already applied live; it was
+  never run against the database (no `apply_migration` call was made this
+  session — read-only pulls only). Added the going-forward rule to
+  `docs/architecture/workflow.md`: every DB-layer change ships its own
+  migration file in the same commit as the dependent app code, now a
+  standing Approval & Regression Gate check. Noted where migrations live in
+  `docs/architecture/system.md`. No schema, RLS, triggers, or functions were
+  changed — this task only captured current state as version-controlled
+  files.
 - **Bookings phase (`ohm#9k4p7w2z`) — New Booking form, 90-min overlap
   engine, Quick Walk-in** — **complete** as of 2026-08-27. Plan +
   regression assessment presented and approved before implementation.

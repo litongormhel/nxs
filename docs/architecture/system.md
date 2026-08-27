@@ -45,3 +45,16 @@ routes (`bookings`, `sales`, `therapists`, `staff`, `logs`, `analytics`,
 prerendering issue — see git history around commit `b959547`).
 `app/dashboard/error.tsx` provides an error boundary specific to the
 dashboard route.
+
+## Migrations
+
+Version-controlled DB migrations live in `supabase/migrations/`, timestamp-
+prefixed (`YYYYMMDDHHMMSS_description.sql`). The project is not yet
+CLI-linked to Supabase (no `supabase/config.toml`), so files here are
+hand-authored to match the live schema rather than generated via
+`supabase db diff`. `20260827130641_baseline_snapshot.sql` is a retroactive
+snapshot of everything applied before this convention started — it is
+already live and must never be re-run. See
+`docs/architecture/workflow.md` → "Migration Files" for the going-forward
+rule: every DB change ships its own migration file in the same commit as
+the app code that depends on it.
