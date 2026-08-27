@@ -87,7 +87,22 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-27 — Correction: Log Visit Modal, No-Show, and Cancel Action Wiring** (`ohm#4t7w1p9k`).
+1. **2026-08-27 — Settings Page Full HTML Mockup Parity** (`ohm#6j2v9s4k`).
+   Rebuilt `/settings` route to full HTML mockup parity matching `#panel-settings` and design system:
+   **Display & Appearance**: Interactive dark/light appearance toggle switch with sun/moon SVG icons
+   and dynamic descriptive subtitle.
+   **Account & Staff Simulation**: Signed-in staff badge with `Simulate Staff` dropdown selector that
+   updates simulated actor and role permissions (`Front Desk` vs `Supervisor` / `Owner`).
+   **Services & Pricing**: Dynamic lock notice, service items with editable points and prices (disabled
+   for Front Desk), `+ Add Service` modal and delete actions (Supervisor/Owner).
+   **Promo Codes**: Dynamic lock notice, promo items with editable discounts (disabled for Front Desk),
+   `+ Add Promo` modal and delete actions (Supervisor/Owner).
+   **Weekend Fixed Time Slots**: Fixed weekend slot list with formatted AM/PM times, `+ Add Slot` modal with
+   HH:MM format validation, and delete action.
+   **Add-ons**: Add-on item list with editable prices, `+ Add Add-on` modal, and delete action.
+   **Capacity**: Locker count with `+ Add 10 Lockers` increment button and editable Room / Bed count input.
+   **Toast Notifications**: Animated bottom-center toast alert with auto-fade timeout for all settings actions.
+2. **2026-08-27 — Correction: Log Visit Modal, No-Show, and Cancel Action Wiring** (`ohm#4t7w1p9k`).
    Explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`) original
    scope to enable the full **Log Visit** modal and wire up the **Log Visit**, **No-Show**, and **Cancel**
    action buttons on the Bookings Tab.
@@ -101,7 +116,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `Cancel` updates the booking status via `updateBookingStatus` server action and immediately reloads the view.
    **Server Action**: `logVisitBooking` server action executes atomic booking completion, sales record creation,
    sale_addons insertions, points transaction (either EARN points or REDEEM -100), locker occupancy check-in, and action logs.
-2. **2026-08-27 — Correction: New Booking Modal & Booking List Row Full Mockup Parity** (`ohm#5q9x2m4p`).
+3. **2026-08-27 — Correction: New Booking Modal & Booking List Row Full Mockup Parity** (`ohm#5q9x2m4p`).
    Explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`) original
    scope to achieve full HTML mockup parity for both the New Booking modal and the Bookings tab day list rows.
    **Client selection**: replaced inline search with the mockup's dropdown select
@@ -121,7 +136,7 @@ Full invariant list: [[nxs-architecture-locks]].
    service + therapist, uppercase status pill badge, and `Log Visit` / `No-show` / `Cancel` action buttons).
    **Submission**: allows nullable therapist and room for Wet Area bookings;
    triggers SMS preview modal for registered clients upon creation.
-3. **2026-08-27 — Correction: Squad Goals via Promo Dropdown + Quick Walk-in
+4. **2026-08-27 — Correction: Squad Goals via Promo Dropdown + Quick Walk-in
    Full Mockup Parity** (`ohm#8r3n6y1q`). Explicitly corrects part of the
    Bookings phase's (`ohm#9k4p7w2z`) original scope — this reverses that
    phase's Squad Goals checkbox/pax-stepper decision, not a new feature.
@@ -167,11 +182,8 @@ Full invariant list: [[nxs-architecture-locks]].
    Walk-in for Wet Area (fields correctly hidden, no therapist/room) — all
    three confirmed via direct DB read, then cleaned up. Regression-checked:
    New Booking's conflict-greying and SMS preview still work.
-4. **2026-08-27 — Version-Controlled Migration Files: retroactive baseline +
+5. **2026-08-27 — Version-Controlled Migration Files: retroactive baseline +
    going-forward convention** (`ohm#2m6x9j5f`). Baseline schema snapshot authored
    to `supabase/migrations/20260827130641_baseline_snapshot.sql` and established
    version-controlled migration workflow convention.
-5. **2026-08-27 — Bookings Phase: MVP (Schema, Migration, RLS, Day View,
-   Create Booking)** (`ohm#9k4p7w2z`). Baseline bookings phase implementation
-   with 90-min overlap engine, slot grid, and DB-level GiST exclusion constraints.
 

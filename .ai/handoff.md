@@ -5,6 +5,25 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Correction (`ohm#6j2v9s4k`) — Settings Page Full HTML Mockup Parity** —
+  **complete** as of 2026-08-27. Explicitly corrects part of the Bookings
+  phase's (`ohm#9k4p7w2z`) original scope and follows the Squad Goals / Quick Walk-in
+  implementation to achieve full HTML mockup parity for the Settings panel (`#panel-settings`):
+  - **Display & Appearance**: Interactive dark/light appearance toggle switch with sun/moon SVG icons
+    and dynamic subtitle ("Dark mode — easier on the eyes for late shifts" vs "Light mode — brighter for daytime front-desk use"),
+    properly toggling the `.light` class on document body.
+  - **Account & Staff Simulation**: Displays active simulated staff (`Ana`, `Receptionist · Front Desk`, `Signed in`),
+    with a `Simulate Staff` dropdown selector that dynamically switches active actor and role permissions (`Front Desk` vs `Supervisor` / `Owner`).
+  - **Services & Pricing**: Dynamic permissions lock notice, list of services with editable Points and Price (₱)
+    (disabled for Front Desk role), `+ Add Service` modal dialog, and service deletion (for Supervisor/Owner).
+  - **Promo Codes**: Dynamic permissions lock notice, list of promos with editable discount values (-₱)
+    (disabled for Front Desk role), `+ Add Promo` modal dialog, and promo deletion (for Supervisor/Owner).
+  - **Weekend Fixed Time Slots**: Interactive list of weekend time slots with 12-hour AM/PM formatting,
+    `+ Add Slot` modal dialog with 24-hr HH:MM validation and auto-sorting, and slot deletion.
+  - **Add-ons**: List of add-ons with editable Price (₱), `+ Add Add-on` modal dialog, and add-on deletion (with minimum 1 safeguard).
+  - **Capacity**: Interactive Lockers row with `+ Add 10 Lockers` increment button and Rooms / Beds row with editable number input.
+  - **Toast Feedback**: Bottom-center floating toast alert with auto-fade timeout for instant feedback on all settings mutations.
+
 - **Correction (`ohm#4t7w1p9k`) — Log Visit Modal, No-Show, and Cancel Action Wiring** —
   **complete** as of 2026-08-27. Explicitly corrects part of the Bookings
   phase's (`ohm#9k4p7w2z`) original scope to enable the full **Log Visit**
