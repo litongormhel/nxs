@@ -22,8 +22,8 @@ export default async function DashboardPage() {
     } else {
       count = dbCount;
     }
-  } catch (err: any) {
-    errorMsg = err?.message || "Could not query Supabase database.";
+  } catch (err: unknown) {
+    errorMsg = err instanceof Error ? err.message : "Could not query Supabase database.";
     isFallback = true;
     // Fallback to NXS SPA mock data (3 services: Wet Area, Combi Massage, Signature Massage)
     count = 3;
