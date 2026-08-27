@@ -85,6 +85,7 @@ export type Database = {
           group_id: string | null
           guest_label: string | null
           id: string
+          pax_count: number | null
           promo_id: string | null
           room_number: number | null
           service_id: string
@@ -103,6 +104,7 @@ export type Database = {
           group_id?: string | null
           guest_label?: string | null
           id?: string
+          pax_count?: number | null
           promo_id?: string | null
           room_number?: number | null
           service_id: string
@@ -121,6 +123,7 @@ export type Database = {
           group_id?: string | null
           guest_label?: string | null
           id?: string
+          pax_count?: number | null
           promo_id?: string | null
           room_number?: number | null
           service_id?: string
@@ -927,7 +930,21 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      log_visit: {
+        Args: {
+          p_amount: number
+          p_client_id: string
+          p_is_redemption: boolean
+          p_payment_method: string
+          p_payment_ref?: string
+          p_service_id: string
+          p_staff_id: string
+        }
+        Returns: {
+          ledger_id: string
+          sale_id: string
+        }[]
+      }
     }
     Enums: {
       booking_status:

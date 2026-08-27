@@ -87,7 +87,34 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-27 — Core Loop: Client Profile Actions, Points Ledger, Log
+1. **2026-08-27 — Bookings Phase: New Booking form, 90-min overlap engine,
+   Quick Walk-in** (`ohm#9k4p7w2z`). Plan + regression assessment presented
+   and approved before any code, per the prompt's mandatory gate; four open
+   architectural questions (Quick Walk-in write path, operating hours/slot
+   grid, SMS copy, Squad Goals pax storage) were surfaced and resolved with
+   the user before scoping, rather than guessed. Built `app/bookings/page.tsx`
+   (real, was a stub) with `BookingBrowser`/`BookingFormModal`/
+   `QuickWalkinModal`/`SmsPreviewModal`, and `app/bookings/actions.ts`
+   (`createBooking` server action). DB-level no-double-booking (GiST
+   exclusion constraints, pre-existing) is verified as the enforcement
+   source of truth; UI greys out conflicting therapist/room options as a
+   UX layer only, and real conflicts surface a specific "therapist" or
+   "room" error parsed from the exclusion-violation code, not a raw
+   Postgres string. One additive schema change: `bookings.pax_count`
+   (nullable smallint, check 3 or 4, for Squad Goals headcount) plus narrow
+   `anon` SELECT/INSERT RLS policies on `bookings` — both smoke-tested via
+   a rolled-back transaction first. Quick Walk-in inserts directly into
+   `bookings` as `status = 'Completed'` (decided with the user), reusing
+   the same conflict-checked insert path. SMS is a compose/preview-only
+   step with placeholder copy (no gateway wired into this repo) — same
+   placeholder-actor pattern as Core Loop for the staff picker. Status
+   transitions (Booked→Completed/No-show/Cancelled) were explicitly left
+   out of scope — no UPDATE policy was opened for `anon`. No migration
+   files exist for this change either (flagged again, not resolved).
+   Verified live in a browser: New Booking with SMS preview, a forced
+   double-booking showing the specific conflict error, and Quick Walk-in —
+   plus regression-checked Dashboard and Client Profile/Log Visit.
+2. **2026-08-27 — Core Loop: Client Profile Actions, Points Ledger, Log
    Visit Modal** (`ohm#7f3k9d2m`). Plan presented and approved before any
    code, per the prompt's mandatory gate. Added `public.log_visit(...)`
    (atomic ledger + optional sale + action log insert in one transaction),
@@ -99,7 +126,7 @@ Full invariant list: [[nxs-architecture-locks]].
    redemption, insufficient-balance guard, redemption-with-upgrade,
    immutability) before writing app code, then re-verified live through the
    real UI in a browser. Staff Auth still deferred; not a regression.
-2. **2026-08-27 — Bootstrap shared context doc system** (`ohm#3q8n5t1x`).
+3. **2026-08-27 — Bootstrap shared context doc system** (`ohm#3q8n5t1x`).
    Created `.ai/` + `docs/state/` + `docs/architecture/` doc scaffold by
    reading the live Supabase schema (migrations, constraints, triggers, RLS
    policies) and the actual Next.js app tree, rather than assuming prior
