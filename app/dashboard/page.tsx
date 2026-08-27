@@ -1,59 +1,57 @@
 import { createClient } from "@/lib/supabase/server";
 
-export default async function DashboardPage() {
-  let count: number | null = null;
-  let errorMsg: string | null = null;
-  let isFallback = false;
+async function getCount(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  table: "therapists" | "services" | "rooms" | "lockers",
+  filter: { column: string; value: boolean },
+) {
+  const { count, error } = await supabase
+    .from(table)
+    .select("*", { count: "exact", head: true })
+    .eq(filter.column, filter.value);
 
-  try {
-    const supabase = await createClient();
-    const { count: dbCount, error: dbError } = await supabase
-      .from("services")
-      .select("*", { count: "exact", head: true });
-
-    if (dbError) {
-      throw new Error(dbError.message);
-    }
-
-    if (dbCount === null || dbCount === 0) {
-      isFallback = true;
-      errorMsg = "Database table is empty.";
-      count = 3; // Fallback to NXS SPA mock services count
-    } else {
-      count = dbCount;
-    }
-  } catch (err: unknown) {
-    errorMsg = err instanceof Error ? err.message : "Could not query Supabase database.";
-    isFallback = true;
-    // Fallback to NXS SPA mock data (3 services: Wet Area, Combi Massage, Signature Massage)
-    count = 3;
+  if (error) {
+    return null;
   }
+  return count ?? 0;
+}
+
+export default async function DashboardPage() {
+  const supabase = await createClient();
+
+  const [availableTherapists, totalServices, totalRooms, totalLockers] =
+    await Promise.all([
+      getCount(supabase, "therapists", { column: "archived", value: false }),
+      getCount(supabase, "services", { column: "active", value: true }),
+      getCount(supabase, "rooms", { column: "active", value: true }),
+      getCount(supabase, "lockers", { column: "active", value: true }),
+    ]);
+
+  const cards = [
+    { label: "Available Therapists", value: availableTherapists },
+    { label: "Total Services", value: totalServices },
+    { label: "Total Rooms", value: totalRooms },
+    { label: "Total Lockers", value: totalLockers },
+  ];
 
   return (
     <div className="p-8">
       <h1 className="text-xl font-semibold text-gold animate-fade-in">Dashboard</h1>
 
-      <div className="mt-6 max-w-md rounded-lg border border-border bg-surface p-5 transition-all hover:border-gold/30">
-        <h2 className="text-sm font-medium text-muted uppercase tracking-wide">
-          Connection Test
-        </h2>
-
-        {isFallback ? (
-          <div className="mt-3 space-y-3">
-            <div className="rounded border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-400">
-              <span className="font-semibold">Offline/Fallback Mode:</span> Using local NXS SPA mock data. ({errorMsg})
-            </div>
-            <div>
-              <p className="text-3xl font-semibold text-gold">{count}</p>
-              <p className="mt-1 text-sm text-muted">rows in `services` table (mock fallback)</p>
-            </div>
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {cards.map((card) => (
+          <div
+            key={card.label}
+            className="rounded-lg border border-border bg-surface p-5 transition-all hover:border-gold/30"
+          >
+            <h2 className="text-sm font-medium text-muted uppercase tracking-wide">
+              {card.label}
+            </h2>
+            <p className="mt-3 text-3xl font-semibold text-gold">
+              {card.value ?? "—"}
+            </p>
           </div>
-        ) : (
-          <div className="mt-3">
-            <p className="text-3xl font-semibold text-gold">{count}</p>
-            <p className="mt-1 text-sm text-muted">rows in `services` table</p>
-          </div>
-        )}
+        ))}
       </div>
     </div>
   );
