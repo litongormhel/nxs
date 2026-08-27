@@ -63,7 +63,11 @@
 - `components/booking-browser.tsx` — client component. Date picker plus a
   live day-view list of active-status bookings for that date (client-side
   Supabase query, re-run on date change or after a create). "New Booking"
-  and "Quick Walk-in" buttons open the two modals below.
+  and "Quick Walk-in" buttons open the two modals below. Booking item rows
+  render with full HTML mockup parity: date/time block on the left (`br-time`),
+  client codename with mini room pill and SQUAD pill alongside service name and
+  assigned therapist in the center, uppercase status chip badge on the right, and
+  action buttons (`Log Visit`, `No-show`, `Cancel`, `Reassign`).
 - `components/booking-form-modal.tsx` — **New Booking** form (updated to full
   HTML mockup parity):
   - Client selector dropdown (`<select id="bClient">`) with `— Walk-in / No account —`

@@ -27,9 +27,10 @@ type BookingRow = {
   service_id: string;
   therapist_id: string | null;
   room_number: number | null;
+  booking_date: string;
   start_time: string;
   duration_minutes: number | null;
-  status: string;
+  status: Database["public"]["Enums"]["booking_status"];
   pax_count: number | null;
 };
 
@@ -41,6 +42,18 @@ const ACTIVE_STATUSES: Database["public"]["Enums"]["booking_status"][] = [
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function fmtTime(t: string): string {
+  if (!t || !t.includes(":")) return t;
+  const [h, m] = t.split(":");
+  const hr = ((+h + 11) % 12) + 1;
+  return `${hr}:${m} ${+h < 12 ? "AM" : "PM"}`;
 }
 
 export function BookingBrowser({
@@ -76,13 +89,13 @@ export function BookingBrowser({
     supabase
       .from("bookings")
       .select(
-        "id, client_id, guest_label, service_id, therapist_id, room_number, start_time, duration_minutes, status, pax_count"
+        "id, client_id, guest_label, service_id, therapist_id, room_number, booking_date, start_time, duration_minutes, status, pax_count"
       )
       .eq("booking_date", date)
       .in("status", ACTIVE_STATUSES)
       .order("start_time", { ascending: true })
       .then(({ data }) => {
-        setDayBookings(data ?? []);
+        setDayBookings((data as BookingRow[]) ?? []);
         setLoadedFor(date);
       });
   }, [date, reloadToken]);
@@ -96,8 +109,8 @@ export function BookingBrowser({
   }
 
   function therapistName(id: string | null) {
-    if (!id) return "Unassigned";
-    return therapists.find((t) => t.id === id)?.name ?? "Unknown";
+    if (!id) return "—";
+    return therapists.find((t) => t.id === id)?.name ?? "—";
   }
 
   function clientLabel(row: BookingRow) {
@@ -105,6 +118,13 @@ export function BookingBrowser({
       return clients.find((c) => c.id === row.client_id)?.codename ?? "Client";
     }
     return row.guest_label ?? "Walk-in";
+  }
+
+  async function handleSetStatus(id: string, status: Database["public"]["Enums"]["booking_status"]) {
+    const supabase = createClient();
+    await supabase.from("bookings").update({ status }).eq("id", id);
+    reload();
+    router.refresh();
   }
 
   return (
@@ -119,7 +139,7 @@ export function BookingBrowser({
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+            className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
           />
         </div>
         <div className="flex gap-3">
@@ -127,7 +147,7 @@ export function BookingBrowser({
             type="button"
             onClick={() => setShowWalkin(true)}
             disabled={services.length === 0 || rooms.length === 0 || staff.length === 0}
-            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-emerald-800/60 bg-emerald-950/20 px-4 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Quick Walk-in
           </button>
@@ -142,35 +162,116 @@ export function BookingBrowser({
         </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-surface p-5">
-        <h2 className="text-sm font-medium text-muted uppercase tracking-wide">
-          Bookings for {date}
+      <div className="space-y-3">
+        <h2 className="text-xs font-semibold text-muted uppercase tracking-wider">
+          Upcoming & Recent Bookings
         </h2>
         {loading ? (
-          <p className="mt-3 text-xs text-muted">Loading…</p>
+          <p className="py-6 text-center text-xs text-muted">Loading…</p>
         ) : dayBookings.length === 0 ? (
-          <p className="mt-3 text-xs text-muted">No bookings for this date.</p>
+          <div className="rounded-xl border border-border bg-surface p-6 text-center text-xs text-muted">
+            No bookings for this date.
+          </div>
         ) : (
-          <ul className="mt-3 space-y-2">
-            {dayBookings.map((row) => (
-              <li
-                key={row.id}
-                className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2 text-sm"
-              >
-                <span className="font-medium text-gold">{row.start_time.slice(0, 5)}</span>
-                <span className="text-foreground">{clientLabel(row)}</span>
-                <span className="text-muted">{serviceName(row.service_id)}</span>
-                <span className="text-muted">Room {row.room_number ?? "—"}</span>
-                <span className="text-muted">{therapistName(row.therapist_id)}</span>
-                {row.pax_count && (
-                  <span className="text-muted">· {row.pax_count} pax</span>
-                )}
-                <span className="ml-auto rounded-full border border-border px-2 py-0.5 text-xs text-muted">
-                  {row.status}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <div className="flex flex-col gap-2.5">
+            {dayBookings.map((row) => {
+              const flagged = row.status === "Needs Reassignment";
+              return (
+                <div
+                  key={row.id}
+                  className={`flex flex-wrap items-center gap-3.5 rounded-xl border p-3.5 transition-colors ${
+                    flagged
+                      ? "border-red-900/60 bg-gradient-to-r from-red-950/20 to-[#14100b]"
+                      : "border-border bg-[#14100b]"
+                  }`}
+                >
+                  <div className="min-w-[128px] font-mono">
+                    <div className="text-[12.5px] font-medium text-[#f3d48b]">
+                      {fmtDate(row.booking_date)}
+                    </div>
+                    <div className="text-[9.5px] text-muted">{fmtTime(row.start_time)}</div>
+                  </div>
+
+                  <div className="min-w-[170px] flex-1">
+                    <div className="flex flex-wrap items-center gap-2 text-[13px] font-bold text-foreground">
+                      <span>{clientLabel(row)}</span>
+                      {row.room_number && (
+                        <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[8.5px] font-extrabold text-[#f3d48b]">
+                          Room {row.room_number}
+                        </span>
+                      )}
+                      {row.pax_count && (
+                        <span className="rounded-full border border-amber-800 bg-amber-950/40 px-2 py-0.5 text-[8px] font-extrabold tracking-wider text-amber-400 uppercase">
+                          SQUAD ×{row.pax_count}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-muted">
+                      {serviceName(row.service_id)} · Therapist: {therapistName(row.therapist_id)}
+                    </div>
+                  </div>
+
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-wider ${
+                      row.status === "Booked"
+                        ? "border border-[#a97e2e] bg-[#c89b3c]/15 text-[#f3d48b]"
+                        : row.status === "Completed"
+                        ? "border border-[#4e5941] bg-[#8a9a76]/15 text-[#8a9a76]"
+                        : row.status === "Needs Reassignment"
+                        ? "border border-[#6b4f1f] bg-[#d9a441]/15 text-[#d9a441]"
+                        : "border border-[#5e3c3c] bg-[#d18b8b]/15 text-[#d18b8b]"
+                    }`}
+                  >
+                    {row.status}
+                  </span>
+
+                  {(row.status === "Booked" || row.status === "Needs Reassignment") && (
+                    <div className="flex items-center gap-1.5">
+                      {row.status === "Booked" && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (row.client_id) {
+                                router.push(`/clients?client=${row.client_id}`);
+                              } else {
+                                setShowWalkin(true);
+                              }
+                            }}
+                            className="rounded-md border border-[#a97e2e] bg-[#1d1610] px-2.5 py-1 text-[10px] font-bold text-[#f3d48b] hover:brightness-125 transition-all"
+                          >
+                            Log Visit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSetStatus(row.id, "No-show")}
+                            className="rounded-md border border-[#5e3c3c] bg-[#1d1610] px-2.5 py-1 text-[10px] font-bold text-[#d18b8b] hover:brightness-125 transition-all"
+                          >
+                            No-show
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSetStatus(row.id, "Cancelled")}
+                            className="rounded-md border border-border bg-[#1d1610] px-2.5 py-1 text-[10px] font-bold text-muted hover:brightness-125 transition-all"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      )}
+                      {row.status === "Needs Reassignment" && (
+                        <button
+                          type="button"
+                          className="rounded-md border border-[#6b4f1f] bg-[#1d1610] px-2.5 py-1 text-[10px] font-bold text-[#d9a441] hover:brightness-125 transition-all"
+                        >
+                          Reassign
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 

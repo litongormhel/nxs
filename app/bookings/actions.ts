@@ -176,3 +176,22 @@ export async function quickWalkin(
 
   return { ok: true, bookingId };
 }
+
+export async function updateBookingStatus(
+  bookingId: string,
+  status: BookingStatus
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("bookings")
+    .update({ status })
+    .eq("id", bookingId);
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/bookings");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}

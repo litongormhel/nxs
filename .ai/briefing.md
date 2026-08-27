@@ -87,9 +87,9 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-27 — Correction: New Booking Modal Full Mockup Parity** (`ohm#5q9x2m4p`).
+1. **2026-08-27 — Correction: New Booking Modal & Booking List Row Full Mockup Parity** (`ohm#5q9x2m4p`).
    Explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`) original
-   New Booking modal scope to achieve full HTML mockup parity.
+   scope to achieve full HTML mockup parity for both the New Booking modal and the Bookings tab day list rows.
    **Client selection**: replaced inline search with the mockup's dropdown select
    (`— Walk-in / No account —` + registered clients) with conditional guest name
    input field for walk-ins without accounts.
@@ -102,6 +102,9 @@ Full invariant list: [[nxs-architecture-locks]].
    "Use a custom time instead" toggle with live availability indicator, and
    Room & Assignment Mode (`Auto (recommended)` vs `Manual`) row with auto-selection
    of free rooms.
+   **Booking Row List**: updated day list in `BookingBrowser` to match mockup
+   card layout (`Aug 27, 2026 / 3:00 PM`, client name, room badge, squad pill,
+   service + therapist, uppercase status pill badge, and `Log Visit` / `No-show` / `Cancel` action buttons).
    **Submission**: allows nullable therapist and room for Wet Area bookings;
    triggers SMS preview modal for registered clients upon creation.
 2. **2026-08-27 — Correction: Squad Goals via Promo Dropdown + Quick Walk-in

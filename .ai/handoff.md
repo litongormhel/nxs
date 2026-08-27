@@ -5,11 +5,11 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
-- **Correction (`ohm#5q9x2m4p`) — New Booking Modal Full Mockup Parity** —
+- **Correction (`ohm#5q9x2m4p`) — New Booking Modal & Booking List Row Full Mockup Parity** —
   **complete** as of 2026-08-27. Explicitly corrects part of the Bookings
-  phase's (`ohm#9k4p7w2z`) original New Booking modal scope (which followed
+  phase's (`ohm#9k4p7w2z`) original scope (which followed
   the Squad Goals/Quick Walk-in correction `ohm#8r3n6y1q`) to match the HTML
-  mockup (`#bookingModalScrim`):
+  mockup (`#bookingModalScrim` and `#panel-bookings` / `.booking-row`):
   - **Client selection**: Replaced inline search with the mockup's dropdown
     select (`<select id="bClient">` with `— Walk-in / No account —` at top and
     registered clients) plus a conditional `Client Name (walk-in / no account)`
@@ -26,9 +26,13 @@ This file tracks only what's in flight right now.
   - **Room & Assignment Mode**: Room selector paired with `Assignment` mode
     (`Auto (recommended)` vs `Manual`), where Auto automatically selects the
     first available room from live conflict calculations.
+  - **Booking List Row Parity**: Updated `BookingBrowser` item cards to render
+    the exact HTML mockup / screenshot layout (`br-time` on left, client + room mini + squad pill
+    and service/therapist in middle, uppercase status chip on right, plus `Log Visit`, `No-show`,
+    `Cancel` action buttons).
   - **Server Actions**: `CreateBookingInput` updated in `app/bookings/actions.ts`
     to allow `therapistId: string | null` and `roomNumber: number | null`
-    for non-therapist services like Wet Area.
+    for non-therapist services like Wet Area, and added `updateBookingStatus` action.
   - **SMS Preview**: Re-verified that creating a booking for a registered client
     opens the SMS preview modal, while walk-in guest bookings complete directly.
 - **Correction (`ohm#8r3n6y1q`) — Squad Goals via Promo Dropdown + Quick
