@@ -13,8 +13,18 @@ type Client = {
   points_balance: number;
 };
 
-type Service = { id: string; name: string; price: number; points_earned: number };
+type Service = {
+  id: string;
+  name: string;
+  price: number;
+  duration_minutes: number;
+  points_earned: number;
+};
 type Staff = { id: string; name: string; position: string };
+
+type Therapist = { id: string; name: string };
+type Promo = { id: string; label: string; discount: number };
+type Addon = { id: string; name: string; price: number };
 
 type LedgerEntry = {
   id: string;
@@ -31,10 +41,18 @@ export function ClientBrowser({
   clients,
   services,
   staff,
+  therapists = [],
+  promos = [],
+  addons = [],
+  lockers = [],
 }: {
   clients: Client[];
   services: Service[];
   staff: Staff[];
+  therapists?: Therapist[];
+  promos?: Promo[];
+  addons?: Addon[];
+  lockers?: number[];
 }) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string>(clients[0].id);
@@ -177,11 +195,14 @@ export function ClientBrowser({
 
       {showLogVisit && (
         <LogVisitModal
-          clientId={selected.id}
-          clientCodename={selected.codename}
-          pointsBalance={selected.points_balance}
+          clients={clients}
           services={services}
           staff={staff}
+          therapists={therapists}
+          promos={promos}
+          addons={addons}
+          lockers={lockers}
+          initialClientId={selected.id}
           onClose={() => setShowLogVisit(false)}
           onLogged={() => {
             setShowLogVisit(false);

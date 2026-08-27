@@ -53,21 +53,34 @@
   **unchanged** — Squad Goals pax is now derived app-side from the
   selected promo's label at insert time rather than a schema change.
 
-## Implemented (app level)
-
-**Correction, `ohm#5q9x2m4p` (2026-08-27)** — aligns `BookingFormModal` to full HTML mockup parity (following Squad Goals/Quick Walk-in correction `ohm#8r3n6y1q`).
+**Correction, `ohm#4t7w1p9k` (2026-08-27)** — connects `LogVisitModal` and wires `Log Visit`, `No-show`, and `Cancel` action buttons on the Bookings Tab.
 
 - `app/bookings/page.tsx` — server component, real (was an 8-line stub).
   Fetches clients (`id, codename, username`), active services, non-archived
-  therapists, active rooms, and active staff; renders `BookingBrowser`.
+  therapists, active rooms, active staff, active promos, active addons, and lockers; renders `BookingBrowser`.
 - `components/booking-browser.tsx` — client component. Date picker plus a
   live day-view list of active-status bookings for that date (client-side
   Supabase query, re-run on date change or after a create). "New Booking"
-  and "Quick Walk-in" buttons open the two modals below. Booking item rows
-  render with full HTML mockup parity: date/time block on the left (`br-time`),
-  client codename with mini room pill and SQUAD pill alongside service name and
-  assigned therapist in the center, uppercase status chip badge on the right, and
-  action buttons (`Log Visit`, `No-show`, `Cancel`, `Reassign`).
+  and "Quick Walk-in" buttons open the respective modals. Booking item rows
+  render with full HTML mockup parity (`br-time` on left, client + room + squad pill
+  and service/therapist in middle, uppercase status chip on right, and action buttons).
+  Clicking `Log Visit` opens `LogVisitModal` pre-linked to the booking; clicking `No-show`
+  or `Cancel` calls `updateBookingStatus` server action and immediately reloads.
+- `components/log-visit-modal.tsx` — **Log Visit** modal with full HTML mockup parity
+  (`#modalScrim` and screenshot):
+  - Find Booking search with live suggestions of open bookings (`Booked` / `Needs Reassignment`)
+    and `Linked: [Name] · Room [X]` badge.
+  - Date of Visit & Therapist dropdown (therapist disabled for Wet Area).
+  - Assign Locker dropdown (shows free lockers).
+  - Availed Service dropdown (services + points preview, plus `Redeem: Combi Massage Reward (−100 pts)`).
+  - Cash upgrade section for redemptions (`Upgraded with cash top-up`).
+  - Manual discount box (`Manual discount (e.g. Senior or PWD)` with Percentage / Fixed ₱).
+  - Add-ons checklist (+₱50 Towel, etc.).
+  - Auto-calculated read-only Added Points and Amount Paid (₱).
+  - Payment Method select (Cash, GCash, Card, Points) and Promo Code dropdown.
+- `app/bookings/actions.ts` — `logVisitBooking` server action handles complete visit logging
+  (marks booking `Completed`, inserts `sales`, `sale_addons`, `point_transactions`, `locker_occupancy`,
+  and `action_logs` in one atomic flow); `updateBookingStatus` handles status transitions.
 - `components/booking-form-modal.tsx` — **New Booking** form (updated to full
   HTML mockup parity):
   - Client selector dropdown (`<select id="bClient">`) with `— Walk-in / No account —`

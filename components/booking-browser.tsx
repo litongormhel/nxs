@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { updateBookingStatus } from "@/app/bookings/actions";
 import { BookingFormModal } from "@/components/booking-form-modal";
 import { QuickWalkinModal } from "@/components/quick-walkin-modal";
+import { LogVisitModal } from "@/components/log-visit-modal";
 import type { Database } from "@/lib/types/database";
 
 export type Client = { id: string; codename: string; username: string };
@@ -30,6 +32,7 @@ type BookingRow = {
   booking_date: string;
   start_time: string;
   duration_minutes: number | null;
+  promo_id: string | null;
   status: Database["public"]["Enums"]["booking_status"];
   pax_count: number | null;
 };
@@ -82,6 +85,7 @@ export function BookingBrowser({
   const [reloadToken, setReloadToken] = useState(0);
   const [showNewBooking, setShowNewBooking] = useState(false);
   const [showWalkin, setShowWalkin] = useState(false);
+  const [logVisitBooking, setLogVisitBooking] = useState<BookingRow | null>(null);
   const loading = loadedFor !== date;
 
   useEffect(() => {
@@ -89,7 +93,7 @@ export function BookingBrowser({
     supabase
       .from("bookings")
       .select(
-        "id, client_id, guest_label, service_id, therapist_id, room_number, booking_date, start_time, duration_minutes, status, pax_count"
+        "id, client_id, guest_label, service_id, therapist_id, room_number, booking_date, start_time, duration_minutes, promo_id, status, pax_count"
       )
       .eq("booking_date", date)
       .in("status", ACTIVE_STATUSES)
@@ -121,8 +125,7 @@ export function BookingBrowser({
   }
 
   async function handleSetStatus(id: string, status: Database["public"]["Enums"]["booking_status"]) {
-    const supabase = createClient();
-    await supabase.from("bookings").update({ status }).eq("id", id);
+    await updateBookingStatus(id, status);
     reload();
     router.refresh();
   }
@@ -231,13 +234,7 @@ export function BookingBrowser({
                         <>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (row.client_id) {
-                                router.push(`/clients?client=${row.client_id}`);
-                              } else {
-                                setShowWalkin(true);
-                              }
-                            }}
+                            onClick={() => setLogVisitBooking(row)}
                             className="rounded-md border border-[#a97e2e] bg-[#1d1610] px-2.5 py-1 text-[10px] font-bold text-[#f3d48b] hover:brightness-125 transition-all"
                           >
                             Log Visit
@@ -306,6 +303,25 @@ export function BookingBrowser({
           onClose={() => setShowWalkin(false)}
           onCreated={() => {
             setShowWalkin(false);
+            reload();
+            router.refresh();
+          }}
+        />
+      )}
+
+      {logVisitBooking && (
+        <LogVisitModal
+          clients={clients}
+          services={services}
+          therapists={therapists}
+          staff={staff}
+          promos={promos}
+          addons={addons}
+          lockers={lockers}
+          initialBooking={logVisitBooking}
+          onClose={() => setLogVisitBooking(null)}
+          onLogged={() => {
+            setLogVisitBooking(null);
             reload();
             router.refresh();
           }}

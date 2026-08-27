@@ -5,6 +5,31 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Correction (`ohm#4t7w1p9k`) — Log Visit Modal, No-Show, and Cancel Action Wiring** —
+  **complete** as of 2026-08-27. Explicitly corrects part of the Bookings
+  phase's (`ohm#9k4p7w2z`) original scope to enable the full **Log Visit**
+  modal and wire up the **Log Visit**, **No-Show**, and **Cancel** action buttons:
+  - **Log Visit Modal (`components/log-visit-modal.tsx`)**: Rebuilt to full HTML mockup parity matching
+    `#modalScrim` and user screenshot:
+    - **Find Booking**: Autocomplete/live search of open bookings (`Booked` / `Needs Reassignment`) with
+      `Linked: [Name] · Room [X]` badge and automatic prefilling of client, service, therapist, date, promo.
+    - **Date & Therapist**: 2-column grid; Therapist select disabled when service is Wet Area.
+    - **Locker Assignment**: Dropdown listing available free lockers (and current locker if already assigned).
+    - **Availed Service**: Services with points preview and `Redeem: Combi Massage Reward (−100 pts)`.
+    - **Redemption Upgrade**: Checkbox `Upgraded with cash top-up` revealing `Upgraded To` select + `Cash Top-up (₱)` input.
+    - **Manual Discount**: Dashed Senior/PWD discount box (Percentage / Fixed ₱), mutually exclusive with promo codes.
+    - **Add-ons**: Checkbox list of available add-ons (+₱50 Towel, etc.).
+    - **Points & Amount**: Read-only auto-calculated Added Points and Amount Paid (₱) with free investor perk hint for Wet Area.
+    - **Payment & Promo**: Payment method select (Cash, GCash, Card, Points) with conditional GCash Ref input, and Promo code select.
+  - **Action Buttons (`components/booking-browser.tsx`)**:
+    - `Log Visit` opens the `LogVisitModal` with that booking pre-linked and prefilled.
+    - `No-show` calls `updateBookingStatus(id, "No-show")` and reloads.
+    - `Cancel` calls `updateBookingStatus(id, "Cancelled")` and reloads.
+  - **Server Actions (`app/bookings/actions.ts`)**:
+    - `logVisitBooking` executes atomic booking completion (`status = 'Completed'`), sales insert, `sale_addons` inserts,
+      `point_transactions` insert (EARN or REDEEM -100), `locker_occupancy` insert, and `action_logs` record.
+    - `updateBookingStatus` updates booking status and revalidates `/bookings` and `/dashboard`.
+
 - **Correction (`ohm#5q9x2m4p`) — New Booking Modal & Booking List Row Full Mockup Parity** —
   **complete** as of 2026-08-27. Explicitly corrects part of the Bookings
   phase's (`ohm#9k4p7w2z`) original scope (which followed

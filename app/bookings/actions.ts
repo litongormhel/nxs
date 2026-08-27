@@ -195,3 +195,198 @@ export async function updateBookingStatus(
   revalidatePath("/dashboard");
   return { ok: true };
 }
+
+export type LogVisitBookingInput = {
+  bookingId: string | null;
+  clientId: string | null;
+  guestLabel: string | null;
+  serviceId: string;
+  therapistId: string | null;
+  roomNumber: number | null;
+  bookingDate: string;
+  startTime: string;
+  lockerNumber: number;
+  promoId: string | null;
+  manualDiscountType: "pct" | "fixed" | null;
+  manualDiscountValue: number | null;
+  addonIds: string[];
+  amount: number;
+  paymentMethod: "Cash" | "GCash" | "Card" | "Points";
+  paymentRef: string | null;
+  isRedemption: boolean;
+  upgradeTo?: string | null;
+  upgradeCash?: number | null;
+  staffId: string;
+};
+
+export type LogVisitBookingResult =
+  | { ok: true; saleId: string | null; ledgerId: string | null }
+  | { ok: false; error: string; field?: "room" | "therapist" | "locker" };
+
+export async function logVisitBooking(
+  input: LogVisitBookingInput
+): Promise<LogVisitBookingResult> {
+  const supabase = await createClient();
+
+  // If no existing booking is linked, use the quick_walkin RPC for atomic creation
+  if (!input.bookingId) {
+    const res = await quickWalkin({
+      clientId: input.clientId,
+      guestLabel: input.guestLabel,
+      serviceId: input.serviceId,
+      therapistId: input.therapistId,
+      roomNumber: input.roomNumber,
+      bookingDate: input.bookingDate,
+      startTime: input.startTime,
+      lockerNumber: input.lockerNumber,
+      promoId: input.promoId,
+      manualDiscountType: input.manualDiscountType,
+      manualDiscountValue: input.manualDiscountValue,
+      addonIds: input.addonIds,
+      amount: input.amount,
+      paymentMethod: input.paymentMethod === "GCash" ? "GCash" : "Cash",
+      paymentRef: input.paymentRef,
+      staffId: input.staffId,
+    });
+    if (!res.ok) {
+      return { ok: false, error: res.error, field: res.field };
+    }
+    return { ok: true, saleId: null, ledgerId: null };
+  }
+
+  // 1. Fetch service info
+  const { data: service, error: svcErr } = await supabase
+    .from("services")
+    .select("name, points_earned")
+    .eq("id", input.serviceId)
+    .single();
+
+  if (svcErr || !service) {
+    return { ok: false, error: svcErr?.message ?? "Service not found." };
+  }
+
+  // 2. Update booking status to Completed
+  const { error: bookingErr } = await supabase
+    .from("bookings")
+    .update({
+      status: "Completed",
+      service_id: input.serviceId,
+      therapist_id: input.therapistId,
+      room_number: input.roomNumber,
+    })
+    .eq("id", input.bookingId);
+
+  if (bookingErr) {
+    return { ok: false, error: bookingErr.message };
+  }
+
+  // 3. Insert Sale
+  const { data: saleData, error: saleErr } = await supabase
+    .from("sales")
+    .insert({
+      client_id: input.clientId,
+      guest_label: input.guestLabel,
+      booking_id: input.bookingId,
+      service_id: input.serviceId,
+      therapist_id: input.therapistId,
+      amount: input.amount,
+      payment_method: input.paymentMethod,
+      payment_ref: input.paymentRef,
+      promo_id: input.promoId,
+      manual_discount_type: input.manualDiscountType,
+      manual_discount_value: input.manualDiscountValue,
+      processed_by: input.staffId,
+    })
+    .select("id")
+    .single();
+
+  if (saleErr) {
+    return { ok: false, error: saleErr.message };
+  }
+
+  const saleId = saleData?.id ?? null;
+
+  // 4. Insert Sale Addons
+  if (input.addonIds.length > 0 && saleId) {
+    const { data: addonsData } = await supabase
+      .from("addons")
+      .select("id, price")
+      .in("id", input.addonIds);
+
+    if (addonsData && addonsData.length > 0) {
+      const saleAddonRows = addonsData.map((a) => ({
+        sale_id: saleId,
+        addon_id: a.id,
+        price_at_sale: a.price,
+      }));
+      await supabase.from("sale_addons").insert(saleAddonRows);
+    }
+  }
+
+  // 5. Insert Points Transaction (for registered clients)
+  let ledgerId: string | null = null;
+  if (input.clientId) {
+    const pointsDelta = input.isRedemption ? -100 : service.points_earned;
+    const entryType = input.isRedemption ? "REDEEM" : "EARN";
+    const notes = input.isRedemption
+      ? `Redemption: ${service.name}${input.upgradeTo ? ` → ${input.upgradeTo} (upgrade)` : ""}`
+      : `Visit: ${service.name}`;
+
+    const { data: ledgerData, error: ledgerErr } = await supabase
+      .from("point_transactions")
+      .insert({
+        client_id: input.clientId,
+        booking_id: input.bookingId,
+        sale_id: saleId,
+        points_delta: pointsDelta,
+        entry_type: entryType,
+        source: "STAFF_MANUAL",
+        processed_by: input.staffId,
+        notes,
+      })
+      .select("id")
+      .single();
+
+    if (ledgerErr) {
+      return { ok: false, error: ledgerErr.message };
+    }
+    ledgerId = ledgerData?.id ?? null;
+  }
+
+  // 6. Assign Locker Occupancy
+  const { error: lockerErr } = await supabase.from("locker_occupancy").insert({
+    locker_number: input.lockerNumber,
+    client_id: input.clientId,
+    guest_label: input.guestLabel,
+    room_number: input.roomNumber,
+    service_id: input.serviceId,
+    checked_in_by: input.staffId,
+  });
+
+  if (lockerErr) {
+    if (lockerErr.code === UNIQUE_VIOLATION) {
+      if (lockerErr.message.includes("one_active_occupant_per_locker")) {
+        return { ok: false, field: "locker", error: "That locker was just taken — pick another." };
+      }
+      if (lockerErr.message.includes("one_active_occupant_per_room")) {
+        return { ok: false, field: "room", error: "That room is already occupied." };
+      }
+    }
+    return { ok: false, error: lockerErr.message };
+  }
+
+  // 7. Insert Action Log
+  await supabase.from("action_logs").insert({
+    staff_id: input.staffId,
+    action: "log_visit",
+    detail: `client=${input.clientId ?? input.guestLabel} service=${service.name} amount=${input.amount} sale_id=${saleId} booking_id=${input.bookingId}`,
+  });
+
+  revalidatePath("/bookings");
+  revalidatePath("/dashboard");
+  revalidatePath("/clients");
+  revalidatePath("/lockers");
+  revalidatePath("/call-sheet");
+
+  return { ok: true, saleId, ledgerId };
+}

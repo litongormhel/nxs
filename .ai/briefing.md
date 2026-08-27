@@ -87,7 +87,21 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-27 — Correction: New Booking Modal & Booking List Row Full Mockup Parity** (`ohm#5q9x2m4p`).
+1. **2026-08-27 — Correction: Log Visit Modal, No-Show, and Cancel Action Wiring** (`ohm#4t7w1p9k`).
+   Explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`) original
+   scope to enable the full **Log Visit** modal and wire up the **Log Visit**, **No-Show**, and **Cancel**
+   action buttons on the Bookings Tab.
+   **Log Visit Modal**: rebuilt to full HTML mockup parity matching `#modalScrim` and user screenshot:
+   find/link open bookings with live search suggestions and `Linked: [Name] · Room [X]`, Date of Visit,
+   Therapist dropdown (hidden for Wet Area), Locker assignment, Availed Service with Points preview and
+   `Redeem: Combi Massage Reward (−100 pts)`, cash upgrade section for redemptions, Senior/PWD manual discount
+   (Percentage / Fixed ₱, mutually exclusive with promo), Add-ons checklist, auto-calculated points delta and amount paid,
+   payment method selector, and promo dropdown.
+   **Action Buttons**: Clicking `Log Visit` opens the modal prefilled for that booking; clicking `No-show` or
+   `Cancel` updates the booking status via `updateBookingStatus` server action and immediately reloads the view.
+   **Server Action**: `logVisitBooking` server action executes atomic booking completion, sales record creation,
+   sale_addons insertions, points transaction (either EARN points or REDEEM -100), locker occupancy check-in, and action logs.
+2. **2026-08-27 — Correction: New Booking Modal & Booking List Row Full Mockup Parity** (`ohm#5q9x2m4p`).
    Explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`) original
    scope to achieve full HTML mockup parity for both the New Booking modal and the Bookings tab day list rows.
    **Client selection**: replaced inline search with the mockup's dropdown select
@@ -107,7 +121,7 @@ Full invariant list: [[nxs-architecture-locks]].
    service + therapist, uppercase status pill badge, and `Log Visit` / `No-show` / `Cancel` action buttons).
    **Submission**: allows nullable therapist and room for Wet Area bookings;
    triggers SMS preview modal for registered clients upon creation.
-2. **2026-08-27 — Correction: Squad Goals via Promo Dropdown + Quick Walk-in
+3. **2026-08-27 — Correction: Squad Goals via Promo Dropdown + Quick Walk-in
    Full Mockup Parity** (`ohm#8r3n6y1q`). Explicitly corrects part of the
    Bookings phase's (`ohm#9k4p7w2z`) original scope — this reverses that
    phase's Squad Goals checkbox/pax-stepper decision, not a new feature.
@@ -153,64 +167,11 @@ Full invariant list: [[nxs-architecture-locks]].
    Walk-in for Wet Area (fields correctly hidden, no therapist/room) — all
    three confirmed via direct DB read, then cleaned up. Regression-checked:
    New Booking's conflict-greying and SMS preview still work.
-3. **2026-08-27 — Version-Controlled Migration Files: retroactive baseline +
-   going-forward convention** (`ohm#2m6x9j5f`). Closed the gap flagged
-   across Core Loop, Bookings, and the original schema audit: no migration
-   files existed anywhere, so all DB-layer changes lived only in Supabase
-   with no version-controlled history. Tooling decision (presented and
-   approved before generating anything): Supabase CLI is installed locally
-   but this repo has no `supabase/` directory and isn't CLI-linked, so the
-   baseline was hand-authored rather than generated via `supabase db diff`
-   — written to the same path/naming convention (`supabase/migrations/`,
-   timestamp-prefixed) so it stays compatible if the project is linked
-   later. Live schema was pulled directly via the Supabase connector (not
-   reconstructed from docs) and verified to match ADR-001's count: 18
-   tables + 1 view (`loginable_staff`). Baseline file
-   (`20260827130641_baseline_snapshot.sql`) covers all tables, both GiST
-   exclusion constraints, the ledger immutability triggers, the
-   `SECURITY DEFINER` fix on `apply_points_delta()`, `log_visit()`,
-   `pax_count` + its check constraint, and all 12 current RLS policies —
-   confirmed snapshot-only, not applied/re-run against the live DB.
-   Documented the going-forward rule in `docs/architecture/workflow.md`:
-   every DB change now ships its own migration file in the same commit as
-   the dependent app code, and this is a standing Approval & Regression
-   Gate check going forward.
-4. **2026-08-27 — Bookings Phase: New Booking form, 90-min overlap engine,
-   Quick Walk-in** (`ohm#9k4p7w2z`). Plan + regression assessment presented
-   and approved before any code, per the prompt's mandatory gate; four open
-   architectural questions (Quick Walk-in write path, operating hours/slot
-   grid, SMS copy, Squad Goals pax storage) were surfaced and resolved with
-   the user before scoping, rather than guessed. Built `app/bookings/page.tsx`
-   (real, was a stub) with `BookingBrowser`/`BookingFormModal`/
-   `QuickWalkinModal`/`SmsPreviewModal`, and `app/bookings/actions.ts`
-   (`createBooking` server action). DB-level no-double-booking (GiST
-   exclusion constraints, pre-existing) is verified as the enforcement
-   source of truth; UI greys out conflicting therapist/room options as a
-   UX layer only, and real conflicts surface a specific "therapist" or
-   "room" error parsed from the exclusion-violation code, not a raw
-   Postgres string. One additive schema change: `bookings.pax_count`
-   (nullable smallint, check 3 or 4, for Squad Goals headcount) plus narrow
-   `anon` SELECT/INSERT RLS policies on `bookings` — both smoke-tested via
-   a rolled-back transaction first. Quick Walk-in inserts directly into
-   `bookings` as `status = 'Completed'` (decided with the user), reusing
-   the same conflict-checked insert path. SMS is a compose/preview-only
-   step with placeholder copy (no gateway wired into this repo) — same
-   placeholder-actor pattern as Core Loop for the staff picker. Status
-   transitions (Booked→Completed/No-show/Cancelled) were explicitly left
-   out of scope — no UPDATE policy was opened for `anon`. No migration
-   files exist for this change either (flagged again, not resolved).
-   Verified live in a browser: New Booking with SMS preview, a forced
-   double-booking showing the specific conflict error, and Quick Walk-in —
-   plus regression-checked Dashboard and Client Profile/Log Visit.
-5. **2026-08-27 — Core Loop: Client Profile Actions, Points Ledger, Log
-   Visit Modal** (`ohm#7f3k9d2m`). Plan presented and approved before any
-   code, per the prompt's mandatory gate. Added `public.log_visit(...)`
-   (atomic ledger + optional sale + action log insert in one transaction),
-   Log Visit UI on Client Profile, and narrow additive RLS policies for the
-   five tables this needed — see the RLS invariant above and
-   [[points_ledger_state]] for detail. Fixed a latent bug this surfaced:
-   `apply_points_delta()` needed `SECURITY DEFINER` to update `clients`
-   under RLS. Verified with a rolled-back SQL transaction (earn, pure
-   redemption, insufficient-balance guard, redemption-with-upgrade,
-   immutability) before writing app code, then re-verified live through the
-   real UI in a browser. Staff Auth still deferred; not a regression.
+4. **2026-08-27 — Version-Controlled Migration Files: retroactive baseline +
+   going-forward convention** (`ohm#2m6x9j5f`). Baseline schema snapshot authored
+   to `supabase/migrations/20260827130641_baseline_snapshot.sql` and established
+   version-controlled migration workflow convention.
+5. **2026-08-27 — Bookings Phase: MVP (Schema, Migration, RLS, Day View,
+   Create Booking)** (`ohm#9k4p7w2z`). Baseline bookings phase implementation
+   with 90-min overlap engine, slot grid, and DB-level GiST exclusion constraints.
+
