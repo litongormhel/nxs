@@ -1,0 +1,13 @@
+export const navItems = [
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/clients", label: "Clients" },
+  { href: "/bookings", label: "Bookings" },
+  { href: "/sales", label: "Sales" },
+  { href: "/therapists", label: "Therapists" },
+  { href: "/lockers", label: "Lockers" },
+  { href: "/call-sheet", label: "Call Sheet" },
+  { href: "/analytics", label: "Analytics" },
+  { href: "/staff", label: "Staff" },
+  { href: "/logs", label: "Logs" },
+  { href: "/settings", label: "Settings" },
+] as const;
