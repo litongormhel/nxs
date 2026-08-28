@@ -87,7 +87,20 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-27 — Therapists Tab Full HTML Mockup Parity** (`ohm#7m2k5v9q`).
+1. **2026-08-28 — Closeout: Commit Reviewed Therapist-Tab Work + Fix Stale
+   Settings State Doc** (`ohm#6w9d3n8h`). Two-item closeout from audit
+   `ohm#4t7b2k9w`. **Item 1**: no commit was made — `git status` showed a
+   clean working tree at session start; the Therapist-tab work the audit
+   described was already committed as `90c5329` before this session began
+   (verified the diff matches exactly). **Item 2**: rewrote
+   `docs/state/settings_state.md`, which still described an 8-line stub,
+   to reflect the actual full-parity Settings UI (`ohm#6j2v9s4k`) while
+   explicitly flagging it as UI-only with no Supabase persistence — verified
+   directly against `app/settings/page.tsx` (read-only seed fetch) and
+   `components/settings-browser.tsx` (no mutation calls, no `actions.ts`).
+   Settings persistence/wiring remains a separate, explicitly out-of-scope
+   follow-up.
+2. **2026-08-27 — Therapists Tab Full HTML Mockup Parity** (`ohm#7m2k5v9q`).
    Rebuilt `/therapists` route to full HTML mockup parity matching `#panel-therapists` and design system:
    **Therapist Roster**: Default 10 therapists matching mockup (`Ron`, `Don`, `Tristan`, `Leo`, `Roy`, `Xander`, `Dan`, `Marco`, `Akio`, `Josh`),
    avatar initial badge, Most Requested badge (`✦ Most Requested`) for top-booked therapist, and daily schedule modal on header click.
@@ -99,7 +112,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `Mark On Leave` (with start/end dates and optional reason), `Archive` (with required reason), `Unarchive`, and `Edit` (for in-place renaming).
    **Modals**: Add Therapist modal with multi-select Day Off / Services pills, Daily Schedule modal, Mark On Leave modal,
    Archive Therapist modal, and Edit Name modal.
-2. **2026-08-27 — Settings Page Full HTML Mockup Parity** (`ohm#6j2v9s4k`).
+3. **2026-08-27 — Settings Page Full HTML Mockup Parity** (`ohm#6j2v9s4k`).
    Rebuilt `/settings` route to full HTML mockup parity matching `#panel-settings` and design system:
    **Display & Appearance**: Interactive dark/light appearance toggle switch with sun/moon SVG icons
    and dynamic descriptive subtitle.
@@ -114,7 +127,7 @@ Full invariant list: [[nxs-architecture-locks]].
    **Add-ons**: Add-on item list with editable prices, `+ Add Add-on` modal, and delete action.
    **Capacity**: Locker count with `+ Add 10 Lockers` increment button and editable Room / Bed count input.
    **Toast Notifications**: Animated bottom-center toast alert with auto-fade timeout for all settings actions.
-3. **2026-08-27 — Correction: Log Visit Modal, No-Show, and Cancel Action Wiring** (`ohm#4t7w1p9k`).
+4. **2026-08-27 — Correction: Log Visit Modal, No-Show, and Cancel Action Wiring** (`ohm#4t7w1p9k`).
    Explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`) original
    scope to enable the full **Log Visit** modal and wire up the **Log Visit**, **No-Show**, and **Cancel**
    action buttons on the Bookings Tab.
@@ -128,7 +141,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `Cancel` updates the booking status via `updateBookingStatus` server action and immediately reloads the view.
    **Server Action**: `logVisitBooking` server action executes atomic booking completion, sales record creation,
    sale_addons insertions, points transaction (either EARN points or REDEEM -100), locker occupancy check-in, and action logs.
-4. **2026-08-27 — Correction: New Booking Modal & Booking List Row Full Mockup Parity** (`ohm#5q9x2m4p`).
+5. **2026-08-27 — Correction: New Booking Modal & Booking List Row Full Mockup Parity** (`ohm#5q9x2m4p`).
    Explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`) original
    scope to achieve full HTML mockup parity for both the New Booking modal and the Bookings tab day list rows.
    **Client selection**: replaced inline search with the mockup's dropdown select
@@ -148,50 +161,4 @@ Full invariant list: [[nxs-architecture-locks]].
    service + therapist, uppercase status pill badge, and `Log Visit` / `No-show` / `Cancel` action buttons).
    **Submission**: allows nullable therapist and room for Wet Area bookings;
    triggers SMS preview modal for registered clients upon creation.
-5. **2026-08-27 — Correction: Squad Goals via Promo Dropdown + Quick Walk-in
-   Full Mockup Parity** (`ohm#8r3n6y1q`). Explicitly corrects part of the
-   Bookings phase's (`ohm#9k4p7w2z`) original scope — this reverses that
-   phase's Squad Goals checkbox/pax-stepper decision, not a new feature.
-   Plan (including which Quick Walk-in flow is in scope) presented and
-   approved before any code, per the prompt's mandatory gate. The mockup
-   the prompt cited (`nxs-spa-portal.html`) didn't match — the only copy
-   findable on disk had no Quick Walk-in modal at all; flagged and blocked
-   until the user supplied the correct file. **Squad Goals**: removed the
-   checkbox/pax-stepper from New Booking; Squad Goals is now selected via
-   the existing Promo dropdown (`Squad Goals 3pax`/`4pax`, already seeded
-   in the live `promos` table at −₱150/−₱200 — no promo data change
-   needed). `pax_count` is derived app-side from the selected promo label
-   at submit time, so the existing `pax_count` check constraint (3 or 4)
-   needed no schema change. The weekday soft-warning banner is preserved,
-   now triggered by "Squad Goals promo selected + weekday" instead of the
-   checkbox. **Quick Walk-in**: rebuilt to full mockup parity — client
-   search with guest-name fallback, conditional therapist/room (hidden for
-   Wet Area), time-slot grid + custom-time toggle (reusing
-   `lib/bookings/slots.ts`), room auto-suggested from live conflicts,
-   locker assignment, promo (mutually exclusive with manual discount),
-   add-ons, auto-computed read-only Amount Paid, Payment Method, and a
-   GCash reference field. Scoped to the mockup's `openQuickWalkin()` flow
-   only — `completeWalkinBooking()` ("Complete Walk-in Visit," converting
-   an existing `Booked` row) was explicitly excluded since it depends on
-   the booking-status-transition UPDATE path the Bookings phase
-   deliberately left unbuilt; confirmed with the user before scoping.
-   **DB**: one new migration
-   (`supabase/migrations/20260827133448_quick_walkin_promo_rls.sql`),
-   smoke-tested via a rolled-back transaction (registered + guest walk-in,
-   addon, ledger-only-for-registered, and the GiST exclusion constraint
-   still firing through the new path) before applying for real. Adds
-   narrow anon SELECT policies on `promos`/`addons`/`locker_occupancy` and
-   INSERT policies on `locker_occupancy`/`sale_addons`, plus a new
-   `public.quick_walkin(...)` function modeled directly on
-   `log_visit()`'s atomic-transaction pattern (not `SECURITY DEFINER` —
-   reachable via the same anon INSERT-policy shape) that writes booking +
-   sale + optional sale_addons + optional ledger entry (registered clients
-   only) + locker_occupancy + action_log in one transaction. No change to
-   `bookings.pax_count` or its check constraint. Verified live in a
-   browser: Squad Goals promo booking (weekday warning, correct
-   `pax_count`/`promo_id`), Quick Walk-in for a massage service
-   (therapist/room conflict-greying, addon, promo, locker), and Quick
-   Walk-in for Wet Area (fields correctly hidden, no therapist/room) — all
-   three confirmed via direct DB read, then cleaned up. Regression-checked:
-   New Booking's conflict-greying and SMS preview still work.
 

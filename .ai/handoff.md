@@ -5,6 +5,29 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Closeout (`ohm#6w9d3n8h`) — Commit Reviewed Therapist-Tab Work + Fix
+  Stale Settings State Doc** — **complete** as of 2026-08-28. Two-item
+  closeout from audit `ohm#4t7b2k9w`:
+  - **Item 1 (commit Therapist-tab work)**: no action needed. `git status`
+    at the start of this session showed a clean working tree — the
+    Therapist-tab work the audit described (`app/therapists/page.tsx`,
+    `components/therapist-browser.tsx`, plus doc updates) was already
+    committed as `90c5329` ("Thera Tab Audit") before this session began.
+    The audit's snapshot had gone stale; verified via `git show --stat` that
+    `90c5329`'s diff matches exactly what the audit described, so nothing
+    further was committed.
+  - **Item 2 (fix stale settings_state.md)**: `docs/state/settings_state.md`
+    rewritten to describe current reality — full HTML mockup parity UI
+    (theme toggle, staff-role simulation, services/promos/slots/add-ons/
+    capacity editing, all from `components/settings-browser.tsx`) —
+    while making explicit that it is **UI-only, no Supabase persistence**:
+    verified directly against the code (`app/settings/page.tsx` only reads
+    seed data; `settings-browser.tsx` has no `insert`/`update`/`delete`
+    calls and no `actions.ts` file exists). Framed as a deliberate deferral,
+    mirroring the "Staff Auth intentionally deferred" pattern. Settings
+    persistence/wiring remains explicitly out of scope — a separate,
+    larger follow-up.
+
 - **Correction (`ohm#7m2k5v9q`) — Therapists Tab Full HTML Mockup Parity** —
   **complete** as of 2026-08-27. Explicitly corrects part of the Bookings/Therapists
   phase's (`ohm#9k4p7w2z`) original scope and follows the Squad Goals / Quick Walk-in
