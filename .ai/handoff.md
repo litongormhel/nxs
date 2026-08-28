@@ -5,6 +5,22 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Correction (`ohm#7m2k5v9q`) — Therapists Tab Full HTML Mockup Parity** —
+  **complete** as of 2026-08-27. Explicitly corrects part of the Bookings/Therapists
+  phase's (`ohm#9k4p7w2z`) original scope and follows the Squad Goals / Quick Walk-in
+  implementation to achieve full HTML mockup parity for the Therapists panel (`#panel-therapists`):
+  - **Therapist Roster**: Default 10 therapists matching mockup (`Ron`, `Don`, `Tristan`, `Leo`, `Roy`, `Xander`, `Dan`, `Marco`, `Akio`, `Josh`),
+    avatar initial badge, Most Requested badge (`✦ Most Requested`) for top-booked therapist, and daily schedule modal on header click.
+  - **Filter Bar**: Interactive Date picker, Time slot select (`16:00` to `01:00`), availability filter (`Select All`, `Available`, `Booked`),
+    and `Show Archived` toggle.
+  - **Interactive Roster Controls**: Clickable Weekly Day(s) Off toggle pills (`Sun`–`Sat`) and Services Offered toggle pills (`Combi Massage`,
+    `Signature Massage`, `Scrub`) with instant toast alerts.
+  - **Kebab Action Menu**: Dropdown on each therapist card supporting `Mark Absent Today` (with automated booking reassignment flagging),
+    `Mark On Leave` (with start/end dates and optional reason), `Archive` (with required reason), `Unarchive`, and `Edit` (for in-place renaming).
+  - **Modals**: Add Therapist modal with multi-select Day Off / Services pills, Daily Schedule modal, Mark On Leave modal,
+    Archive Therapist modal, and Edit Name modal.
+  - **Toast Alerts**: Bottom-center floating toast alert with auto-fade timeout for instant feedback on all roster mutations.
+
 - **Correction (`ohm#6j2v9s4k`) — Settings Page Full HTML Mockup Parity** —
   **complete** as of 2026-08-27. Explicitly corrects part of the Bookings
   phase's (`ohm#9k4p7w2z`) original scope and follows the Squad Goals / Quick Walk-in

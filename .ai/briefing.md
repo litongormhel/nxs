@@ -87,7 +87,19 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-27 — Settings Page Full HTML Mockup Parity** (`ohm#6j2v9s4k`).
+1. **2026-08-27 — Therapists Tab Full HTML Mockup Parity** (`ohm#7m2k5v9q`).
+   Rebuilt `/therapists` route to full HTML mockup parity matching `#panel-therapists` and design system:
+   **Therapist Roster**: Default 10 therapists matching mockup (`Ron`, `Don`, `Tristan`, `Leo`, `Roy`, `Xander`, `Dan`, `Marco`, `Akio`, `Josh`),
+   avatar initial badge, Most Requested badge (`✦ Most Requested`) for top-booked therapist, and daily schedule modal on header click.
+   **Filter Bar**: Interactive Date picker, Time slot select (`16:00` to `01:00`), availability filter (`Select All`, `Available`, `Booked`),
+   and `Show Archived` toggle.
+   **Interactive Roster Controls**: Clickable Weekly Day(s) Off toggle pills (`Sun`–`Sat`) and Services Offered toggle pills (`Combi Massage`,
+   `Signature Massage`, `Scrub`) with instant toast alerts.
+   **Kebab Action Menu**: Dropdown on each therapist card supporting `Mark Absent Today` (with automated booking reassignment flagging),
+   `Mark On Leave` (with start/end dates and optional reason), `Archive` (with required reason), `Unarchive`, and `Edit` (for in-place renaming).
+   **Modals**: Add Therapist modal with multi-select Day Off / Services pills, Daily Schedule modal, Mark On Leave modal,
+   Archive Therapist modal, and Edit Name modal.
+2. **2026-08-27 — Settings Page Full HTML Mockup Parity** (`ohm#6j2v9s4k`).
    Rebuilt `/settings` route to full HTML mockup parity matching `#panel-settings` and design system:
    **Display & Appearance**: Interactive dark/light appearance toggle switch with sun/moon SVG icons
    and dynamic descriptive subtitle.
@@ -102,7 +114,7 @@ Full invariant list: [[nxs-architecture-locks]].
    **Add-ons**: Add-on item list with editable prices, `+ Add Add-on` modal, and delete action.
    **Capacity**: Locker count with `+ Add 10 Lockers` increment button and editable Room / Bed count input.
    **Toast Notifications**: Animated bottom-center toast alert with auto-fade timeout for all settings actions.
-2. **2026-08-27 — Correction: Log Visit Modal, No-Show, and Cancel Action Wiring** (`ohm#4t7w1p9k`).
+3. **2026-08-27 — Correction: Log Visit Modal, No-Show, and Cancel Action Wiring** (`ohm#4t7w1p9k`).
    Explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`) original
    scope to enable the full **Log Visit** modal and wire up the **Log Visit**, **No-Show**, and **Cancel**
    action buttons on the Bookings Tab.
@@ -116,7 +128,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `Cancel` updates the booking status via `updateBookingStatus` server action and immediately reloads the view.
    **Server Action**: `logVisitBooking` server action executes atomic booking completion, sales record creation,
    sale_addons insertions, points transaction (either EARN points or REDEEM -100), locker occupancy check-in, and action logs.
-3. **2026-08-27 — Correction: New Booking Modal & Booking List Row Full Mockup Parity** (`ohm#5q9x2m4p`).
+4. **2026-08-27 — Correction: New Booking Modal & Booking List Row Full Mockup Parity** (`ohm#5q9x2m4p`).
    Explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`) original
    scope to achieve full HTML mockup parity for both the New Booking modal and the Bookings tab day list rows.
    **Client selection**: replaced inline search with the mockup's dropdown select
@@ -136,7 +148,7 @@ Full invariant list: [[nxs-architecture-locks]].
    service + therapist, uppercase status pill badge, and `Log Visit` / `No-show` / `Cancel` action buttons).
    **Submission**: allows nullable therapist and room for Wet Area bookings;
    triggers SMS preview modal for registered clients upon creation.
-4. **2026-08-27 — Correction: Squad Goals via Promo Dropdown + Quick Walk-in
+5. **2026-08-27 — Correction: Squad Goals via Promo Dropdown + Quick Walk-in
    Full Mockup Parity** (`ohm#8r3n6y1q`). Explicitly corrects part of the
    Bookings phase's (`ohm#9k4p7w2z`) original scope — this reverses that
    phase's Squad Goals checkbox/pax-stepper decision, not a new feature.
@@ -182,8 +194,4 @@ Full invariant list: [[nxs-architecture-locks]].
    Walk-in for Wet Area (fields correctly hidden, no therapist/room) — all
    three confirmed via direct DB read, then cleaned up. Regression-checked:
    New Booking's conflict-greying and SMS preview still work.
-5. **2026-08-27 — Version-Controlled Migration Files: retroactive baseline +
-   going-forward convention** (`ohm#2m6x9j5f`). Baseline schema snapshot authored
-   to `supabase/migrations/20260827130641_baseline_snapshot.sql` and established
-   version-controlled migration workflow convention.
 
