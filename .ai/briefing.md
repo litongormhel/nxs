@@ -87,7 +87,60 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-28 — Operations Phase: Locker Board, Call Sheet, Sales
+1. **2026-08-28 — Analytics Phase: Owner-Only Reporting Dashboard
+   (Spa-Day Bucketing)** (`ohm#7v2q8f5c`). Plan + regression assessment
+   presented and approved before implementation, per the prompt's
+   mandatory gate. Two discrepancies surfaced during context loading and
+   resolved with the user rather than assumed: (1) no `nxs-spa-portal.html`
+   mockup exists anywhere in the repo (same recurring gap as prior
+   phases) — the prompt's own scope section (items 3-8) already fully
+   specified every stat/ranking's logic, so the user chose to proceed
+   from the prompt's spec alone rather than block on the file; (2) the
+   prompt stated spa-day opens at 4:00 PM, but the only existing
+   operating-hours definition in the codebase (`lib/bookings/slots.ts`,
+   from the Bookings phase) is 4:30 PM open / 1:00 AM last call — the
+   user confirmed aligning to 4:30 PM (cosmetic only: the rollover
+   formula's 12:00 AM–3:59 PM window is unaffected either way, since
+   nothing operationally happens 4:00–4:30 PM). **New canonical spa-day
+   helper** (`lib/analytics/spa-day.ts`, first of its kind — confirmed no
+   prior "operating day" concept existed via ADR-001 and a grep):
+   `toSpaDay`/`toSpaMonth`/`spaDayNow`/`spaMonthNow`/`lastSpaDays`, all
+   built on one formula (subtract 8 hours from the UTC instant, since
+   Asia/Manila is a fixed UTC+8 offset with no DST — net equivalent of
+   the documented "shift to Manila local, then roll back 12AM–3:59PM
+   onto the prior date"), used by every bucketed stat/table so numbers
+   stay consistent site-wide. **Analytics page**
+   (`app/analytics/page.tsx`, real page replacing the 8-line stub;
+   `components/analytics-browser.tsx`, new): Sales stat cards
+   (Today/7-day/Month, non-voided `sales.amount` summed by spa-day/spa-
+   month), Client Visits stat cards (same buckets, count of non-voided
+   `sales` rows — confirmed `sales` alone is the correct, non-double-
+   counting visit definition per the prompt), Most Availed Service
+   (ranked count via `sales.service_id → services(name)`), Sales Per Day
+   / Sales Per Month tables (amount + visit count, most recent first),
+   Top Clients (ranked by non-voided spend, visit count,
+   `clients.points_balance` read directly), Therapist Ranking (count of
+   `bookings` with status Booked/Completed per therapist via
+   `bookings.therapist_id`, archived therapists tagged "(Archived)").
+   Read-only aggregation — no new mutation paths, no new RLS (confirmed
+   `sales`/`bookings`/`clients`/`therapists` SELECT was already open from
+   prior phases). **Owner-only gating reuses the exact existing
+   `lib/staff-context.tsx` (`useStaffSim`/`currentRole`) mechanism** — no
+   new gating pattern invented: `lib/nav.ts`'s `analytics` entry gained
+   `ownerOnly: true` (previously the only nav item lacking it despite the
+   page needing it — the Staff/Logs phase had explicitly left it
+   untouched as out of scope then), plus the same page-level content
+   guard pattern as Staff Directory/Activity Logs. Verified live in the
+   browser (`npx tsc --noEmit` passes clean, but not relied on alone):
+   confirmed the numbers (Today ₱0, Last 7 Days/This Month ₱3,300, 4
+   visits) correctly reflect all 4 existing sales bucketing into
+   yesterday's spa-day at the current pre-4:30-PM wall-clock time,
+   matching the Sales tab's own ₱3,300 total independently; confirmed nav
+   hiding and the page-level guard both correctly block Front Desk (Ana)
+   and clear for Owner (J. Cruz). Regression-checked Sales, Bookings,
+   Staff Directory, and Activity Logs — all load with no server or
+   console errors.
+2. **2026-08-28 — Operations Phase: Locker Board, Call Sheet, Sales
    (Edit/Void)** (`ohm#9h4c7x2m`). Plan + regression assessment presented
    and approved before implementation, per the prompt's mandatory gate.
    Both required discrepancy questions were resolved by reading the actual
@@ -139,7 +192,7 @@ Full invariant list: [[nxs-architecture-locks]].
    DB after verification so state matches pre-session. Regression-checked
    Dashboard (Total Lockers still reads 100), Bookings, and Settings — all
    load with no server or console errors.
-2. **2026-08-28 — Management Phase: Staff Directory + Activity Logs Tab
+3. **2026-08-28 — Management Phase: Staff Directory + Activity Logs Tab
    (Owner-only)** (`ohm#3z8k1p6d`). Plan + regression assessment presented
    and approved before implementation, per the prompt's mandatory gate.
    Two real discrepancies surfaced during context loading, not guessed
@@ -206,7 +259,7 @@ Full invariant list: [[nxs-architecture-locks]].
    via `localStorage`. Regression-checked Settings (dropdown
    options/labels/gating behavior unchanged), Bookings, Therapists, and
    Client Profile — all load with no server or console errors.
-3. **2026-08-28 — Settings Persistence — Wire Existing UI to Supabase
+4. **2026-08-28 — Settings Persistence — Wire Existing UI to Supabase
    (Direct Table Writes)** (`ohm#5x1p8m3v`). Wired the full-parity Settings
    UI (`ohm#6j2v9s4k`) to real Supabase persistence via direct writes to
    `services`/`promos`/`addons`/`rooms`/`lockers`, plus a new
@@ -255,7 +308,7 @@ Full invariant list: [[nxs-architecture-locks]].
    with the correct actor; regression-checked Bookings, Client Profile,
    and Therapists — all load with no server or console errors. Test rows
    cleaned up from the live DB after verification.
-4. **2026-08-28 — Closeout: Commit Reviewed Therapist-Tab Work + Fix Stale
+5. **2026-08-28 — Closeout: Commit Reviewed Therapist-Tab Work + Fix Stale
    Settings State Doc** (`ohm#6w9d3n8h`). Two-item closeout from audit
    `ohm#4t7b2k9w`. **Item 1**: no commit was made — `git status` showed a
    clean working tree at session start; the Therapist-tab work the audit
@@ -268,15 +321,3 @@ Full invariant list: [[nxs-architecture-locks]].
    `components/settings-browser.tsx` (no mutation calls, no `actions.ts`).
    Settings persistence/wiring remains a separate, explicitly out-of-scope
    follow-up.
-5. **2026-08-27 — Therapists Tab Full HTML Mockup Parity** (`ohm#7m2k5v9q`).
-   Rebuilt `/therapists` route to full HTML mockup parity matching `#panel-therapists` and design system:
-   **Therapist Roster**: Default 10 therapists matching mockup (`Ron`, `Don`, `Tristan`, `Leo`, `Roy`, `Xander`, `Dan`, `Marco`, `Akio`, `Josh`),
-   avatar initial badge, Most Requested badge (`✦ Most Requested`) for top-booked therapist, and daily schedule modal on header click.
-   **Filter Bar**: Interactive Date picker, Time slot select (`16:00` to `01:00`), availability filter (`Select All`, `Available`, `Booked`),
-   and `Show Archived` toggle.
-   **Interactive Roster Controls**: Clickable Weekly Day(s) Off toggle pills (`Sun`–`Sat`) and Services Offered toggle pills (`Combi Massage`,
-   `Signature Massage`, `Scrub`) with instant toast alerts.
-   **Kebab Action Menu**: Dropdown on each therapist card supporting `Mark Absent Today` (with automated booking reassignment flagging),
-   `Mark On Leave` (with start/end dates and optional reason), `Archive` (with required reason), `Unarchive`, and `Edit` (for in-place renaming).
-   **Modals**: Add Therapist modal with multi-select Day Off / Services pills, Daily Schedule modal, Mark On Leave modal,
-   Archive Therapist modal, and Edit Name modal.

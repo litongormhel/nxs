@@ -5,6 +5,108 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Analytics Phase: Owner-Only Reporting Dashboard (Spa-Day Bucketing)**
+  (`ohm#7v2q8f5c`) — **complete** as of 2026-08-28. Plan + regression
+  assessment presented and approved before implementation, per the
+  prompt's mandatory gate.
+  - **Context loaded first**: `.ai/briefing.md`, `.ai/handoff.md`,
+    `docs/state/analytics_state.md` (confirmed still an 8-line stub, no
+    prior analytics work exists), ADR-001, plus a direct read of the live
+    schema for `sales`/`bookings`/`clients`/`therapists`, and a grep of
+    ADR-001 / `lib/bookings/slots.ts` for any pre-existing "operating
+    day"/"spa-day" concept to reuse.
+  - **Two discrepancies surfaced, resolved with the user, not guessed
+    past**: (1) `nxs-spa-portal.html` is not present anywhere in this
+    repo — confirmed via a repo-wide search — same recurring gap as
+    every prior phase that cited it. Unlike prior phases, this one was
+    not blocked on it: the prompt's own scope section (items 3-8) already
+    gives complete, unambiguous logic for every stat/ranking, so the user
+    chose "build from the prompt's spec" over waiting for the file. (2)
+    the prompt states spa-day opens at 4:00 PM; the only existing
+    operating-hours definition anywhere in the codebase
+    (`lib/bookings/slots.ts`, confirmed during the Bookings phase) is
+    4:30 PM open / 1:00 AM last call. User confirmed aligning the
+    documented boundary to 4:30 PM for consistency — noted (and
+    confirmed by the math) that this is cosmetic only: the rollover
+    formula only cares about the 12:00 AM–3:59 PM window rolling back to
+    the previous spa-day, and nothing operationally happens 4:00–4:30 PM
+    either way.
+  - **New canonical spa-day helper** (`lib/analytics/spa-day.ts`) — first
+    of its kind in this codebase (confirmed via ADR-001 and a grep that
+    no "operating day"/"spa-day" concept existed before this).
+    `toSpaDay(timestamp)` / `toSpaMonth(timestamp)` return `YYYY-MM-DD` /
+    `YYYY-MM` spa-day buckets; `spaDayNow()` / `spaMonthNow()` give the
+    real current spa-day/month; `lastSpaDays(7)` returns the set of the
+    last 7 spa-day buckets including today. One formula underlies all of
+    them: since Asia/Manila is a fixed UTC+8 offset with no DST,
+    "shift to Manila local time, then roll back 16 hours so 12AM–3:59PM
+    lands on the prior date" reduces to a single 8-hour subtraction from
+    the raw UTC instant, then reading off the UTC calendar date. Every
+    bucketed stat/table in Analytics imports this — no per-card
+    reimplementation, per the prompt's explicit requirement.
+  - **Analytics page** (`app/analytics/page.tsx`, real page replacing the
+    8-line stub; `components/analytics-browser.tsx`, new): a single
+    Server Component fetch of `sales` (embedded-joined to
+    `services(name)` and `clients(codename, points_balance)`, all rows —
+    current volume is a handful, no pagination needed) and `bookings`
+    (status `Booked`/`Completed`, embedded-joined to
+    `therapists(name, archived)`), shaped into flat objects server-side
+    (same pattern as the Sales page) and passed to a client component
+    that does all spa-day bucketing/aggregation in a single `useMemo`.
+    **Sales**: Today/7-day/Month stat cards, sum of non-voided
+    `sales.amount`. **Client Visits**: Today/7-day/Month stat cards,
+    count of non-voided `sales` rows — confirmed per the prompt that
+    `sales` alone is the correct, non-double-counting visit definition
+    (both `logVisitBooking` and `quick_walkin()` unconditionally write a
+    `sales` row per visit; `point_transactions` is conditional/linked and
+    would double-count). **Most Availed Service**: ranked count of
+    `services.name` across all non-voided sales. **Sales Per Day / Sales
+    Per Month**: tables of amount + visit count per spa-day/spa-month
+    bucket, most recent first. **Top Clients**: ranked by total
+    non-voided spend among registered clients only (walk-ins have no
+    `client_id` to rank), showing visit count and `clients.points_balance`
+    read directly (no ledger recomputation). **Therapist Ranking**: count
+    of `bookings` with status Booked or Completed per `therapist_id`,
+    archived therapists tagged "(Archived)" per ADR-001's archive-handling
+    convention.
+  - **Owner-only gating reuses the exact existing `lib/staff-context.tsx`
+    (`useStaffSim`/`currentRole`) mechanism — no new gating pattern
+    invented**, per the prompt's explicit instruction: `lib/nav.ts`'s
+    `analytics` entry gained `ownerOnly: true` (this was the one nav item
+    still missing the flag — the Staff/Logs phase had explicitly left it
+    untouched as out of scope then, and this phase is what closes that
+    gap); `components/analytics-browser.tsx` has the same page-level
+    content guard pattern as `staff-browser.tsx`/`logs-browser.tsx`
+    (`currentRole !== "Owner"` → blocking message), defense-in-depth
+    beyond nav hiding for a direct URL visit.
+  - **No new RLS** — confirmed live via `list_tables` that `sales`,
+    `bookings`, `clients`, `therapists` all already carry public SELECT
+    policies from prior phases (Sales/Operations phase added `sales`
+    SELECT; `clients`/`therapists`/`bookings` already had SELECT from
+    Core Loop/Bookings/Staff phases). No migration file needed or
+    written this phase.
+  - **App-level-only role gate — the same explicitly accepted gap as
+    every other Owner-only page pending real Staff Auth**: RLS SELECT on
+    all four tables is open to any anon/authenticated caller; the actual
+    Owner-only restriction is enforced only in app code via the
+    client-side Simulate Staff selection, not at the RLS layer.
+  - Verified live in a browser (`npx tsc --noEmit` passes clean, but not
+    relied on alone): loaded `/analytics` as Owner and confirmed Sales
+    Today = ₱0 / Last 7 Days = This Month = ₱3,300 with 4 visits — all 4
+    existing sales correctly bucketed into the previous spa-day (Aug 27)
+    at the current pre-4:30-PM wall-clock time on Aug 28, matching the
+    Sales tab's own independently-computed ₱3,300 running total exactly;
+    confirmed Most Availed Service, Sales Per Day/Month, Top Clients, and
+    Therapist Ranking all rendered with correct counts against the live
+    data. Switched Simulate Staff to Ana (Front Desk) and confirmed both
+    the nav item disappeared and a direct `/analytics` visit showed the
+    Owner-only blocking message; switched back to Owner (J. Cruz) and
+    confirmed the dashboard reappeared. Regression-checked Sales
+    (₱3,300 total, matches), Bookings, Staff Directory, and Activity Logs
+    — all load with no server or console errors.
+  - See [[analytics_state]] for the full surgical detail (updated next in
+    this same session, per the prompt's mandated after-completion order).
+
 - **Operations Phase: Locker Board, Call Sheet, Sales (Edit/Void)**
   (`ohm#9h4c7x2m`) — **complete** as of 2026-08-28. Plan + regression
   assessment presented and approved before implementation, per the
@@ -646,11 +748,9 @@ This file tracks only what's in flight right now.
 ## Session notes
 
 - `app/dashboard`, `app/clients`, `app/bookings`, `app/therapists`,
-  `app/settings`, `app/staff`, and `app/logs` have real implementations.
-  `app/sales`, `app/analytics`, `app/lockers`, `app/call-sheet` are still
-  8-line "Coming soon." stubs — none of the phases so far have touched
-  them. Do not assume any behavior exists there beyond the stub unless
-  you've re-read the file.
+  `app/settings`, `app/staff`, `app/logs`, `app/sales`, `app/lockers`,
+  `app/call-sheet`, and `app/analytics` all have real implementations now.
+  No route is still an 8-line "Coming soon." stub.
 - Staff auth is still not wired up anywhere in the app code (no login page,
   no real session). `app/layout.tsx` now does fetch the `staff` table
   server-side (`ohm#3z8k1p6d`) to seed a client-side "simulated role"
