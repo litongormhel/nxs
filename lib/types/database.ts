@@ -896,6 +896,24 @@ export type Database = {
           },
         ]
       }
+      weekend_slots: {
+        Row: {
+          created_at: string
+          id: string
+          slot_time: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          slot_time: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          slot_time?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       loginable_staff: {
@@ -947,7 +965,7 @@ export type Database = {
       }
       quick_walkin: {
         Args: {
-          p_addon_ids: string[] | null
+          p_addon_ids: string[]
           p_amount: number
           p_booking_date: string
           p_client_id: string | null

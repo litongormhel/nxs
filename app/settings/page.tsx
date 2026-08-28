@@ -9,6 +9,7 @@ export default async function SettingsPage() {
     { data: promos },
     { data: addons },
     { data: staff },
+    { data: weekendSlots },
     { count: lockersCount },
     { count: roomsCount },
   ] = await Promise.all([
@@ -33,6 +34,10 @@ export default async function SettingsPage() {
       .eq("active", true)
       .order("name", { ascending: true }),
     supabase
+      .from("weekend_slots")
+      .select("id, slot_time")
+      .order("slot_time", { ascending: true }),
+    supabase
       .from("lockers")
       .select("*", { count: "exact", head: true })
       .eq("active", true),
@@ -53,6 +58,10 @@ export default async function SettingsPage() {
         initialPromos={promos ?? []}
         initialAddons={addons ?? []}
         initialStaff={staff ?? []}
+        initialWeekendSlots={(weekendSlots ?? []).map((s) => ({
+          id: s.id,
+          slot_time: s.slot_time.slice(0, 5),
+        }))}
         initialLockersCount={lockersCount ?? 100}
         initialRoomsCount={roomsCount ?? 18}
       />

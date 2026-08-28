@@ -87,7 +87,56 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-28 — Closeout: Commit Reviewed Therapist-Tab Work + Fix Stale
+1. **2026-08-28 — Settings Persistence — Wire Existing UI to Supabase
+   (Direct Table Writes)** (`ohm#5x1p8m3v`). Wired the full-parity Settings
+   UI (`ohm#6j2v9s4k`) to real Supabase persistence via direct writes to
+   `services`/`promos`/`addons`/`rooms`/`lockers`, plus a new
+   `weekend_slots` table (nothing in the schema modeled weekend slots
+   before this). Plan + regression assessment presented and approved
+   before implementation, including three explicit decision points
+   confirmed with the user: (1) Rooms/Beds count decreases deactivate the
+   highest-numbered active rooms rather than hard-deleting; (2) a new
+   `weekend_slots` table was the right call, not a generic settings blob;
+   (3) Services delete got wired too (soft-delete) even though the
+   prompt's literal scope omitted it, since the UI already shipped a
+   working Delete button for it. **Migration**
+   (`supabase/migrations/20260828011724_settings_persistence_rls.sql`,
+   smoke-tested via a rolled-back transaction as the `anon` role before
+   applying for real): new `weekend_slots` table + `public_insert`
+   INSERT/UPDATE RLS policies on `services`/`promos`/`addons`/`rooms`,
+   INSERT-only on `lockers` — same `roles: {public}`, `USING(true)` shape
+   as every prior additive policy. **Deletes for services/promos/addons
+   are soft** (`active = false` via UPDATE, never hard `DELETE`) since all
+   three are FK-referenced by historical sales/bookings/sale_addons rows —
+   no DELETE policy exists for them. A second migration
+   (`20260828011900_seed_weekend_slots_defaults.sql`) seeded the 7 default
+   slot times the UI already displayed, so switching to persistence didn't
+   visually wipe the list. **Server actions**
+   (`app/settings/actions.ts`, new file): one action per mutation point in
+   `settings-browser.tsx` (services price/points/add/delete, promos
+   add/discount/delete, weekend slots add/delete, add-ons add/price/delete
+   with the "minimum 1 active add-on" guard now enforced server-side too,
+   lockers add-10-batch, room count increase/decrease), each ending with
+   an `action_logs` insert using the same placeholder-actor pattern as
+   Bookings/Core Loop and `revalidatePath("/settings")`. **UI wiring**:
+   every local-only `useState` handler in `settings-browser.tsx` now calls
+   its server action first and only commits local state + toast on
+   success (numeric inputs switched from per-keystroke `onChange` to
+   commit-on-`blur` to avoid a DB write per digit typed); theme toggle and
+   Staff Simulation stay local-only by design (confirmed with the user, no
+   DB write needed for either). **App-level-only role gate, same
+   explicitly-accepted gap as every other phase**: the new RLS grants
+   INSERT/UPDATE at the DB level to any anon/authenticated caller — the
+   actual Front-Desk-locked / Supervisor-Owner-editable restriction is
+   enforced only in the UI via the existing Simulate Staff selection, not
+   at the RLS layer, pending real Staff Auth. Verified live in the browser
+   (not just `npx tsc --noEmit`, which passes clean): updated a service
+   price, added a weekend slot, added a locker batch, and shrank the room
+   count, confirming each write landed in the live DB and in `action_logs`
+   with the correct actor; regression-checked Bookings, Client Profile,
+   and Therapists — all load with no server or console errors. Test rows
+   cleaned up from the live DB after verification.
+2. **2026-08-28 — Closeout: Commit Reviewed Therapist-Tab Work + Fix Stale
    Settings State Doc** (`ohm#6w9d3n8h`). Two-item closeout from audit
    `ohm#4t7b2k9w`. **Item 1**: no commit was made — `git status` showed a
    clean working tree at session start; the Therapist-tab work the audit
@@ -100,7 +149,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `components/settings-browser.tsx` (no mutation calls, no `actions.ts`).
    Settings persistence/wiring remains a separate, explicitly out-of-scope
    follow-up.
-2. **2026-08-27 — Therapists Tab Full HTML Mockup Parity** (`ohm#7m2k5v9q`).
+3. **2026-08-27 — Therapists Tab Full HTML Mockup Parity** (`ohm#7m2k5v9q`).
    Rebuilt `/therapists` route to full HTML mockup parity matching `#panel-therapists` and design system:
    **Therapist Roster**: Default 10 therapists matching mockup (`Ron`, `Don`, `Tristan`, `Leo`, `Roy`, `Xander`, `Dan`, `Marco`, `Akio`, `Josh`),
    avatar initial badge, Most Requested badge (`✦ Most Requested`) for top-booked therapist, and daily schedule modal on header click.
@@ -112,7 +161,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `Mark On Leave` (with start/end dates and optional reason), `Archive` (with required reason), `Unarchive`, and `Edit` (for in-place renaming).
    **Modals**: Add Therapist modal with multi-select Day Off / Services pills, Daily Schedule modal, Mark On Leave modal,
    Archive Therapist modal, and Edit Name modal.
-3. **2026-08-27 — Settings Page Full HTML Mockup Parity** (`ohm#6j2v9s4k`).
+4. **2026-08-27 — Settings Page Full HTML Mockup Parity** (`ohm#6j2v9s4k`).
    Rebuilt `/settings` route to full HTML mockup parity matching `#panel-settings` and design system:
    **Display & Appearance**: Interactive dark/light appearance toggle switch with sun/moon SVG icons
    and dynamic descriptive subtitle.
@@ -127,7 +176,7 @@ Full invariant list: [[nxs-architecture-locks]].
    **Add-ons**: Add-on item list with editable prices, `+ Add Add-on` modal, and delete action.
    **Capacity**: Locker count with `+ Add 10 Lockers` increment button and editable Room / Bed count input.
    **Toast Notifications**: Animated bottom-center toast alert with auto-fade timeout for all settings actions.
-4. **2026-08-27 — Correction: Log Visit Modal, No-Show, and Cancel Action Wiring** (`ohm#4t7w1p9k`).
+5. **2026-08-27 — Correction: Log Visit Modal, No-Show, and Cancel Action Wiring** (`ohm#4t7w1p9k`).
    Explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`) original
    scope to enable the full **Log Visit** modal and wire up the **Log Visit**, **No-Show**, and **Cancel**
    action buttons on the Bookings Tab.
@@ -141,24 +190,4 @@ Full invariant list: [[nxs-architecture-locks]].
    `Cancel` updates the booking status via `updateBookingStatus` server action and immediately reloads the view.
    **Server Action**: `logVisitBooking` server action executes atomic booking completion, sales record creation,
    sale_addons insertions, points transaction (either EARN points or REDEEM -100), locker occupancy check-in, and action logs.
-5. **2026-08-27 — Correction: New Booking Modal & Booking List Row Full Mockup Parity** (`ohm#5q9x2m4p`).
-   Explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`) original
-   scope to achieve full HTML mockup parity for both the New Booking modal and the Bookings tab day list rows.
-   **Client selection**: replaced inline search with the mockup's dropdown select
-   (`— Walk-in / No account —` + registered clients) with conditional guest name
-   input field for walk-ins without accounts.
-   **Layout**: organized into 2-column Service & Therapist row (therapist hidden
-   for Wet Area), Promo dropdown below (massage-only, with Squad Goals derivation
-   and weekday soft warning banner), and Date picker with past date validation
-   ("Cannot book a date in the past.").
-   **Time & Rooms**: implemented visual Time Slot Grid with struck-through
-   disabled styling for conflicting slots (`taken`) and gold active selection,
-   "Use a custom time instead" toggle with live availability indicator, and
-   Room & Assignment Mode (`Auto (recommended)` vs `Manual`) row with auto-selection
-   of free rooms.
-   **Booking Row List**: updated day list in `BookingBrowser` to match mockup
-   card layout (`Aug 27, 2026 / 3:00 PM`, client name, room badge, squad pill,
-   service + therapist, uppercase status pill badge, and `Log Visit` / `No-show` / `Cancel` action buttons).
-   **Submission**: allows nullable therapist and room for Wet Area bookings;
-   triggers SMS preview modal for registered clients upon creation.
 

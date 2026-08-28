@@ -1,6 +1,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import {
+  updateServicePrice,
+  updateServicePoints,
+  addService,
+  deleteService,
+  addPromo,
+  updatePromoDiscount,
+  deletePromo,
+  addWeekendSlot,
+  deleteWeekendSlot,
+  addAddon,
+  updateAddonPrice,
+  deleteAddon,
+  addLockerBatch,
+  updateRoomCount,
+} from "@/app/settings/actions";
 
 export type Service = {
   id: string;
@@ -27,15 +44,10 @@ export type StaffMember = {
   position: string;
 };
 
-const DEFAULT_WEEKEND_SLOTS = [
-  "16:00",
-  "17:30",
-  "19:00",
-  "20:30",
-  "22:00",
-  "23:30",
-  "01:00",
-];
+export type WeekendSlot = {
+  id: string;
+  slot_time: string;
+};
 
 function fmtTime(t: string): string {
   if (!t || !t.includes(":")) return t;
@@ -49,6 +61,7 @@ export function SettingsBrowser({
   initialPromos,
   initialAddons,
   initialStaff,
+  initialWeekendSlots,
   initialLockersCount,
   initialRoomsCount,
 }: {
@@ -56,9 +69,12 @@ export function SettingsBrowser({
   initialPromos: Promo[];
   initialAddons: Addon[];
   initialStaff: StaffMember[];
+  initialWeekendSlots: WeekendSlot[];
   initialLockersCount: number;
   initialRoomsCount: number;
 }) {
+  const router = useRouter();
+
   // Theme state
   const [isLightMode, setIsLightMode] = useState(false);
 
@@ -125,8 +141,8 @@ export function SettingsBrowser({
     ];
   });
 
-  const [weekendSlots, setWeekendSlots] = useState<string[]>(
-    DEFAULT_WEEKEND_SLOTS
+  const [weekendSlots, setWeekendSlots] = useState<WeekendSlot[]>(
+    initialWeekendSlots ?? []
   );
 
   const [addons, setAddons] = useState<Addon[]>(() => {
@@ -138,6 +154,9 @@ export function SettingsBrowser({
     initialLockersCount || 100
   );
   const [roomCount, setRoomCount] = useState<number>(initialRoomsCount || 18);
+  const [roomCountDraft, setRoomCountDraft] = useState<string>(
+    String(initialRoomsCount || 18)
+  );
 
   // Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -159,7 +178,7 @@ export function SettingsBrowser({
     type: "service" | "promo" | "slot" | "addon";
     title: string;
     fields: { name: string; label: string; defaultValue: string; type?: string }[];
-    onConfirm: (values: Record<string, string>) => void;
+    onConfirm: (values: Record<string, string>) => void | Promise<void>;
   } | null>(null);
 
   // Theme toggle effect
@@ -175,20 +194,34 @@ export function SettingsBrowser({
   }, [isLightMode]);
 
   // Handlers for Services
-  const handleUpdateServicePrice = (index: number, val: string) => {
+  const handleUpdateServicePrice = async (index: number, val: string) => {
     const num = parseInt(val, 10) || 0;
+    const svc = services[index];
     const updated = [...services];
     updated[index] = { ...updated[index], price: num };
     setServices(updated);
-    showToast(`${updated[index].name} price updated to ₱${num}`);
+    const res = await updateServicePrice(svc.id, num, selectedStaffId);
+    if (!res.ok) {
+      showToast(`Failed to update ${svc.name} price: ${res.error}`);
+      return;
+    }
+    showToast(`${svc.name} price updated to ₱${num}`);
+    router.refresh();
   };
 
-  const handleUpdateServicePoints = (index: number, val: string) => {
+  const handleUpdateServicePoints = async (index: number, val: string) => {
     const num = parseInt(val, 10) || 0;
+    const svc = services[index];
     const updated = [...services];
     updated[index] = { ...updated[index], points_earned: num };
     setServices(updated);
-    showToast(`${updated[index].name} points updated to +${num}`);
+    const res = await updateServicePoints(svc.id, num, selectedStaffId);
+    if (!res.ok) {
+      showToast(`Failed to update ${svc.name} points: ${res.error}`);
+      return;
+    }
+    showToast(`${svc.name} points updated to +${num}`);
+    router.refresh();
   };
 
   const handleAddService = () => {
@@ -200,37 +233,56 @@ export function SettingsBrowser({
         { name: "price", label: "Price (₱)", defaultValue: "200", type: "number" },
         { name: "points", label: "Points Earned", defaultValue: "2", type: "number" },
       ],
-      onConfirm: (values) => {
+      onConfirm: async (values) => {
         const name = values.name.trim();
         if (!name) return;
         const price = parseInt(values.price, 10) || 200;
         const points = parseInt(values.points, 10) || 2;
+        const res = await addService(name, price, points, selectedStaffId);
+        if (!res.ok) {
+          showToast(`Failed to add ${name}: ${res.error}`);
+          return;
+        }
         const newSvc: Service = {
-          id: `svc_${Date.now()}`,
+          id: res.id!,
           name,
           price,
           points_earned: points,
         };
         setServices((prev) => [...prev, newSvc]);
         showToast(`${name} added to services`);
+        router.refresh();
       },
     });
   };
 
-  const handleDeleteService = (index: number) => {
+  const handleDeleteService = async (index: number) => {
     const svc = services[index];
     if (!window.confirm(`Delete ${svc.name}?`)) return;
+    const res = await deleteService(svc.id, selectedStaffId);
+    if (!res.ok) {
+      showToast(`Failed to remove ${svc.name}: ${res.error}`);
+      return;
+    }
     setServices((prev) => prev.filter((_, i) => i !== index));
     showToast(`${svc.name} removed`);
+    router.refresh();
   };
 
   // Handlers for Promos
-  const handleUpdatePromoDiscount = (index: number, val: string) => {
+  const handleUpdatePromoDiscount = async (index: number, val: string) => {
     const num = parseInt(val, 10) || 0;
+    const promo = promos[index];
     const updated = [...promos];
     updated[index] = { ...updated[index], discount: num };
     setPromos(updated);
-    showToast(`${updated[index].label} discount updated to -₱${num}`);
+    const res = await updatePromoDiscount(promo.id, num, selectedStaffId);
+    if (!res.ok) {
+      showToast(`Failed to update ${promo.label} discount: ${res.error}`);
+      return;
+    }
+    showToast(`${promo.label} discount updated to -₱${num}`);
+    router.refresh();
   };
 
   const handleAddPromo = () => {
@@ -241,26 +293,38 @@ export function SettingsBrowser({
         { name: "label", label: "Promo Name / Label", defaultValue: "" },
         { name: "discount", label: "Discount Amount (₱)", defaultValue: "100", type: "number" },
       ],
-      onConfirm: (values) => {
+      onConfirm: async (values) => {
         const label = values.label.trim();
         if (!label) return;
         const discount = parseInt(values.discount, 10) || 100;
+        const res = await addPromo(label, discount, selectedStaffId);
+        if (!res.ok) {
+          showToast(`Failed to add ${label}: ${res.error}`);
+          return;
+        }
         const newPromo: Promo = {
-          id: `promo_${Date.now()}`,
+          id: res.id!,
           label,
           discount,
         };
         setPromos((prev) => [...prev, newPromo]);
         showToast(`${label} added`);
+        router.refresh();
       },
     });
   };
 
-  const handleDeletePromo = (index: number) => {
+  const handleDeletePromo = async (index: number) => {
     const promo = promos[index];
     if (!window.confirm(`Delete ${promo.label}?`)) return;
+    const res = await deletePromo(promo.id, selectedStaffId);
+    if (!res.ok) {
+      showToast(`Failed to remove ${promo.label}: ${res.error}`);
+      return;
+    }
     setPromos((prev) => prev.filter((_, i) => i !== index));
     showToast(`${promo.label} removed`);
+    router.refresh();
   };
 
   // Handlers for Weekend Slots
@@ -271,7 +335,7 @@ export function SettingsBrowser({
       fields: [
         { name: "slot", label: "Time Slot (24-hr HH:MM, e.g. 15:00)", defaultValue: "" },
       ],
-      onConfirm: (values) => {
+      onConfirm: async (values) => {
         const val = values.slot.trim();
         if (!val || !/^\d{1,2}:\d{2}$/.test(val)) {
           alert("Please use HH:MM format, e.g. 15:00");
@@ -279,37 +343,58 @@ export function SettingsBrowser({
         }
         const [h, m] = val.split(":");
         const formatted = `${String(h).padStart(2, "0")}:${m}`;
-        if (weekendSlots.includes(formatted)) {
+        if (weekendSlots.some((s) => s.slot_time === formatted)) {
           alert("Slot already exists");
           return;
         }
-        const updated = [...weekendSlots, formatted].sort((a, b) => {
-          const [ha, ma] = a.split(":").map(Number);
-          const [hb, mb] = b.split(":").map(Number);
-          const minA = ha < 10 ? ha * 60 + ma + 1440 : ha * 60 + ma;
-          const minB = hb < 10 ? hb * 60 + mb + 1440 : hb * 60 + mb;
-          return minA - minB;
-        });
+        const res = await addWeekendSlot(formatted, selectedStaffId);
+        if (!res.ok) {
+          showToast(`Failed to add slot: ${res.error}`);
+          return;
+        }
+        const updated = [...weekendSlots, { id: res.id!, slot_time: formatted }].sort(
+          (a, b) => {
+            const [ha, ma] = a.slot_time.split(":").map(Number);
+            const [hb, mb] = b.slot_time.split(":").map(Number);
+            const minA = ha < 10 ? ha * 60 + ma + 1440 : ha * 60 + ma;
+            const minB = hb < 10 ? hb * 60 + mb + 1440 : hb * 60 + mb;
+            return minA - minB;
+          }
+        );
         setWeekendSlots(updated);
         showToast(`${fmtTime(formatted)} added to weekend slots`);
+        router.refresh();
       },
     });
   };
 
-  const handleDeleteSlot = (index: number) => {
+  const handleDeleteSlot = async (index: number) => {
     const slot = weekendSlots[index];
-    if (!window.confirm(`Remove ${fmtTime(slot)} from weekend slots?`)) return;
+    if (!window.confirm(`Remove ${fmtTime(slot.slot_time)} from weekend slots?`)) return;
+    const res = await deleteWeekendSlot(slot.id, selectedStaffId);
+    if (!res.ok) {
+      showToast(`Failed to remove slot: ${res.error}`);
+      return;
+    }
     setWeekendSlots((prev) => prev.filter((_, i) => i !== index));
-    showToast(`${fmtTime(slot)} removed`);
+    showToast(`${fmtTime(slot.slot_time)} removed`);
+    router.refresh();
   };
 
   // Handlers for Add-ons
-  const handleUpdateAddonPrice = (index: number, val: string) => {
+  const handleUpdateAddonPrice = async (index: number, val: string) => {
     const num = parseInt(val, 10) || 0;
+    const addon = addons[index];
     const updated = [...addons];
     updated[index] = { ...updated[index], price: num };
     setAddons(updated);
-    showToast(`${updated[index].name} price updated to ₱${num}`);
+    const res = await updateAddonPrice(addon.id, num, selectedStaffId);
+    if (!res.ok) {
+      showToast(`Failed to update ${addon.name} price: ${res.error}`);
+      return;
+    }
+    showToast(`${addon.name} price updated to ₱${num}`);
+    router.refresh();
   };
 
   const handleAddAddon = () => {
@@ -320,43 +405,69 @@ export function SettingsBrowser({
         { name: "name", label: "Add-on Name", defaultValue: "" },
         { name: "price", label: "Price (₱)", defaultValue: "50", type: "number" },
       ],
-      onConfirm: (values) => {
+      onConfirm: async (values) => {
         const name = values.name.trim();
         if (!name) return;
         const price = parseInt(values.price, 10) || 50;
+        const res = await addAddon(name, price, selectedStaffId);
+        if (!res.ok) {
+          showToast(`Failed to add ${name}: ${res.error}`);
+          return;
+        }
         const newAddon: Addon = {
-          id: `addon_${Date.now()}`,
+          id: res.id!,
           name,
           price,
         };
         setAddons((prev) => [...prev, newAddon]);
         showToast(`${name} added to add-ons`);
+        router.refresh();
       },
     });
   };
 
-  const handleDeleteAddon = (index: number) => {
+  const handleDeleteAddon = async (index: number) => {
     if (addons.length <= 1) {
       alert("At least one add-on must remain.");
       return;
     }
     const addon = addons[index];
     if (!window.confirm(`Delete ${addon.name}?`)) return;
+    const res = await deleteAddon(addon.id, selectedStaffId);
+    if (!res.ok) {
+      showToast(`Failed to remove ${addon.name}: ${res.error}`);
+      return;
+    }
     setAddons((prev) => prev.filter((_, i) => i !== index));
     showToast(`${addon.name} removed`);
+    router.refresh();
   };
 
   // Handlers for Capacity
-  const handleAddLockers = () => {
+  const handleAddLockers = async () => {
+    const res = await addLockerBatch(selectedStaffId);
+    if (!res.ok) {
+      showToast(`Failed to add lockers: ${res.error}`);
+      return;
+    }
     const updated = lockerCount + 10;
     setLockerCount(updated);
     showToast(`Locker count increased to ${updated}`);
+    router.refresh();
   };
 
-  const handleUpdateRoomCount = (val: string) => {
+  const handleUpdateRoomCount = async (val: string) => {
     const num = parseInt(val, 10) || 18;
+    if (num === roomCount) return;
+    const res = await updateRoomCount(num, selectedStaffId);
+    if (!res.ok) {
+      showToast(`Failed to update room count: ${res.error}`);
+      setRoomCountDraft(String(roomCount));
+      return;
+    }
     setRoomCount(num);
     showToast(`Room/bed count set to ${num}`);
+    router.refresh();
   };
 
   return (
@@ -502,8 +613,9 @@ export function SettingsBrowser({
                 <input
                   type="number"
                   disabled={!canEditServices}
-                  value={s.points_earned}
-                  onChange={(e) => handleUpdateServicePoints(idx, e.target.value)}
+                  defaultValue={s.points_earned}
+                  key={`${s.id}-pts-${s.points_earned}`}
+                  onBlur={(e) => handleUpdateServicePoints(idx, e.target.value)}
                   className="w-[70px] rounded-lg border border-border bg-[#1d1610] px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none disabled:opacity-50 disabled:cursor-not-allowed focus:border-gold"
                 />
               </div>
@@ -512,8 +624,9 @@ export function SettingsBrowser({
                 <input
                   type="number"
                   disabled={!canEditServices}
-                  value={s.price}
-                  onChange={(e) => handleUpdateServicePrice(idx, e.target.value)}
+                  defaultValue={s.price}
+                  key={`${s.id}-price-${s.price}`}
+                  onBlur={(e) => handleUpdateServicePrice(idx, e.target.value)}
                   className="w-[70px] rounded-lg border border-border bg-[#1d1610] px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none disabled:opacity-50 disabled:cursor-not-allowed focus:border-gold"
                 />
               </div>
@@ -564,8 +677,9 @@ export function SettingsBrowser({
                 <input
                   type="number"
                   disabled={!canEditPromos}
-                  value={p.discount}
-                  onChange={(e) => handleUpdatePromoDiscount(idx, e.target.value)}
+                  defaultValue={p.discount}
+                  key={`${p.id}-discount-${p.discount}`}
+                  onBlur={(e) => handleUpdatePromoDiscount(idx, e.target.value)}
                   className="w-[70px] rounded-lg border border-border bg-[#1d1610] px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none disabled:opacity-50 focus:border-gold"
                 />
               </div>
@@ -598,11 +712,11 @@ export function SettingsBrowser({
         <div className="space-y-2">
           {weekendSlots.map((slot, idx) => (
             <div
-              key={slot}
+              key={slot.id}
               className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-2.5"
             >
               <div className="flex-1 font-mono text-xs font-semibold text-[#f3d48b]">
-                {fmtTime(slot)}
+                {fmtTime(slot.slot_time)}
               </div>
               <button
                 onClick={() => handleDeleteSlot(idx)}
@@ -641,8 +755,9 @@ export function SettingsBrowser({
                 <span className="text-[11px] text-muted">₱</span>
                 <input
                   type="number"
-                  value={a.price}
-                  onChange={(e) => handleUpdateAddonPrice(idx, e.target.value)}
+                  defaultValue={a.price}
+                  key={`${a.id}-price-${a.price}`}
+                  onBlur={(e) => handleUpdateAddonPrice(idx, e.target.value)}
                   className="w-[70px] rounded-lg border border-border bg-[#1d1610] px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none focus:border-gold"
                 />
               </div>
@@ -687,8 +802,9 @@ export function SettingsBrowser({
             </div>
             <input
               type="number"
-              value={roomCount}
-              onChange={(e) => handleUpdateRoomCount(e.target.value)}
+              value={roomCountDraft}
+              onChange={(e) => setRoomCountDraft(e.target.value)}
+              onBlur={(e) => handleUpdateRoomCount(e.target.value)}
               className="w-20 rounded-lg border border-border bg-[#1d1610] px-2.5 py-2 font-mono text-xs text-foreground outline-none focus:border-gold"
             />
           </div>

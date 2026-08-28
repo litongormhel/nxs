@@ -5,6 +5,118 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Settings Persistence (`ohm#5x1p8m3v`) — Wire Existing UI to Supabase
+  (Direct Table Writes)** — **complete** as of 2026-08-28. Plan +
+  regression assessment presented and approved before any code, per the
+  prompt's mandatory gate — three explicit decision points were confirmed
+  with the user rather than assumed (see below).
+  - **Context loaded first**: `.ai/briefing.md`, `.ai/handoff.md`,
+    `docs/state/settings_state.md`, ADR-001, plus a direct read of the
+    live schema/RLS for `services`/`promos`/`addons`/`rooms`/`lockers`
+    and of `components/settings-browser.tsx`'s exact mutation points —
+    per the prompt's required reading order.
+  - **Verification turned up two real gaps, not assumptions**: no table
+    anywhere modeled Weekend Fixed Time Slots (confirmed via live schema
+    read, not guessed), and Capacity doesn't map to a count column —
+    `rooms`/`lockers` are individual numbered rows (PK = `number`), so
+    "Room/Bed count" required a real design decision on what a decrease
+    means.
+  - **Three decisions confirmed with the user before writing code**:
+    (1) Rooms/Beds count decreases deactivate (`active = false`) the
+    highest-numbered active rooms rather than a hard delete — never a
+    hard delete since `bookings.room_number` FKs to `rooms`; increases
+    insert new sequential rows, same pattern as Lockers'
+    "+ Add 10 Lockers". (2) A new dedicated `weekend_slots` table (plain
+    `slot_time` column, add/delete only, no FK to anything) was approved
+    as the right call — not a violation of "no new generic settings
+    store," since it's a real table for real data with nowhere else to
+    live, not a config blob. (3) Services delete got wired too
+    (soft-delete, Supervisor/Owner-gated), even though the prompt's
+    literal scope only listed "update price/points" for Services —
+    leaving it unwired would have left an existing, visible Delete
+    button silently do nothing.
+  - **Migration** (`supabase/migrations/20260828011724_settings_persistence_rls.sql`),
+    smoke-tested via a rolled-back transaction first — ran the full DDL,
+    then `set local role anon` and exercised insert/update through every
+    new policy (weekend_slots insert/select, services/promos/addons
+    insert+update+soft-delete, rooms insert+deactivate, lockers insert),
+    confirmed the booking GiST exclusion constraints and other tables'
+    existing policies were untouched, then rolled back — before applying
+    for real via `apply_migration`. Contents: new `weekend_slots` table;
+    additive `public_insert`/`public_update` RLS policies (role
+    `public`, `USING(true)`/`WITH CHECK(true)`, same shape as every prior
+    additive policy from Core Loop/Bookings) on
+    `services`/`promos`/`addons`/`rooms`; `public_insert`-only on
+    `lockers` (batch-add never touches existing rows). **No DELETE
+    policy exists on services/promos/addons** — all three are
+    FK-referenced by historical `sales`/`bookings`/`sale_addons` rows, so
+    "delete" in the UI is a soft `UPDATE ... SET active = false`, which
+    the existing `page.tsx` reads already filter out
+    (`.eq("active", true)`). A second migration
+    (`20260828011900_seed_weekend_slots_defaults.sql`) seeded the 7
+    default slot times the UI already displayed locally, so switching to
+    persistence didn't visually wipe the list on first load.
+  - **App-level-only role gate — the explicitly accepted gap, same as
+    every other phase pending real Staff Auth**: every new RLS policy
+    grants INSERT/UPDATE capability at the DB level to any
+    anon/authenticated caller. The actual "Front Desk can't edit,
+    Supervisor/Owner can" restriction is enforced only in
+    `settings-browser.tsx`'s existing `canEditServices`/`canEditPromos`
+    checks (driven by the Simulate Staff dropdown), not at the RLS
+    layer. Documented inline in the migration file and here — not a
+    regression, not forgotten, closes when real Staff Auth lands.
+  - **Server actions** (`app/settings/actions.ts`, new file): one action
+    per mutation point identified in `settings-browser.tsx` —
+    `updateServicePrice`/`updateServicePoints`/`addService`/
+    `deleteService`, `addPromo`/`updatePromoDiscount`/`deletePromo`,
+    `addWeekendSlot`/`deleteWeekendSlot`,
+    `addAddon`/`updateAddonPrice`/`deleteAddon` (the existing UI-only
+    "minimum 1 active add-on" safeguard is now also enforced
+    server-side, not just via a disabled button), `addLockerBatch`
+    (inserts the next 10 sequential numbers after the current max),
+    `updateRoomCount` (inserts or deactivates rows to reach the target
+    count). Every mutation ends with an `action_logs` insert using the
+    same `// TEMP: placeholder actor pending Staff Auth phase` pattern
+    as Bookings/Core Loop (actor = the real `staff.id` already flowing
+    through `selectedStaffId` from the Simulate Staff dropdown) and
+    `revalidatePath("/settings")`.
+  - **UI wiring** (`components/settings-browser.tsx`): every local-only
+    `useState` handler now calls its server action first and only
+    commits local state + toast on success, showing the actual error on
+    failure instead of a blind "updated" toast. Numeric inputs
+    (services price/points, promo discount, add-on price) were switched
+    from per-keystroke `onChange` to commit-on-`blur`, so typing doesn't
+    fire a DB write and an `action_logs` row per digit — a fix beyond
+    the prompt's literal ask, made because the direct 1:1 port would
+    have hammered the DB and the audit log on every keystroke. Room
+    count got the same treatment via a separate draft-state input.
+    Weekend slots' local state changed shape from `string[]` to
+    `{id, slot_time}[]` since delete now needs a real row id; `page.tsx`
+    gained a `weekend_slots` fetch to seed it. Theme toggle and Staff
+    Simulation stay local/session-only by design — confirmed with the
+    user that neither needs DB persistence, consistent with the
+    prompt's own suggestion.
+  - **`lib/types/database.ts` regenerated** from the live schema after
+    both migrations, picking up the new `weekend_slots` table type
+    (hand-preserved the existing `quick_walkin` `Args` nullability
+    adjustments from `ohm#8r3n6y1q`, which the raw codegen doesn't
+    infer).
+  - Verified live in a browser (`npx tsc --noEmit` passes clean, but not
+    relied on alone): switched Simulate Staff to Diego (Supervisor),
+    updated Combi Massage's price, added a weekend slot, added a locker
+    batch, and shrank the room count from 18 to 16 — confirmed each
+    write landed in the live `services`/`weekend_slots`/`lockers`/`rooms`
+    tables and produced a correctly-attributed `action_logs` row,
+    confirmed rooms 17–18 were deactivated (not deleted) by the count
+    decrease. Regression-checked Bookings, Client Profile, and
+    Therapists pages — all load with no server or console errors, none
+    of their read/write paths touch the five catalog tables' new INSERT/
+    UPDATE policies. Test rows (the extra weekend slot, the 10 extra
+    lockers, the price bump, the deactivated rooms) were reverted from
+    the live DB after verification so it matches its pre-test state.
+  - See [[settings_state]] for the full surgical detail (updated next in
+    this same session, per the prompt's mandated after-completion order).
+
 - **Closeout (`ohm#6w9d3n8h`) — Commit Reviewed Therapist-Tab Work + Fix
   Stale Settings State Doc** — **complete** as of 2026-08-28. Two-item
   closeout from audit `ohm#4t7b2k9w`:
