@@ -5,6 +5,140 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Management Phase: Staff Directory + Activity Logs Tab (Owner-only)**
+  (`ohm#3z8k1p6d`) — **complete** as of 2026-08-28. Plan + regression
+  assessment presented and approved before implementation, per the
+  prompt's mandatory gate.
+  - **Context loaded first, two real discrepancies surfaced (not
+    guessed past)**: (1) the first `nxs-spa-portal.html` found on disk
+    was the wrong/older mockup (no `panel-staff`/`panel-logs`/
+    `addStaffModalScrim`) — same failure mode as `ohm#8r3n6y1q` — blocked
+    until the user supplied the correct file
+    (`nxs-spa-portal (13).html`). (2) The prompt assumed Owner-only nav
+    gating could "reuse the Analytics mechanism" — verified directly this
+    doesn't exist: `lib/nav.ts` was a static array with zero role logic,
+    `app/analytics/page.tsx` has no role check, and `Simulate Staff`
+    state lived only in local `useState` inside `settings-browser.tsx`
+    (confirmed local/session-only by design in the prior Settings phase),
+    invisible to `Sidebar`/`layout.tsx`.
+  - **Three decisions confirmed with the user before writing code**: (1)
+    build a small shared role-state mechanism (React Context) rather than
+    leaving Owner-gating unbuilt — approved as legitimate scope, not
+    creep, since the prompt explicitly required it for Logs; (2) Staff
+    Directory's nav item should also be Owner-only, matching the mockup's
+    `nav-staff` gating even though the prompt's text only explicitly said
+    this for Logs; (3) Analytics' nav item should NOT be touched despite
+    the mockup gating it identically — stayed strictly scoped to
+    Staff/Logs per the prompt's explicit out-of-scope list.
+  - **New shared mechanism** (`lib/staff-context.tsx`): `StaffSimProvider`
+    + `useStaffSim()` — a React Context holding `staffList`,
+    `loginableStaff`, `selectedStaffId`/`setSelectedStaffId`,
+    `currentStaff`, `currentRole` (same `positionToRole` mapping as the
+    mockup: Receptionist→"Front Desk", else 1:1). Seeded from a
+    server-fetched `staff` list in `app/layout.tsx` (now an `async`
+    Server Component wrapping `Sidebar` + `children`). Selection persists
+    to `localStorage` (`nxs_sim_staff_id`) so it survives full page
+    navigation between real Next.js routes — unlike the mockup's
+    single-page tab switching, this app has real page loads per route.
+    `components/sidebar.tsx` now filters `navItems` (each item in
+    `lib/nav.ts` gained an optional `ownerOnly` flag, set on `staff` and
+    `logs` only) to hide `Staff`/`Logs` unless `currentRole === 'Owner'`.
+  - **`components/settings-browser.tsx` migrated to the shared context**:
+    the Simulate Staff dropdown's `staffList`/`loginableStaff`/
+    `selectedStaffId`/`currentStaff`/`currentRole` are now read from
+    `useStaffSim()` instead of local `useState` — same UI, same options,
+    same labels, verified unchanged in the browser. The `initialStaff`
+    prop and its local hardcoded fallback array were removed as dead code
+    (the fetch now happens once in the layout); `app/settings/page.tsx`
+    no longer fetches or passes `staff`.
+  - **Staff Directory** (`app/staff/page.tsx`, real page replacing the
+    8-line stub; `components/staff-browser.tsx`, new): flat list per the
+    mockup (`renderStaffList`) — each row shows position, an inline
+    comment if present, and "· can log in" / "· directory only" — plus
+    the "Only Receptionist, Supervisor, and Owner can log in..." notice
+    and a `+ Add Staff` button. **Add Staff modal**: Name, Position
+    select (Receptionist/Attendant/Supervisor/Others — matches the
+    mockup's `#stPosition` options, no Owner in the add list), Comment
+    field shown only when Position is "Others", same "Please enter a
+    name." validation as the mockup. **Owner-only page-level content
+    guard** in addition to nav hiding, since a direct URL visit bypasses
+    nav — verified live that visiting `/staff` as Front Desk shows a
+    blocking message instead of the roster. No delete/archive — add-only,
+    confirmed in scope with the user beforehand.
+  - **New `app/staff/actions.ts`**: `addStaff(name, position, comment,
+    actorStaffId)` — INSERT into `staff`, then an `action_logs` insert
+    (`action = "staff_add"`, detail = name/position/comment) using the
+    same `// TEMP: placeholder actor pending Staff Auth phase` pattern as
+    every other phase, `revalidatePath("/staff")` +
+    `revalidatePath("/settings")` + `revalidatePath("/", "layout")` (the
+    last one so the root layout's staff fetch — and therefore the
+    Simulate Staff dropdown and `loginableStaff` list — picks up newly
+    added staff without a hard reload).
+  - **Activity Logs** (`app/logs/page.tsx`, real page replacing the
+    8-line stub; `components/logs-browser.tsx`, new): server-fetches
+    `action_logs` ordered `created_at desc`, `LIMIT 500` — current volume
+    is a few dozen rows across every phase since Core Loop, so no
+    pagination UI was built; flagged in a code comment to revisit once
+    real growth suggests it, per the prompt's explicit instruction not to
+    over-build for a dataset this small. **Staff names are joined in app
+    code, not via a PostgREST embedded select** — `action_logs.staff_id`
+    carries two FKs in the generated types (one to `staff`, one to the
+    `loginable_staff` view over the same table), which makes `staff:
+    staff_id(name)`-style embedding ambiguous; fetched `staff` separately
+    and mapped `staff_id → name` server-side instead. **Filters**
+    (Action/Date/Staff, all combinable, exactly like the mockup's
+    `renderLogs()`): Action and Staff dropdowns populate from **distinct
+    values actually present in the fetched rows** — deliberately not the
+    mockup's hardcoded `LOG_ACTIONS` list, per the prompt's explicit
+    instruction that this one point overrides mockup literalism. Table:
+    When / Staff / Action / Detail, matching the mockup's
+    `an-table`/`an-head` grid-template-columns exactly. Read-only, no
+    mutation capability from this tab. Same Owner-only page-level content
+    guard as Staff Directory — verified live that visiting `/logs`
+    directly as Front Desk shows a blocking message.
+  - **Migration**
+    (`supabase/migrations/20260828015000_staff_directory_and_logs_rls.sql`),
+    smoke-tested via a rolled-back transaction first — ran the DDL, then
+    `set local role anon` and exercised an insert into `staff` and a
+    select from `action_logs` through the new policies, confirmed both
+    worked, then rolled back — before applying for real via
+    `apply_migration`. Contents: `staff` gained a `public_insert` INSERT
+    policy (`WITH CHECK (true)`) — was SELECT-only before this, first
+    writer is the Add Staff modal; `action_logs` gained a `public_select`
+    SELECT policy (`USING (true)`) — was INSERT-only before this, first
+    reader is the Activity Logs tab. Both `roles: public`, same shape as
+    every prior additive policy from Core Loop/Bookings/Settings. No
+    UPDATE/DELETE policy added to either table.
+  - **App-level-only role gate — the explicitly accepted gap, same as
+    every other phase pending real Staff Auth**: the new RLS grants
+    INSERT (`staff`) / SELECT (`action_logs`) at the DB level to any
+    anon/authenticated caller. The actual "Owner only" restriction for
+    both new pages is enforced only in app code (nav hiding +
+    page-level content guard, both keyed off the client-side Simulate
+    Staff selection), not at the RLS layer — not a regression, not
+    forgotten, closes when real Staff Auth lands.
+  - **Seeded "Jeff" and "Essem"** as real `Receptionist` rows through the
+    live Add Staff UI (explicit user request during the approval
+    exchange, not test data to be cleaned up) — both now appear correctly
+    in the Simulate Staff dropdown and the Staff Directory list, and their
+    `staff_add` action_logs rows are visible and filterable on the Logs
+    tab.
+  - Verified live in a browser (`npx tsc --noEmit` passes clean, but not
+    relied on alone): confirmed nav hiding and the page-level Owner-only
+    guard both correctly block Front Desk and clear for Owner on both
+    `/staff` and `/logs`; confirmed the Logs Action filter dropdown
+    includes the new `staff_add` action and filters the table correctly;
+    confirmed the Staff filter dropdown populates from distinct staff
+    actually present in the logs; confirmed the Simulate Staff selection
+    survives a full page navigation (not just a client-side route change)
+    via `localStorage`, and that switching staff in Settings still
+    updates `canEditServices`/`canEditPromos` gating exactly as before.
+    Regression-checked Settings, Bookings, Therapists, and Client Profile
+    — all load with no server or console errors.
+  - See [[staff_state]] and [[logs_state]] for the full surgical detail
+    (updated next in this same session, per the prompt's mandated
+    after-completion order).
+
 - **Settings Persistence (`ohm#5x1p8m3v`) — Wire Existing UI to Supabase
   (Direct Table Writes)** — **complete** as of 2026-08-28. Plan +
   regression assessment presented and approved before any code, per the
@@ -392,14 +526,25 @@ This file tracks only what's in flight right now.
 
 ## Session notes
 
-- `app/dashboard` and `app/clients` have real implementations. Every other
-  route under `app/` (`bookings`, `sales`, `therapists`, `staff`, `logs`,
-  `analytics`, `settings`, `lockers`, `call-sheet`) is still an 8-line
-  "Coming soon." stub — Core Loop did not touch any of them. Do not assume
-  any behavior exists there beyond the stub unless you've re-read the file.
+- `app/dashboard`, `app/clients`, `app/bookings`, `app/therapists`,
+  `app/settings`, `app/staff`, and `app/logs` have real implementations.
+  `app/sales`, `app/analytics`, `app/lockers`, `app/call-sheet` are still
+  8-line "Coming soon." stubs — none of the phases so far have touched
+  them. Do not assume any behavior exists there beyond the stub unless
+  you've re-read the file.
 - Staff auth is still not wired up anywhere in the app code (no login page,
-  no session in `app/layout.tsx`/`sidebar.tsx`). The app's server/browser
-  Supabase clients use the anon key. RLS now has narrow, additive
-  SELECT/INSERT policies for the five tables Core Loop needed (see above) —
-  everything else is unchanged from the doc-scaffold bootstrap's findings:
-  enabled, no policy, default-deny.
+  no real session). `app/layout.tsx` now does fetch the `staff` table
+  server-side (`ohm#3z8k1p6d`) to seed a client-side "simulated role"
+  context (`lib/staff-context.tsx`) — this is still the Simulate Staff
+  placeholder pattern, not real auth; there is no `auth.uid()`-keyed
+  session anywhere. The app's server/browser Supabase clients use the
+  anon key. RLS now has narrow, additive SELECT/INSERT policies on
+  `staff` (SELECT + INSERT) and `action_logs` (INSERT + SELECT), among
+  the other tables opened by prior phases — everything else is
+  default-deny for `anon`/`authenticated`.
+- Owner-only route gating (`Staff`, `Logs` nav items, and each page's own
+  content) is enforced only in app code via `lib/staff-context.tsx`'s
+  `currentRole`, driven by the client-side Simulate Staff selection — not
+  by RLS, not by real route middleware. Do not treat this as real access
+  control; it's a UI convenience pending Staff Auth, same caveat as every
+  other role check in this app.

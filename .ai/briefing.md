@@ -87,7 +87,74 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-28 — Settings Persistence — Wire Existing UI to Supabase
+1. **2026-08-28 — Management Phase: Staff Directory + Activity Logs Tab
+   (Owner-only)** (`ohm#3z8k1p6d`). Plan + regression assessment presented
+   and approved before implementation, per the prompt's mandatory gate.
+   Two real discrepancies surfaced during context loading, not guessed
+   past: (1) the mockup file initially found on disk (same pattern as
+   `ohm#8r3n6y1q`) lacked the `panel-staff`/`panel-logs` panels — blocked
+   until the user supplied the correct file
+   (`nxs-spa-portal (13).html`); (2) the prompt's premise that Owner-only
+   gating could "reuse the Analytics mechanism" was false — verified
+   directly that `lib/nav.ts` was a static array with no role logic at
+   all, and `Simulate Staff` state lived only in local `useState` inside
+   `settings-browser.tsx`, invisible to `Sidebar`. Confirmed with the user
+   before building anything: a small shared role-state mechanism was the
+   right call (not scope creep), Staff Directory's nav item should also
+   be Owner-only (matching the mockup, which the prompt's text hadn't
+   explicitly said), and Analytics' nav should NOT be touched despite the
+   mockup gating it too (stayed strictly in scope). **New shared
+   mechanism**: `lib/staff-context.tsx` (`StaffSimProvider`/`useStaffSim`)
+   lifts the Simulate Staff selection out of Settings-local state into a
+   React Context seeded from a server-fetched staff list in
+   `app/layout.tsx` (now async), persisted to `localStorage` so it
+   survives full page navigation between real routes (unlike the
+   mockup's single-page tabs). `components/sidebar.tsx` now hides the
+   `Staff`/`Logs` nav items (`lib/nav.ts` items gained an `ownerOnly`
+   flag) unless `currentRole === 'Owner'`; `settings-browser.tsx`'s
+   Simulate Staff dropdown now reads/writes the shared context instead of
+   local state (same UI/options — the `initialStaff` prop and its local
+   fallback staff array were removed as dead code once the fetch moved to
+   the layout). **Staff Directory** (`app/staff/page.tsx`,
+   `components/staff-browser.tsx`): real page (was 8-line stub), flat
+   list per mockup (position + "can log in"/"directory only" tag,
+   comment shown if present), `+ Add Staff` modal (Name, Position select,
+   Comment field shown only for "Others"), Owner-only page-level content
+   guard as defense-in-depth beyond nav hiding (a direct URL visit would
+   otherwise bypass it). New `app/staff/actions.ts`: `addStaff()` server
+   action — insert-only, no delete/archive in scope, ends with an
+   `action_logs` insert (`staff_add`) using the same placeholder-actor
+   pattern as every other phase. **Activity Logs** (`app/logs/page.tsx`,
+   `components/logs-browser.tsx`): real page (was 8-line stub),
+   server-fetches `action_logs` (LIMIT 500 — current volume is a few
+   dozen rows, no pagination needed yet, flagged for revisit if that
+   changes) joined to staff names in app code (not a PostgREST embedded
+   select — `action_logs.staff_id` carries two FKs, to `staff` and to the
+   `loginable_staff` view over it, which makes embedding ambiguous).
+   Client-side combinable filters (Action/Date/Staff) populate from
+   distinct values actually present in the fetched rows, not the
+   mockup's hardcoded action-label list — per the prompt's explicit
+   instruction overriding mockup literalism on that one point. Read-only,
+   same Owner-only page guard as Staff Directory. **Migration**
+   (`supabase/migrations/20260828015000_staff_directory_and_logs_rls.sql`,
+   smoke-tested via a rolled-back transaction as the `anon` role —
+   insert into `staff` and select from `action_logs` both exercised —
+   before applying for real): `staff` gained a `public_insert` INSERT
+   policy (was SELECT-only), `action_logs` gained a `public_select`
+   SELECT policy (was INSERT-only) — both `roles: public`,
+   `USING/WITH CHECK (true)`, same shape as every prior additive policy.
+   **Seeded** "Jeff" and "Essem" as real Receptionist rows through the
+   live Add Staff UI (per explicit user request), not left as test data —
+   both now appear in the Simulate Staff dropdown. Verified live in the
+   browser (not just `npx tsc --noEmit`, which passes clean): confirmed
+   nav hiding and the page-level Owner-only guard both fire correctly for
+   Front Desk and both clear for Owner, confirmed the Logs Action filter
+   dropdown includes the new `staff_add` action and filters correctly,
+   confirmed the Simulate Staff selection survives a full page navigation
+   via `localStorage`. Regression-checked Settings (dropdown
+   options/labels/gating behavior unchanged), Bookings, Therapists, and
+   Client Profile — all load with no server or console errors.
+2. **2026-08-28 — Settings Persistence — Wire Existing UI to Supabase
    (Direct Table Writes)** (`ohm#5x1p8m3v`). Wired the full-parity Settings
    UI (`ohm#6j2v9s4k`) to real Supabase persistence via direct writes to
    `services`/`promos`/`addons`/`rooms`/`lockers`, plus a new
@@ -136,7 +203,7 @@ Full invariant list: [[nxs-architecture-locks]].
    with the correct actor; regression-checked Bookings, Client Profile,
    and Therapists — all load with no server or console errors. Test rows
    cleaned up from the live DB after verification.
-2. **2026-08-28 — Closeout: Commit Reviewed Therapist-Tab Work + Fix Stale
+3. **2026-08-28 — Closeout: Commit Reviewed Therapist-Tab Work + Fix Stale
    Settings State Doc** (`ohm#6w9d3n8h`). Two-item closeout from audit
    `ohm#4t7b2k9w`. **Item 1**: no commit was made — `git status` showed a
    clean working tree at session start; the Therapist-tab work the audit
@@ -149,7 +216,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `components/settings-browser.tsx` (no mutation calls, no `actions.ts`).
    Settings persistence/wiring remains a separate, explicitly out-of-scope
    follow-up.
-3. **2026-08-27 — Therapists Tab Full HTML Mockup Parity** (`ohm#7m2k5v9q`).
+4. **2026-08-27 — Therapists Tab Full HTML Mockup Parity** (`ohm#7m2k5v9q`).
    Rebuilt `/therapists` route to full HTML mockup parity matching `#panel-therapists` and design system:
    **Therapist Roster**: Default 10 therapists matching mockup (`Ron`, `Don`, `Tristan`, `Leo`, `Roy`, `Xander`, `Dan`, `Marco`, `Akio`, `Josh`),
    avatar initial badge, Most Requested badge (`✦ Most Requested`) for top-booked therapist, and daily schedule modal on header click.
@@ -161,7 +228,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `Mark On Leave` (with start/end dates and optional reason), `Archive` (with required reason), `Unarchive`, and `Edit` (for in-place renaming).
    **Modals**: Add Therapist modal with multi-select Day Off / Services pills, Daily Schedule modal, Mark On Leave modal,
    Archive Therapist modal, and Edit Name modal.
-4. **2026-08-27 — Settings Page Full HTML Mockup Parity** (`ohm#6j2v9s4k`).
+5. **2026-08-27 — Settings Page Full HTML Mockup Parity** (`ohm#6j2v9s4k`).
    Rebuilt `/settings` route to full HTML mockup parity matching `#panel-settings` and design system:
    **Display & Appearance**: Interactive dark/light appearance toggle switch with sun/moon SVG icons
    and dynamic descriptive subtitle.
@@ -176,18 +243,4 @@ Full invariant list: [[nxs-architecture-locks]].
    **Add-ons**: Add-on item list with editable prices, `+ Add Add-on` modal, and delete action.
    **Capacity**: Locker count with `+ Add 10 Lockers` increment button and editable Room / Bed count input.
    **Toast Notifications**: Animated bottom-center toast alert with auto-fade timeout for all settings actions.
-5. **2026-08-27 — Correction: Log Visit Modal, No-Show, and Cancel Action Wiring** (`ohm#4t7w1p9k`).
-   Explicitly corrects part of the Bookings phase's (`ohm#9k4p7w2z`) original
-   scope to enable the full **Log Visit** modal and wire up the **Log Visit**, **No-Show**, and **Cancel**
-   action buttons on the Bookings Tab.
-   **Log Visit Modal**: rebuilt to full HTML mockup parity matching `#modalScrim` and user screenshot:
-   find/link open bookings with live search suggestions and `Linked: [Name] · Room [X]`, Date of Visit,
-   Therapist dropdown (hidden for Wet Area), Locker assignment, Availed Service with Points preview and
-   `Redeem: Combi Massage Reward (−100 pts)`, cash upgrade section for redemptions, Senior/PWD manual discount
-   (Percentage / Fixed ₱, mutually exclusive with promo), Add-ons checklist, auto-calculated points delta and amount paid,
-   payment method selector, and promo dropdown.
-   **Action Buttons**: Clicking `Log Visit` opens the modal prefilled for that booking; clicking `No-show` or
-   `Cancel` updates the booking status via `updateBookingStatus` server action and immediately reloads the view.
-   **Server Action**: `logVisitBooking` server action executes atomic booking completion, sales record creation,
-   sale_addons insertions, points transaction (either EARN points or REDEEM -100), locker occupancy check-in, and action logs.
 

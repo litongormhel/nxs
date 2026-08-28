@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useStaffSim } from "@/lib/staff-context";
 import {
   updateServicePrice,
   updateServicePoints,
@@ -38,12 +39,6 @@ export type Addon = {
   price: number;
 };
 
-export type StaffMember = {
-  id: string;
-  name: string;
-  position: string;
-};
-
 export type WeekendSlot = {
   id: string;
   slot_time: string;
@@ -60,7 +55,6 @@ export function SettingsBrowser({
   initialServices,
   initialPromos,
   initialAddons,
-  initialStaff,
   initialWeekendSlots,
   initialLockersCount,
   initialRoomsCount,
@@ -68,7 +62,6 @@ export function SettingsBrowser({
   initialServices: Service[];
   initialPromos: Promo[];
   initialAddons: Addon[];
-  initialStaff: StaffMember[];
   initialWeekendSlots: WeekendSlot[];
   initialLockersCount: number;
   initialRoomsCount: number;
@@ -78,40 +71,11 @@ export function SettingsBrowser({
   // Theme state
   const [isLightMode, setIsLightMode] = useState(false);
 
-  // Staff simulation state
-  const [staffList] = useState<StaffMember[]>(() => {
-    if (initialStaff && initialStaff.length > 0) return initialStaff;
-    return [
-      { id: "1", name: "J. Cruz", position: "Owner" },
-      { id: "2", name: "Ana", position: "Receptionist" },
-      { id: "3", name: "Ben", position: "Receptionist" },
-      { id: "4", name: "Cathy", position: "Receptionist" },
-      { id: "5", name: "Diego", position: "Supervisor" },
-      { id: "6", name: "Elena", position: "Supervisor" },
-      { id: "7", name: "Mika", position: "Attendant" },
-    ];
-  });
-
-  const loginableStaff = staffList.filter(
-    (s) =>
-      s.position === "Receptionist" ||
-      s.position === "Supervisor" ||
-      s.position === "Owner"
-  );
-
-  const [selectedStaffId, setSelectedStaffId] = useState<string>(() => {
-    const ana = loginableStaff.find((s) => s.name === "Ana");
-    return ana ? ana.id : loginableStaff[0]?.id ?? "2";
-  });
-
-  const currentStaff =
-    loginableStaff.find((s) => s.id === selectedStaffId) ||
-    loginableStaff[0] || { id: "2", name: "Ana", position: "Receptionist" };
-
-  const currentRole =
-    currentStaff.position === "Receptionist"
-      ? "Front Desk"
-      : currentStaff.position;
+  // Staff simulation state — shared across the app via StaffSimProvider
+  // (lifted out of local state in ohm#3z8k1p6d so the Sidebar's Owner-only
+  // nav gating can read the same "who's simulated" value).
+  const { loginableStaff, selectedStaffId, setSelectedStaffId, currentStaff, currentRole } =
+    useStaffSim();
 
   const canEditServices =
     currentRole === "Supervisor" || currentRole === "Owner";

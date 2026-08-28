@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Sidebar } from "@/components/sidebar";
+import { StaffSimProvider } from "@/lib/staff-context";
+import { createClient } from "@/lib/supabase/server";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,19 +20,28 @@ export const metadata: Metadata = {
   description: "NXS operations console",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const supabase = await createClient();
+  const { data: staff } = await supabase
+    .from("staff")
+    .select("id, name, position")
+    .eq("active", true)
+    .order("name", { ascending: true });
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex bg-background text-foreground">
-        <Sidebar />
-        <main className="flex-1 min-h-full overflow-y-auto">{children}</main>
+        <StaffSimProvider initialStaff={staff ?? []}>
+          <Sidebar />
+          <main className="flex-1 min-h-full overflow-y-auto">{children}</main>
+        </StaffSimProvider>
       </body>
     </html>
   );

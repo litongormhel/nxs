@@ -8,7 +8,6 @@ export default async function SettingsPage() {
     { data: services },
     { data: promos },
     { data: addons },
-    { data: staff },
     { data: weekendSlots },
     { count: lockersCount },
     { count: roomsCount },
@@ -26,11 +25,6 @@ export default async function SettingsPage() {
     supabase
       .from("addons")
       .select("id, name, price")
-      .eq("active", true)
-      .order("name", { ascending: true }),
-    supabase
-      .from("staff")
-      .select("id, name, position")
       .eq("active", true)
       .order("name", { ascending: true }),
     supabase
@@ -57,7 +51,6 @@ export default async function SettingsPage() {
         initialServices={services ?? []}
         initialPromos={promos ?? []}
         initialAddons={addons ?? []}
-        initialStaff={staff ?? []}
         initialWeekendSlots={(weekendSlots ?? []).map((s) => ({
           id: s.id,
           slot_time: s.slot_time.slice(0, 5),

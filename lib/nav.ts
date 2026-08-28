@@ -7,7 +7,7 @@ export const navItems = [
   { href: "/lockers", label: "Lockers" },
   { href: "/call-sheet", label: "Call Sheet" },
   { href: "/analytics", label: "Analytics" },
-  { href: "/staff", label: "Staff" },
-  { href: "/logs", label: "Logs" },
+  { href: "/staff", label: "Staff", ownerOnly: true },
+  { href: "/logs", label: "Logs", ownerOnly: true },
   { href: "/settings", label: "Settings" },
 ] as const;

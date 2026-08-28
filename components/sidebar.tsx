@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/nav";
+import { useStaffSim } from "@/lib/staff-context";
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { currentRole } = useStaffSim();
 
   return (
     <aside className="w-60 shrink-0 border-r border-border bg-surface flex flex-col">
@@ -15,7 +17,9 @@ export function Sidebar() {
         </span>
       </div>
       <nav className="flex-1 overflow-y-auto py-3">
-        {navItems.map((item) => {
+        {navItems
+          .filter((item) => !("ownerOnly" in item && item.ownerOnly) || currentRole === "Owner")
+          .map((item) => {
           const active =
             pathname === item.href || pathname?.startsWith(`${item.href}/`);
           return (
