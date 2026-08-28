@@ -16,12 +16,55 @@ app-level read of these tables.
 
 ## RLS
 
-`rooms` and `lockers` both have public-read policies (`USING (true)`) —
-these are two of only four tables with any public SELECT policy at all.
+`rooms` and `lockers` both have public-read policies (`USING (true)`).
+`locker_occupancy` has `public_select`/`public_insert` (from Bookings) plus
+a `public_update` policy added in the Operations phase (`ohm#9h4c7x2m`,
+migration `20260828023358_operations_sales_rls.sql`) for Check-Out. All
+`roles: public`, `USING(true)`/`WITH CHECK(true)` — same additive shape as
+every prior policy. App-level-only role gate, same accepted gap as every
+other phase: the DB grants this to any anon/authenticated caller; nothing
+restricts Check-Out by role at the RLS layer.
+
+## Implemented (app level) — Operations Phase (`ohm#9h4c7x2m`, 2026-08-28)
+
+- **Locker Board** (`app/lockers/page.tsx`, `components/locker-board.tsx`):
+  real page (was an 8-line stub). Renders one tile per `active=true`
+  `lockers` row (live count, currently 100 — not hardcoded). A tile is
+  "occupied" when a `locker_occupancy` row exists for that `locker_number`
+  with `checked_out_at IS NULL`; occupied tiles show the linked client's
+  `codename` (or `guest_label` for walk-ins/guests) and a Check-Out button.
+  Header reads `"X / Y occupied"`.
+- **Check-Out** (`app/lockers/actions.ts::checkOutLocker`): sets
+  `checked_out_at = now()` and `checked_out_by = <acting staff>` on the
+  matching `locker_occupancy` row (never deletes it — the row stays as a
+  historical record). Ends with an `action_logs` insert
+  (`action = "locker_checkout"`), revalidates `/lockers` and
+  `/call-sheet`.
+- **Call Sheet** (`app/call-sheet/page.tsx`,
+  `components/call-sheet-browser.tsx`): read-only, no mutation. Derived
+  from the same active (`checked_out_at IS NULL`) `locker_occupancy` rows,
+  joined to `services(name)` and filtered to exclude Wet Area, matching
+  ADR-001's Wet Area exclusion. **Time field substitution, documented, not
+  a schema change**: the mockup's synthetic per-entry `time` doesn't exist
+  in the real schema — `locker_occupancy` has no start-time column (that
+  concept lives on `bookings`, not joined here). `checked_in_at`
+  (formatted HH:MM) is used instead as the time-filter basis, with the
+  dropdown built from distinct times actually present in the active rows
+  (same "derive from live data" pattern the Logs tab established). Total
+  line reads `"X massage(s) [in progress / at TIME]"`.
+- Both current write paths into `locker_occupancy` — `quick_walkin()` (RPC)
+  and `logVisitBooking()`'s linked-booking branch
+  (`app/bookings/actions.ts`) — were verified directly (not assumed) to
+  reliably populate it at check-in, which is what makes Check-Out safe.
+  Two pre-existing partial unique indexes,
+  `one_active_occupant_per_locker` and `one_active_occupant_per_room`
+  (both `WHERE checked_out_at IS NULL`), are what make "active occupancy"
+  well-defined.
 
 ## Not yet implemented — see roadmap
 
-- `app/lockers/page.tsx` and `app/call-sheet/page.tsx` are both 8-line
-  stubs. No check-in/check-out UI, no room/locker management UI, no call
-  sheet view exists yet. `locker_occupancy` is not read or written by any
-  app code currently.
+- No room-management UI (adding/deactivating individual rooms is done via
+  Settings' Room/Bed count, not from Lockers/Call Sheet).
+- No manual check-in UI from the Lockers page itself — check-in still only
+  happens as a side effect of Log Visit / Quick Walk-in on the Bookings
+  page, by design (out of scope for this phase, confirmed with the user).

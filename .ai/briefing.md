@@ -87,7 +87,59 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-28 — Management Phase: Staff Directory + Activity Logs Tab
+1. **2026-08-28 — Operations Phase: Locker Board, Call Sheet, Sales
+   (Edit/Void)** (`ohm#9h4c7x2m`). Plan + regression assessment presented
+   and approved before implementation, per the prompt's mandatory gate.
+   Both required discrepancy questions were resolved by reading the actual
+   code/schema, not assumed: (1) the Locker Board check-in "gap" turned out
+   not to be a gap — both `quick_walkin()` (RPC) and `logVisitBooking()`'s
+   linked-booking path already insert into `locker_occupancy` reliably, so
+   Check-Out was safe to build without touching check-in; (2) walk-in vs.
+   registered sales are distinguished by `sales.client_id IS NULL` (with
+   `guest_label` set), matching the mockup's `clientKey===null` check
+   exactly. **New migration**
+   (`supabase/migrations/20260828023358_operations_sales_rls.sql`,
+   smoke-tested via a rolled-back transaction as `anon` first): additive
+   `public_update` policy on `locker_occupancy` (for Check-Out) and
+   `public_select` + `public_update` policies on `sales` (was insert-only;
+   needed for the Sales tab to read at all, plus Edit/Void) — same
+   `USING(true)`/`WITH CHECK(true)` shape as every prior policy,
+   app-level-only role gate same accepted gap as every other phase.
+   **Locker Board** (`app/lockers/page.tsx`, `components/locker-board.tsx`,
+   `app/lockers/actions.ts`): 100 tiles from the live `lockers` table,
+   occupied tiles show client codename/guest label and a Check-Out button
+   that sets `checked_out_at`/`checked_out_by`. **Call Sheet**
+   (`app/call-sheet/page.tsx`, `components/call-sheet-browser.tsx`,
+   read-only): derived from the same active (`checked_out_at IS NULL`)
+   `locker_occupancy` rows, excluding Wet Area; the mockup's synthetic
+   per-entry `time` field doesn't exist in the real schema, so the time
+   filter is built from distinct `checked_in_at` times instead (documented
+   substitution, not a schema change). **Sales**
+   (`app/sales/page.tsx`, `components/sales-browser.tsx`,
+   `app/sales/actions.ts`): real Edit modal (not `prompt()`) for
+   amount/payment method/GCash ref/therapist, writes `edited_by`/
+   `edited_at` + an "Edited by [staff]" tag; Void sets `voided`/
+   `voided_at`/`voided_by` (never a hard delete), excluded from the running
+   total, tagged "VOIDED", stays visible; walk-in sales show "No action —
+   walk-in, no account" instead of buttons. Both mutations end with an
+   `action_logs` entry. **Role gating reuses `lib/staff-context.tsx`
+   (`useStaffSim`/`currentRole`)** exactly as Staff/Logs did — Edit =
+   Supervisor/Owner, Void = Owner-only — no new gating mechanism invented.
+   Verified live in the browser (`npx tsc --noEmit` passes clean, but not
+   relied on alone): edited a real sale (amount 700→750, confirmed the
+   `sales` row and a `sale_edit` action_logs entry), checked out locker 5
+   (confirmed `checked_out_at` set and a `locker_checkout` action_logs
+   entry, Locker Board and Call Sheet both updated live), confirmed
+   Front-Desk role shows disabled Edit/Void with the correct tooltip text
+   and Owner role shows them enabled. Void's `window.confirm()` couldn't be
+   driven through the headless browser tool (dialogs are suppressed there),
+   but it's the identical write path already proven via Edit and the RLS
+   UPDATE was independently smoke-tested during migration application.
+   Test mutations (the amount edit, the checkout) were reverted in the live
+   DB after verification so state matches pre-session. Regression-checked
+   Dashboard (Total Lockers still reads 100), Bookings, and Settings — all
+   load with no server or console errors.
+2. **2026-08-28 — Management Phase: Staff Directory + Activity Logs Tab
    (Owner-only)** (`ohm#3z8k1p6d`). Plan + regression assessment presented
    and approved before implementation, per the prompt's mandatory gate.
    Two real discrepancies surfaced during context loading, not guessed
@@ -154,7 +206,7 @@ Full invariant list: [[nxs-architecture-locks]].
    via `localStorage`. Regression-checked Settings (dropdown
    options/labels/gating behavior unchanged), Bookings, Therapists, and
    Client Profile — all load with no server or console errors.
-2. **2026-08-28 — Settings Persistence — Wire Existing UI to Supabase
+3. **2026-08-28 — Settings Persistence — Wire Existing UI to Supabase
    (Direct Table Writes)** (`ohm#5x1p8m3v`). Wired the full-parity Settings
    UI (`ohm#6j2v9s4k`) to real Supabase persistence via direct writes to
    `services`/`promos`/`addons`/`rooms`/`lockers`, plus a new
@@ -203,7 +255,7 @@ Full invariant list: [[nxs-architecture-locks]].
    with the correct actor; regression-checked Bookings, Client Profile,
    and Therapists — all load with no server or console errors. Test rows
    cleaned up from the live DB after verification.
-3. **2026-08-28 — Closeout: Commit Reviewed Therapist-Tab Work + Fix Stale
+4. **2026-08-28 — Closeout: Commit Reviewed Therapist-Tab Work + Fix Stale
    Settings State Doc** (`ohm#6w9d3n8h`). Two-item closeout from audit
    `ohm#4t7b2k9w`. **Item 1**: no commit was made — `git status` showed a
    clean working tree at session start; the Therapist-tab work the audit
@@ -216,7 +268,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `components/settings-browser.tsx` (no mutation calls, no `actions.ts`).
    Settings persistence/wiring remains a separate, explicitly out-of-scope
    follow-up.
-4. **2026-08-27 — Therapists Tab Full HTML Mockup Parity** (`ohm#7m2k5v9q`).
+5. **2026-08-27 — Therapists Tab Full HTML Mockup Parity** (`ohm#7m2k5v9q`).
    Rebuilt `/therapists` route to full HTML mockup parity matching `#panel-therapists` and design system:
    **Therapist Roster**: Default 10 therapists matching mockup (`Ron`, `Don`, `Tristan`, `Leo`, `Roy`, `Xander`, `Dan`, `Marco`, `Akio`, `Josh`),
    avatar initial badge, Most Requested badge (`✦ Most Requested`) for top-booked therapist, and daily schedule modal on header click.
@@ -228,19 +280,3 @@ Full invariant list: [[nxs-architecture-locks]].
    `Mark On Leave` (with start/end dates and optional reason), `Archive` (with required reason), `Unarchive`, and `Edit` (for in-place renaming).
    **Modals**: Add Therapist modal with multi-select Day Off / Services pills, Daily Schedule modal, Mark On Leave modal,
    Archive Therapist modal, and Edit Name modal.
-5. **2026-08-27 — Settings Page Full HTML Mockup Parity** (`ohm#6j2v9s4k`).
-   Rebuilt `/settings` route to full HTML mockup parity matching `#panel-settings` and design system:
-   **Display & Appearance**: Interactive dark/light appearance toggle switch with sun/moon SVG icons
-   and dynamic descriptive subtitle.
-   **Account & Staff Simulation**: Signed-in staff badge with `Simulate Staff` dropdown selector that
-   updates simulated actor and role permissions (`Front Desk` vs `Supervisor` / `Owner`).
-   **Services & Pricing**: Dynamic lock notice, service items with editable points and prices (disabled
-   for Front Desk), `+ Add Service` modal and delete actions (Supervisor/Owner).
-   **Promo Codes**: Dynamic lock notice, promo items with editable discounts (disabled for Front Desk),
-   `+ Add Promo` modal and delete actions (Supervisor/Owner).
-   **Weekend Fixed Time Slots**: Fixed weekend slot list with formatted AM/PM times, `+ Add Slot` modal with
-   HH:MM format validation, and delete action.
-   **Add-ons**: Add-on item list with editable prices, `+ Add Add-on` modal, and delete action.
-   **Capacity**: Locker count with `+ Add 10 Lockers` increment button and editable Room / Bed count input.
-   **Toast Notifications**: Animated bottom-center toast alert with auto-fade timeout for all settings actions.
-

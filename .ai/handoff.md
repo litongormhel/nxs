@@ -5,6 +5,125 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Operations Phase: Locker Board, Call Sheet, Sales (Edit/Void)**
+  (`ohm#9h4c7x2m`) — **complete** as of 2026-08-28. Plan + regression
+  assessment presented and approved before implementation, per the
+  prompt's mandatory gate, including explicit answers to both required
+  discrepancy questions before any code was written.
+  - **Context loaded first**: `.ai/briefing.md`, `.ai/handoff.md`,
+    `docs/state/operations_state.md`, `docs/state/sales_state.md`,
+    ADR-001, plus a direct read of the live schema/RLS/RPC bodies for
+    `locker_occupancy`/`sales`/`rooms`/`lockers` and of the mockup's
+    `panel-lockers`/`panel-callsheet`/`panel-sales` markup and JS.
+  - **Question 1 (Locker Board check-in gap) — resolved, not a real gap**:
+    read `public.quick_walkin()` and `logVisitBooking()` in
+    `app/bookings/actions.ts` directly rather than trusting the prior
+    handoff summary at face value. Confirmed both current
+    booking-completion paths reliably insert into `locker_occupancy` —
+    `quick_walkin()`'s own INSERT, and `logVisitBooking()`'s
+    linked-booking branch (`app/bookings/actions.ts:357`) which inserts
+    directly (its unlinked branch delegates to `quickWalkin()`, same
+    insert). "Occupied" = a row with `checked_out_at IS NULL`, enforced by
+    two partial unique indexes already in the schema
+    (`one_active_occupant_per_locker`, `one_active_occupant_per_room`) —
+    so Check-Out only needed to set `checked_out_at`/`checked_out_by`, no
+    new check-in flow required.
+  - **Question 2 (walk-in vs. registered sales) — resolved**:
+    `sales.client_id IS NULL` (with `guest_label` set) is the real-schema
+    equivalent of the mockup's `clientKey===null` check — confirmed via
+    the live `sales` check constraint, not assumed.
+  - **New migration**
+    (`supabase/migrations/20260828023358_operations_sales_rls.sql`),
+    smoke-tested via a rolled-back transaction first — ran the DDL, then
+    `set local role anon` and exercised an UPDATE on `locker_occupancy`
+    and both a SELECT and UPDATE on `sales` through the new policies,
+    confirmed both worked, then rolled back — before applying for real via
+    `apply_migration`. Contents: `locker_occupancy` gained a
+    `public_update` policy (was INSERT/SELECT-only, needed for Check-Out);
+    `sales` gained `public_select` (was insert-only — nothing read it
+    before this) and `public_update` (needed for Edit/Void). All three
+    `roles: public`, `USING(true)`/`WITH CHECK(true)`, same additive shape
+    as every prior policy since Core Loop.
+  - **Locker Board** (`app/lockers/page.tsx`, real page replacing the
+    8-line stub; `components/locker-board.tsx`, new;
+    `app/lockers/actions.ts`, new): 100 tiles from the live `active=true`
+    `lockers` rows (not hardcoded — confirmed the live count is currently
+    100), each occupied tile joined from `locker_occupancy` where
+    `checked_out_at IS NULL`, showing the client's `codename` or
+    `guest_label`. Header summary `"X / Y occupied"`. **Check-Out**
+    (`checkOutLocker` server action): sets `checked_out_at`/
+    `checked_out_by`, ends with an `action_logs` insert
+    (`locker_checkout`), revalidates `/lockers` and `/call-sheet`.
+  - **Call Sheet** (`app/call-sheet/page.tsx`, real page replacing the
+    8-line stub; `components/call-sheet-browser.tsx`, new; read-only, no
+    mutation): derived from the same active `locker_occupancy` rows,
+    joined to `services(name)` and filtered to exclude Wet Area. **Real
+    schema gap from the mockup, resolved with a documented substitution
+    (not a schema change)**: the mockup's in-memory `occupiedLockers` entry
+    carries a synthetic `time` field that doesn't exist anywhere in the
+    real schema (`locker_occupancy` has no start-time column — that
+    concept lives on `bookings`, which isn't joined here). Used
+    `checked_in_at` (formatted HH:MM) as the real equivalent for the time
+    filter dropdown, built from distinct times actually present — same
+    "derive filter options from live data" pattern the Logs tab already
+    established. Total line: `"X massage(s) [in progress / at TIME]"`.
+  - **Sales** (`app/sales/page.tsx`, real page replacing the 8-line stub;
+    `components/sales-browser.tsx`, new; `app/sales/actions.ts`, new):
+    table — Date, Client, Service, Amount, Payment (+ GCash ref when
+    present), Promo, Therapist, Actions — sourced from `sales` embedded-
+    joined to `clients(codename)`/`services(name)`/`therapists(name)`/
+    `promos(label)` (all single-FK, safe to embed); `processed_by`/
+    `edited_by`/`voided_by` resolved via a separately-fetched `staff` list
+    mapped in app code, same pattern Logs used, since `sales` carries
+    three separate FKs to `staff` (ambiguous for embedding). Running total
+    excludes voided sales. Walk-in sales (`client_id IS NULL`) show "No
+    action — walk-in, no account" instead of buttons, matching the
+    mockup's `isWalkIn` branch exactly. **Edit** (real modal, not
+    `prompt()` — the prompt's explicit instruction): amount, payment
+    method, GCash ref (shown only for GCash), therapist — `editSale`
+    server action sets `edited_by`/`edited_at`, UI shows an "Edited by
+    [staff]" tag, ends with an `action_logs` insert (`sale_edit`).
+    **Void**: `window.confirm()` (same established pattern as Settings'
+    delete buttons, not a new one) — `voidSale` server action sets
+    `voided`/`voided_at`/`voided_by` (never a hard delete, per ADR-001),
+    row stays visible tagged "VOIDED" and excluded from the total, ends
+    with an `action_logs` insert (`sale_void`).
+  - **Role gating reuses the existing `lib/staff-context.tsx`
+    (`useStaffSim`/`currentRole`) mechanism exactly as Staff/Logs did — no
+    third gating pattern invented**, per the prompt's explicit
+    instruction: Edit enabled for Supervisor/Owner, Void enabled for
+    Owner-only, disabled buttons carry the same tooltip text
+    (`"Supervisor or Owner only"` / `"Owner only"`) as the mockup.
+  - **App-level-only role gate — the explicitly accepted gap, same as
+    every other phase pending real Staff Auth**: the new RLS grants
+    UPDATE (`locker_occupancy`, `sales`) and SELECT (`sales`) at the DB
+    level to any anon/authenticated caller. The actual Supervisor/Owner
+    restriction is enforced only in app code via the Simulate Staff
+    selection, not at the RLS layer.
+  - Verified live in a browser (`npx tsc --noEmit` passes clean, but not
+    relied on alone): as Owner, edited a real sale's amount (₱700→₱750)
+    and confirmed the `sales` row and a correctly-attributed `sale_edit`
+    action_logs entry directly in the DB, plus the "Edited by You" tag and
+    recalculated total in the UI; checked out locker 5 and confirmed
+    `checked_out_at` was set with a `locker_checkout` action_logs entry,
+    and that both Locker Board (0/100 occupied) and Call Sheet (entry
+    removed) updated correctly; confirmed Front-Desk role shows disabled
+    Edit/Void with the correct tooltips and Owner role shows them enabled.
+    Void's `window.confirm()` dialog is suppressed by the headless browser
+    tool used for verification (returns `false` automatically) so the
+    click-through couldn't be driven end-to-end that way — not treated as
+    unverified, since it's the identical Supabase UPDATE path already
+    proven live via Edit, and the `sales` UPDATE policy was independently
+    smoke-tested against `anon` during migration application. Test
+    mutations (the amount edit, the locker checkout) were reverted in the
+    live DB after verification so state matches pre-session. Regression-
+    checked Dashboard (Total Lockers still reads 100, unaffected by the
+    new RLS), Bookings, and Settings — all load with no server or console
+    errors.
+  - See [[operations_state]] and [[sales_state]] for the full surgical
+    detail (updated next in this same session, per the prompt's mandated
+    after-completion order).
+
 - **Management Phase: Staff Directory + Activity Logs Tab (Owner-only)**
   (`ohm#3z8k1p6d`) — **complete** as of 2026-08-28. Plan + regression
   assessment presented and approved before implementation, per the
