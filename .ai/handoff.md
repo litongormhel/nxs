@@ -151,6 +151,51 @@ This file tracks only what's in flight right now.
       signed out again and confirmed the app reverted cleanly to
       Simulate Staff mode. No server or console errors.
     - See [[staff_state]] for the updated attribution detail.
+  - **6B-Addendum — Logout Button + Fully Automatic Actor (Remove Staff
+    Dropdowns from Modals) — complete** (`ohm#6y1d4h8m`) as of 2026-08-29.
+    Precursor to 6C, not 6C itself — no RLS changes, no protected routes.
+    - **Context loaded first**: `.ai/briefing.md`, `.ai/handoff.md`,
+      `docs/state/staff_state.md`, `lib/staff-context.tsx`, plus a
+      repo-wide search for every staff-select dropdown before writing any
+      code, per the prompt's mandatory approval gate.
+    - **Enumeration confirmed exactly the 3 modals already found in
+      6B** — `log-visit-modal.tsx`, `booking-form-modal.tsx`,
+      `quick-walkin-modal.tsx` — no others exist. Checked and ruled
+      out: `staff-browser.tsx`'s Add Staff modal `<select>` is the
+      **Position** field, not an actor picker; `settings-browser.tsx`'s
+      `<select>` is the Simulate Staff control itself, explicitly out of
+      scope ("no removal of Simulate Staff itself"). Enumeration + logout
+      placement presented and approved before implementation.
+    - **Actor dropdowns removed** from all 3 modals: each local `staffId`
+      `useState` (6B had seeded it from `sessionStaff?.id ?? staff[0]?.id`
+      but left it editable) is now a plain derived value —
+      `const actor = sessionStaff ?? staff[0]; const staffId = actor?.id ?? ""`
+      — with the `<select>` replaced by a read-only `<div>` showing
+      `{actor.name} · {actor.position}`. Deliberately kept the exact same
+      value/fallback logic 6B established rather than switching to
+      `selectedStaffId`/Simulate-Staff-context — only the editability was
+      removed, per "preserve existing architecture, this is a UI
+      simplification not a new identity system."
+    - **Logout button**: `components/sidebar.tsx` gained a persistent
+      account block at the bottom of the sidebar, below the nav list —
+      reads `sessionStaff`/`currentStaff`/`currentRole` from
+      `useStaffSim()` (no new context fields needed). Session present:
+      shows `{currentStaff.name} · {currentRole}` plus a "Sign out"
+      button wired to the existing `logout()` server action from
+      `app/login/actions.ts` (reused as-is via a `<form action={logout}>`,
+      matching the pattern already used on `/login`). No session: shows a
+      "Log in" link to `/login`.
+    - Verified live in the browser (`npx tsc --noEmit` passes clean, not
+      relied on alone): logged out — sidebar showed "Log in", all three
+      modals showed the read-only label sourced from the Simulate Staff
+      selection, no dropdown; logged in as Ana (Receptionist) — sidebar
+      showed "Ana · Front Desk" with a working Sign Out button, Log
+      Visit / New Booking / Quick Walk-in modals all showed the
+      read-only "Ana · Receptionist" label with no editable control;
+      signed out again and confirmed a clean revert to the Simulate
+      Staff–driven state (Owner nav restored, dropdown re-enabled in
+      Settings). No server or console errors.
+    - See [[staff_state]] for the updated modal-attribution detail.
   - **6C — not started.** Planned scope: protected routes (redirect
     unauthenticated visitors away from the app, e.g. proxy/middleware or
     per-page session checks) and RLS lockdown (real `auth.uid()`-keyed

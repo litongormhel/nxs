@@ -87,7 +87,47 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-29 — Staff Auth 6B: Real Session Wiring into staff-context +
+1. **2026-08-29 — Staff Auth 6B-Addendum: Logout Button + Fully Automatic
+   Actor (Remove Staff Dropdowns from Modals)** (`ohm#6y1d4h8m`). Precursor
+   to 6C, not 6C itself — no RLS changes, no protected routes. Context
+   loaded first (`.ai/briefing.md`, `.ai/handoff.md`,
+   `docs/state/staff_state.md`, `lib/staff-context.tsx`), then a repo-wide
+   enumeration of every staff-select dropdown before writing any code, per
+   the prompt's mandatory approval gate. **Enumeration confirmed exactly
+   the 3 modals 6B had already found** (`log-visit-modal.tsx`,
+   `booking-form-modal.tsx`, `quick-walkin-modal.tsx`) — no others exist;
+   `staff-browser.tsx`'s Add Staff modal `<select>` is a Position field,
+   not an actor picker, and `settings-browser.tsx`'s `<select>` is
+   Simulate Staff itself, explicitly out of scope. Plan (enumerated list +
+   logout placement) presented and approved before implementation. **Actor
+   dropdowns removed**: each modal's local `staffId` `useState` (which 6B
+   had seeded from `sessionStaff?.id ?? staff[0]?.id` but left editable)
+   is now a plain derived value — `const actor = sessionStaff ?? staff[0]`
+   — with the `<select>` replaced by a read-only `<div>` showing
+   `{actor.name} · {actor.position}`. The underlying value/fallback logic
+   is byte-for-byte the same as 6B established (deliberately not changed
+   to `selectedStaffId`/Simulate-Staff-context, to avoid inventing a new
+   pattern); only the editability was removed. **Logout button**:
+   `components/sidebar.tsx` gained a persistent account block at the
+   bottom, below the nav list — reads `sessionStaff`/`currentStaff`/
+   `currentRole` from `useStaffSim()` (no new context fields needed).
+   Session present: shows `{currentStaff.name} · {currentRole}` plus a
+   "Sign out" button wired to the existing `logout()` server action from
+   `app/login/actions.ts` (reused as-is, no duplicate sign-out logic). No
+   session: shows a "Log in" link to `/login`. **No removal of Simulate
+   Staff** — untouched, still the sole driver when logged out, per
+   explicit scope. Verified live in the browser (`npx tsc --noEmit`
+   passes clean, not relied on alone): logged out — sidebar showed "Log
+   in", all three modals showed no dropdown but a resolved
+   Simulate-Staff-driven actor label; logged in as Ana (Receptionist) —
+   sidebar showed "Ana · Front Desk" + working Sign Out, Log Visit / New
+   Booking / Quick Walk-in modals all showed the read-only "Ana ·
+   Receptionist" label with no editable control; signed out again and
+   confirmed clean revert to the Simulate Staff–driven state. No server
+   or console errors. **Next**: 6C (protected-route middleware + RLS
+   lockdown, including neutralizing Simulate Staff at the DB level)
+   remains, tracked in `.ai/handoff.md`.
+2. **2026-08-29 — Staff Auth 6B: Real Session Wiring into staff-context +
    Actor Attribution** (`ohm#4p7v9k3s`). Second of the three-part plan
    (6A/6B/6C) — see `.ai/handoff.md`. Enumerated all 7
    `// TEMP: placeholder actor pending Staff Auth phase` sites and the
@@ -130,7 +170,7 @@ Full invariant list: [[nxs-architecture-locks]].
    signed out again → correctly reverted to Simulate Staff mode. **Next**:
    6C (protected-route middleware + RLS lockdown) remains, tracked in
    `.ai/handoff.md`.
-2. **2026-08-29 — Staff Auth 6A: Auth Users + Basic Login** (`ohm#2k9m4w7p`).
+3. **2026-08-29 — Staff Auth 6A: Auth Users + Basic Login** (`ohm#2k9m4w7p`).
    First of a three-part plan (6A/6B/6C) — see [[staff_auth_6a_6c_plan]] and
    `.ai/handoff.md` for sub-phase tracking. Scope was explicitly limited to
    auth account creation + login page + session handling only: **no RLS
@@ -186,7 +226,7 @@ Full invariant list: [[nxs-architecture-locks]].
    console errors. **Next**: 6B (wiring real sessions into
    `lib/staff-context.tsx`/actor-attribution) and 6C (protected routes)
    remain, tracked in `.ai/handoff.md`.
-3. **2026-08-28 — Analytics Phase: Owner-Only Reporting Dashboard
+4. **2026-08-28 — Analytics Phase: Owner-Only Reporting Dashboard
    (Spa-Day Bucketing)** (`ohm#7v2q8f5c`). Plan + regression assessment
    presented and approved before implementation, per the prompt's
    mandatory gate. Two discrepancies surfaced during context loading and
@@ -239,7 +279,7 @@ Full invariant list: [[nxs-architecture-locks]].
    and clear for Owner (J. Cruz). Regression-checked Sales, Bookings,
    Staff Directory, and Activity Logs — all load with no server or
    console errors.
-4. **2026-08-28 — Operations Phase: Locker Board, Call Sheet, Sales
+5. **2026-08-28 — Operations Phase: Locker Board, Call Sheet, Sales
    (Edit/Void)** (`ohm#9h4c7x2m`). Plan + regression assessment presented
    and approved before implementation, per the prompt's mandatory gate.
    Both required discrepancy questions were resolved by reading the actual
@@ -291,70 +331,3 @@ Full invariant list: [[nxs-architecture-locks]].
    DB after verification so state matches pre-session. Regression-checked
    Dashboard (Total Lockers still reads 100), Bookings, and Settings — all
    load with no server or console errors.
-5. **2026-08-28 — Management Phase: Staff Directory + Activity Logs Tab
-   (Owner-only)** (`ohm#3z8k1p6d`). Plan + regression assessment presented
-   and approved before implementation, per the prompt's mandatory gate.
-   Two real discrepancies surfaced during context loading, not guessed
-   past: (1) the mockup file initially found on disk (same pattern as
-   `ohm#8r3n6y1q`) lacked the `panel-staff`/`panel-logs` panels — blocked
-   until the user supplied the correct file
-   (`nxs-spa-portal (13).html`); (2) the prompt's premise that Owner-only
-   gating could "reuse the Analytics mechanism" was false — verified
-   directly that `lib/nav.ts` was a static array with no role logic at
-   all, and `Simulate Staff` state lived only in local `useState` inside
-   `settings-browser.tsx`, invisible to `Sidebar`. Confirmed with the user
-   before building anything: a small shared role-state mechanism was the
-   right call (not scope creep), Staff Directory's nav item should also
-   be Owner-only (matching the mockup, which the prompt's text hadn't
-   explicitly said), and Analytics' nav should NOT be touched despite the
-   mockup gating it too (stayed strictly in scope). **New shared
-   mechanism**: `lib/staff-context.tsx` (`StaffSimProvider`/`useStaffSim`)
-   lifts the Simulate Staff selection out of Settings-local state into a
-   React Context seeded from a server-fetched staff list in
-   `app/layout.tsx` (now async), persisted to `localStorage` so it
-   survives full page navigation between real routes (unlike the
-   mockup's single-page tabs). `components/sidebar.tsx` now hides the
-   `Staff`/`Logs` nav items (`lib/nav.ts` items gained an `ownerOnly`
-   flag) unless `currentRole === 'Owner'`; `settings-browser.tsx`'s
-   Simulate Staff dropdown now reads/writes the shared context instead of
-   local state (same UI/options — the `initialStaff` prop and its local
-   fallback staff array were removed as dead code once the fetch moved to
-   the layout). **Staff Directory** (`app/staff/page.tsx`,
-   `components/staff-browser.tsx`): real page (was 8-line stub), flat
-   list per mockup (position + "can log in"/"directory only" tag,
-   comment shown if present), `+ Add Staff` modal (Name, Position select,
-   Comment field shown only for "Others"), Owner-only page-level content
-   guard as defense-in-depth beyond nav hiding (a direct URL visit would
-   otherwise bypass it). New `app/staff/actions.ts`: `addStaff()` server
-   action — insert-only, no delete/archive in scope, ends with an
-   `action_logs` insert (`staff_add`) using the same placeholder-actor
-   pattern as every other phase. **Activity Logs** (`app/logs/page.tsx`,
-   `components/logs-browser.tsx`): real page (was 8-line stub),
-   server-fetches `action_logs` (LIMIT 500 — current volume is a few
-   dozen rows, no pagination needed yet, flagged for revisit if that
-   changes) joined to staff names in app code (not a PostgREST embedded
-   select — `action_logs.staff_id` carries two FKs, to `staff` and to the
-   `loginable_staff` view over it, which makes embedding ambiguous).
-   Client-side combinable filters (Action/Date/Staff) populate from
-   distinct values actually present in the fetched rows, not the
-   mockup's hardcoded action-label list — per the prompt's explicit
-   instruction overriding mockup literalism on that one point. Read-only,
-   same Owner-only page guard as Staff Directory. **Migration**
-   (`supabase/migrations/20260828015000_staff_directory_and_logs_rls.sql`,
-   smoke-tested via a rolled-back transaction as the `anon` role —
-   insert into `staff` and select from `action_logs` both exercised —
-   before applying for real): `staff` gained a `public_insert` INSERT
-   policy (was SELECT-only), `action_logs` gained a `public_select`
-   SELECT policy (was INSERT-only) — both `roles: public`,
-   `USING/WITH CHECK (true)`, same shape as every prior additive policy.
-   **Seeded** "Jeff" and "Essem" as real Receptionist rows through the
-   live Add Staff UI (per explicit user request), not left as test data —
-   both now appear in the Simulate Staff dropdown. Verified live in the
-   browser (not just `npx tsc --noEmit`, which passes clean): confirmed
-   nav hiding and the page-level Owner-only guard both fire correctly for
-   Front Desk and both clear for Owner, confirmed the Logs Action filter
-   dropdown includes the new `staff_add` action and filters correctly,
-   confirmed the Simulate Staff selection survives a full page navigation
-   via `localStorage`. Regression-checked Settings (dropdown
-   options/labels/gating behavior unchanged), Bookings, Therapists, and
-   Client Profile — all load with no server or console errors.

@@ -94,14 +94,21 @@ flow exists in the app for staff.
   a hard reload).
 - **Log Visit / New Booking / Quick Walk-in modals**
   (`components/log-visit-modal.tsx`, `components/booking-form-modal.tsx`,
-  `components/quick-walkin-modal.tsx`) each still have their own local
-  "Logged by (staff)" `<select>`, independent of the shared
-  `staff-context.tsx` mechanism (discovered during 6B's enumeration, not
-  present in the 6A/prior state). As of 6B, each defaults its selection to
-  `useStaffSim().sessionStaff?.id` when a real session exists, falling
-  back to the prior first-staff-member default otherwise — the dropdown
-  itself remains, as an editable override, confirmed with the user rather
-  than removed.
+  `components/quick-walkin-modal.tsx`): as of the 6B-Addendum
+  (`ohm#6y1d4h8m`, 2026-08-29), the "Logged by (staff)" / "Booked by
+  (staff)" field is a **read-only label**, not a `<select>` — no manual
+  actor selection inside any modal. Each resolves
+  `actor = sessionStaff ?? staff[0]` (same value/fallback 6B established:
+  real session when logged in, first staff member in the fetched list
+  when not) and renders `{actor.name} · {actor.position}`. To change the
+  acting identity while logged out, use Settings' Simulate Staff control —
+  not a per-modal picker.
+- **Persistent logout control**: `components/sidebar.tsx` (6B-Addendum,
+  `ohm#6y1d4h8m`) now has an account block at the bottom of the sidebar,
+  always visible. Session present: shows `{name} · {role}` and a "Sign
+  out" button (posts to the existing `logout()` action in
+  `app/login/actions.ts`). No session: shows a "Log in" link to `/login`.
+  Previously the only sign-out path was `/login` itself.
 - **`action_logs` attribution**: every write path (Settings, Sales,
   Lockers, Staff Directory, Bookings, Core Loop) now genuinely attributes
   to the real logged-in staff member when one exists, and to the

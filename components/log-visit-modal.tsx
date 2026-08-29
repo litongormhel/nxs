@@ -108,7 +108,8 @@ export function LogVisitModal({
   >("Cash");
   const [gcashRef, setGcashRef] = useState("");
   const { sessionStaff } = useStaffSim();
-  const [staffId, setStaffId] = useState(sessionStaff?.id ?? staff[0]?.id ?? "");
+  const actor = sessionStaff ?? staff[0];
+  const staffId = actor?.id ?? "";
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -663,21 +664,10 @@ export function LogVisitModal({
 
           {/* Logged by staff */}
           <div>
-            <label className="text-xs text-muted" htmlFor="fStaff">
-              Logged by (staff)
-            </label>
-            <select
-              id="fStaff"
-              value={staffId}
-              onChange={(e) => setStaffId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
-            >
-              {staff.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name} · {member.position}
-                </option>
-              ))}
-            </select>
+            <div className="text-xs text-muted">Logged by (staff)</div>
+            <div className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
+              {actor ? `${actor.name} · ${actor.position}` : "—"}
+            </div>
           </div>
 
           {/* Error Message */}

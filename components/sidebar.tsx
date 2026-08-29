@@ -4,10 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/nav";
 import { useStaffSim } from "@/lib/staff-context";
+import { logout } from "@/app/login/actions";
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { currentRole } = useStaffSim();
+  const { currentRole, currentStaff, sessionStaff } = useStaffSim();
 
   return (
     <aside className="w-60 shrink-0 border-r border-border bg-surface flex flex-col">
@@ -37,6 +38,33 @@ export function Sidebar() {
           );
         })}
       </nav>
+      <div className="border-t border-border px-5 py-4">
+        {sessionStaff ? (
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-xs font-medium text-foreground truncate">
+                {currentStaff.name}
+              </div>
+              <div className="text-[11px] text-muted truncate">{currentRole}</div>
+            </div>
+            <form action={logout}>
+              <button
+                type="submit"
+                className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-[11px] text-muted hover:text-foreground hover:bg-white/5"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
+        ) : (
+          <Link
+            href="/login"
+            className="block rounded-md border border-border px-2.5 py-1.5 text-center text-[11px] text-muted hover:text-foreground hover:bg-white/5"
+          >
+            Log in
+          </Link>
+        )}
+      </div>
     </aside>
   );
 }

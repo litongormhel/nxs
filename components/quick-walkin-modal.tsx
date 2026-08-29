@@ -95,7 +95,8 @@ export function QuickWalkinModal({
   const [paymentMethod, setPaymentMethod] = useState<"Cash" | "GCash">("Cash");
   const [gcashRef, setGcashRef] = useState("");
   const { sessionStaff } = useStaffSim();
-  const [staffId, setStaffId] = useState(sessionStaff?.id ?? staff[0]?.id ?? "");
+  const actor = sessionStaff ?? staff[0];
+  const staffId = actor?.id ?? "";
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -597,21 +598,10 @@ export function QuickWalkinModal({
           )}
 
           <div>
-            <label className="text-xs text-muted" htmlFor="wk-staff">
-              Logged by (staff)
-            </label>
-            <select
-              id="wk-staff"
-              value={staffId}
-              onChange={(e) => setStaffId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-            >
-              {staff.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name} · {member.position}
-                </option>
-              ))}
-            </select>
+            <div className="text-xs text-muted">Logged by (staff)</div>
+            <div className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
+              {actor ? `${actor.name} · ${actor.position}` : "—"}
+            </div>
           </div>
 
           {error && (
