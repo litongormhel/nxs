@@ -82,7 +82,50 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-29 — Staff Auth 6C-6: Remove Simulate Staff + Full-System
+1. **2026-08-29 — Client Portal 7A-1: Schema Foundation** (`ohm#7a1f9c2k`).
+   Database layer only — no UI, no routes. Added a `UNIQUE` constraint to
+   the already-existing `clients.phone` column (the prompt described it as
+   a new column; live schema check caught it already existed, nullable,
+   no duplicates), a new `client_portal_accounts` table (RLS enabled, zero
+   policies = default-deny, matching existing precedent), a new singleton
+   `app_settings` table for `allow_receptionist_manual_points`
+   (Owner-editable; no generic settings table existed to reuse — Settings
+   persistence in this codebase writes directly to catalog tables), and a
+   `COMMENT ON COLUMN`-only relabel of `clients.codename`'s display label
+   to "Name" (column name unchanged; zero `.tsx` files touched, per the
+   prompt's explicit UI-regression-risk exclusion). `action_logs.action`
+   is plain text with no enum, so the new `phone_number_revealed` event
+   type is a convention, not a schema change. Both migrations applied live
+   and verified via `pg_policies`/`get_advisors`. See [[client_portal_state]].
+2. **2026-08-29 — Cleanup: Remove 6C-6 Regression Test Artifacts from Live
+   DB** (`ohm#2c6h9x4d`). Data-only cleanup, no code/schema/RLS changes.
+   Removed the 4 test artifacts named in `ohm#8r5m1v7z`'s "harmless test
+   artifacts left in place" note: booking "6C-6 Regression Test", sale
+   "6C-6 Walkin Test", staff row "6C-6 Regression Staff", weekend slot
+   "2:15 PM". **One discrepancy caught by reading the live rows before
+   deleting, not assumed from the prompt's description**: the prompt
+   described the "6C-6 Walkin Test" sale as "edited by Diego, ₱700→₱725,"
+   but the live row was unedited (₱700, `edited_by` null, processed by
+   Ana). The real ₱700→₱725 Diego edit turned out to be on a separate,
+   unlabeled sale with no "6C-6" marker — left untouched as real data,
+   per the prompt's "don't delete anything that doesn't clearly match"
+   rule. Flagged to the user before deleting anything; confirmed correct.
+   **Two related test rows not named in the prompt** were found
+   FK/action-log-linked to the "6C-6 Walkin Test" sale (same
+   `quick_walkin` event): booking "6C-6 Walkin Test" (`sales.booking_id`)
+   and a locker_occupancy row (already checked out) sharing the same
+   guest label. Flagged and approved before deletion, since leaving them
+   would've orphaned test residue with no delete UI to clean up later.
+   All 6 rows confirmed live, shown for sign-off, then deleted
+   individually (`sales` → `locker_occupancy` → both `bookings` → `staff`
+   → `weekend_slots`) after explicit approval. `action_logs` entries
+   referencing these artifacts (`quick_walkin`, `staff_add`) were left
+   untouched per ADR-001's append-only invariant. Post-delete verification:
+   table counts dropped as expected (bookings 13→11, sales 11→10, staff
+   11→10, weekend_slots 8→7); the real ₱725 sale confirmed still present
+   and unmodified. This closes out the Staff Auth phase (6A–6C-6) with no
+   lingering test data in the live DB.
+3. **2026-08-29 — Staff Auth 6C-6: Remove Simulate Staff + Full-System
    Regression Pass (Staff Auth Complete)** (`ohm#8r5m1v7z`). Final
    sub-step of the entire Staff Auth phase (6A through 6C-6) and the
    entire originally-scoped 6-phase roadmap. Repo-wide search for every
@@ -152,7 +195,7 @@ Full invariant list: [[nxs-architecture-locks]].
    6-phase roadmap in full.** No RLS policy changes — none were needed,
    per scope; nothing surfaced by regression testing warranted one. See
    [[staff_state]] for the final state.
-2. **2026-08-29 — Staff Auth 6C-5: Staff Directory + Activity Logs RLS**
+4. **2026-08-29 — Staff Auth 6C-5: Staff Directory + Activity Logs RLS**
    (`ohm#4t8w2j6q`). Fifth and final table-level RLS-lockdown sub-step of
    six planned — reused 6C-2's role helpers as-is (`is_staff()`,
    `is_owner()`), no new helpers created. Policy matrix, including the
@@ -217,7 +260,7 @@ Full invariant list: [[nxs-architecture-locks]].
    now complete for all five table-level RLS sub-steps — only 6C-6
    (removing Simulate Staff) remains.** See [[staff_state]],
    [[logs_state]] for the updated RLS detail.
-3. **2026-08-29 — Staff Auth 6C-4: Settings/Catalog RLS (services, promos,
+5. **2026-08-29 — Staff Auth 6C-4: Settings/Catalog RLS (services, promos,
    addons, rooms, lockers, weekend_slots)** (`ohm#9d2k6y4p`). Fourth of six
    planned 6C sub-steps — reused 6C-2's role helpers as-is (`is_staff()`,
    `is_supervisor_or_above()`), no new helpers created. Closes the
@@ -264,110 +307,3 @@ Full invariant list: [[nxs-architecture-locks]].
    transaction smoke test. No server or console errors at any tier.
    **Next**: 6C-5 (Staff/Logs RLS) and 6C-6 (removing Simulate Staff)
    remain, tracked in `.ai/handoff.md`.
-4. **2026-08-29 — Staff Auth 6C-3: Bookings + Locker Occupancy RLS**
-   (`ohm#3f7n9c1k`). Third of six planned 6C sub-steps — reused 6C-2's role
-   helpers as-is (`is_staff()`, `is_supervisor_or_above()`, `is_owner()`,
-   `current_staff_position()`), no new helpers created. Policy matrix and
-   the status-transition role-restriction question were presented and
-   approved before any SQL was written, per the prompt's mandatory gate:
-   the user picked "all staff, no restriction" for both `bookings` and
-   `locker_occupancy` (unlike Sales Void, which stays Owner-only per 6C-2 —
-   confirmed this is a `sales`-only rule, not a `bookings` one).
-   **`bookings`**: `staff_select`/`staff_insert`/`staff_update` all
-   `is_staff()`-gated, replacing the old `public_select`/`public_insert`
-   pair. **One real gap closed, not just re-scoped**: `bookings` previously
-   had no UPDATE policy at all (default-deny), so `updateBookingStatus()`
-   (the No-show/Cancel buttons wired in the Bookings correction phase) was
-   silently affecting 0 rows under RLS — confirmed live via `pg_policies`
-   before writing the migration, not assumed from the docs. This migration
-   is what makes status transitions actually work end-to-end for the first
-   time, not merely re-gate an existing path. No DELETE policy — bookings
-   are never hard-deleted. **`locker_occupancy`**: `staff_select`/
-   `staff_insert`/`staff_update` all `is_staff()`-gated, replacing the prior
-   `public_*` policies (Check-Out already had an UPDATE policy from the
-   Operations phase; this just re-scopes it to real staff identity). No
-   DELETE policy. **Migration**
-   (`supabase/migrations/20260829140000_bookings_locker_occupancy_rls.sql`),
-   smoke-tested via a rolled-back transaction simulating `auth.uid()` as
-   anon, Ana (Front Desk), Diego (Supervisor), and J. Cruz (Owner) —
-   confirmed anon sees/inserts nothing on both tables, Ana can select/
-   insert/cancel a booking, the GiST exclusion constraints
-   (`no_double_book_room`/`no_double_book_therapist`) still correctly
-   blocked a conflicting insert under the new policies, and Diego/Owner
-   can check a locker in and out — before applying live via
-   `apply_migration`. Live policies read back afterward and confirmed to
-   match exactly. Regression-tested end-to-end via real logins (not
-   Simulate Staff): logged in as Ana — New Booking succeeded (actor
-   attribution correctly showed "Ana · Receptionist"), Cancel on that same
-   booking succeeded (confirmed live via SQL: status flipped to
-   `Cancelled`, previously would have silently no-op'd), Locker Board
-   Check-out succeeded. Logged in as Diego — Call Sheet loaded correctly
-   (3 active massages), `quick_walkin()` RPC succeeded end-to-end via a
-   rolled-back-transaction substitution (booking + sale + locker_occupancy
-   all inserted) after hitting the same pre-existing Browser-pane
-   limitation from 6C-2 (native `<select>` changes not propagating to
-   React state — unrelated to RLS, not a regression). Logged in as J. Cruz
-   (Owner) — Locker Board Check-out succeeded, Owner-only nav
-   (Analytics/Staff/Logs) correctly present. No server or console errors
-   at any tier. One harmless test artifact left in place, matching the
-   "bookings are never hard-deleted" invariant: a `Cancelled` booking
-   (`guest_label = "RLS Smoke TestRLS Smoke Test"`) from the live browser
-   test — inert, excluded from active-status lists. **Next**: 6C-4 and
-   6C-5 (RLS for `staff`/`action_logs` attribution and the Settings/Catalog
-   domain) and 6C-6 (removing Simulate Staff) remain, tracked in
-   `.ai/handoff.md`.
-5. **2026-08-29 — Staff Auth 6C-2: Role Helper Functions + Core Loop RLS
-   (clients, point_transactions, sales)** (`ohm#5m8t2x6b`). Second of six
-   planned 6C sub-steps — first real RLS lockdown step (6C-1 was routes
-   only, no RLS). Helper-function shape, the policy-per-table-per-operation
-   matrix, and the Sales edit-vs-void granularity decision were all
-   presented and approved before any SQL was written, per the prompt's
-   mandatory gate; the void granularity question (single policy vs.
-   RLS+trigger) was explicitly flagged rather than guessed, and the user
-   picked the RLS+trigger option. **New role helpers** (reused as-is by
-   6C-3 through 6C-5): `current_staff_position()` (`SECURITY DEFINER`,
-   resolves `auth.uid() → staff.user_id → staff.position`, returns null
-   gracefully with no session), `is_staff()`, `is_supervisor_or_above()`,
-   `is_owner()`. **`clients`**: `staff_select`/`staff_insert` replace the
-   old `public_select`-only policy — SELECT/INSERT now require
-   `is_staff()`; confirmed no UPDATE policy is needed (no editable client
-   field exists in the app; `points_balance` stays ledger-trigger-only).
-   **`point_transactions`**: `staff_select`/`staff_insert` replace
-   `public_select`/`public_insert`, both now `is_staff()`-gated; no
-   UPDATE/DELETE policy, unchanged (the block triggers are the only
-   enforcement). **`sales`**: `staff_select`/`staff_insert` now
-   `is_staff()`-gated; `staff_update` now requires
-   `is_supervisor_or_above()` (was `USING(true)`); a new
-   `trg_block_void_by_non_owner` trigger additionally blocks flipping
-   `voided` unless `is_owner()`, giving the Owner-only void rule real
-   DB-level enforcement on top of the Supervisor+ RLS floor. **One
-   real discrepancy caught by reading the live function bodies before
-   writing policy, not assumed**: `log_visit()`/`quick_walkin()` are
-   `SECURITY INVOKER`, not `DEFINER` — they run as the calling session's
-   role, so the new INSERT policies had to actually pass for an
-   authenticated staff caller, not just an app-level abstraction; verified
-   directly rather than assumed. **Migration**
-   (`supabase/migrations/20260829000000_role_helpers_and_core_loop_rls.sql`),
-   smoke-tested via a rolled-back transaction simulating `auth.uid()` as
-   anon, Ana (Front Desk), Diego (Supervisor), and J. Cruz (Owner) —
-   confirmed anon sees/inserts nothing, Front Desk sees but can't edit
-   sales, Supervisor can edit but not void, Owner can void — before
-   applying live via `apply_migration`. Regression-tested end-to-end via
-   real logins (not Simulate Staff): Log Visit earn case confirmed live in
-   the browser as Ana (28→33 pts); redemption and redemption-with-upgrade
-   cases confirmed via the same `log_visit()` RPC path in a rolled-back
-   transaction as Diego/Owner respectively, after a UI-automation
-   limitation (this Browser pane's native `<select>` changes don't
-   propagate to this app's React state, a pre-existing tooling gap
-   unrelated to RLS) made driving those two cases through the actual
-   dropdown unreliable; Sales Edit confirmed live as Diego and reverted
-   live as Owner; Sales Void's `window.confirm()` is auto-dismissed by
-   this browser tool (same known limitation noted in the Operations
-   Phase handoff) so the click-through itself wasn't drivable, but the
-   identical UPDATE path was proven live via Edit and the void trigger
-   was independently smoke-tested (Diego blocked, Owner allowed).
-   Regression-checked Dashboard/Clients/Staff/Bookings — all load with no
-   console errors, and nav/role gating is unchanged. **Next**: 6C-3
-   through 6C-5 (RLS for the remaining domains, reusing these same helper
-   functions) and 6C-6 (removing Simulate Staff) remain, tracked in
-   `.ai/handoff.md`.

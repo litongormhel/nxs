@@ -52,6 +52,22 @@ on UPDATE/DELETE attempts, not a real permission.
   non-Owner role.
 - Read-only — no mutation capability from this tab.
 
+## Event types — convention, not a DB enum
+
+`action_logs.action` is plain `text`, so "event types" are an app-level
+convention, not a schema constraint — there is no enum to extend when a
+new one is added.
+
+- **`phone_number_revealed`** (Client Portal 7A-1, `ohm#7a1f9c2k`,
+  2026-08-29) — reserved for when a staff member reveals a client's full
+  phone number (default display is masked, last 4 digits only, per
+  ADR-001). No schema change was needed or made. `staff_id` (revealing
+  staff) and `created_at` (timestamp) use the table's existing columns;
+  the target client id is expected to go in the nullable `detail` text
+  column, matching how every other event type already encodes extra
+  context. **No writer exists yet** — the actual reveal UI/action is a
+  later Client Portal prompt; see [[client_portal_state]].
+
 ## Not yet implemented — see roadmap
 
 - No pagination — a flat `LIMIT 500` is used; fine at current volume, not

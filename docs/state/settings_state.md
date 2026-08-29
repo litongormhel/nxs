@@ -90,6 +90,28 @@ instead of showing enabled controls that would then fail server-side.
 soft `UPDATE ... SET active = false` / deactivate, and the existing read
 queries already filter `.eq("active", true)`.
 
+## `app_settings` table (Client Portal 7A-1, `ohm#7a1f9c2k`, 2026-08-29)
+
+A new singleton table, **not** part of the catalog-persistence pattern
+above — no generic key/value or config table existed before this prompt,
+so this was created as the smallest reasonable home for a standalone
+boolean flag rather than shoehorned into an existing catalog table.
+
+- `app_settings`: single row (`id boolean primary key default true`,
+  `check (id)` enforces exactly one row), seeded by its migration.
+- `allow_receptionist_manual_points` (boolean, default `false`) — gates
+  whether Front Desk can enter manual points-ledger `ADJUSTMENT` entries
+  for client backtracking from the prior system (Client Portal feature,
+  not built yet — see [[client_portal_state]]). Supervisor and Owner tiers
+  are unaffected by this toggle (always permitted), per ADR-001.
+- RLS: `app_settings_select` (`is_staff()`), `app_settings_update`
+  (`is_owner()` on both `USING`/`WITH CHECK` — "Owner-editable only," no
+  Supervisor write access to the flag itself, distinct from the flag's own
+  Supervisor/Owner-always-permitted downstream effect). No INSERT/DELETE
+  policy — singleton, seeded once by migration.
+- No UI reads or writes this table yet — this prompt was database-layer
+  only.
+
 ## Not persisted — deliberately, not an oversight
 
 **Display/Appearance** (theme) remains local/session-only — confirmed with

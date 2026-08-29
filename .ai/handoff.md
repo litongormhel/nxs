@@ -5,6 +5,104 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Client Portal 7A-1: Schema Foundation — complete** (`ohm#7a1f9c2k`,
+  2026-08-29). Database layer only, first prompt of the new Client Portal
+  domain — no UI, no routes, no client-facing pages. Plan + regression risk
+  assessment presented and approved before any migration was written, per
+  the prompt's mandatory gate.
+  - **Context loaded first**: `.ai/briefing.md`, `.ai/current_state.md`,
+    `docs/state/settings_state.md`, `docs/state/logs_state.md` (the prompt
+    named `activity_logs_state.md`, which doesn't exist — flagged and used
+    the real file), ADR-001's "Client Identity (amended)" and "Client
+    Portal (new)" sections, plus a live schema read
+    (`information_schema.columns`, `pg_constraint`) rather than trusting
+    the prompt's description of what already exists.
+  - **Three real discrepancies caught by reading the live schema, not
+    assumed from the prompt, all flagged and confirmed with the user before
+    implementing**: (1) `clients.phone` already exists (nullable `text`,
+    no default) — the prompt described it as a new column; live check
+    showed 1 client row, phone null, no duplicates, so the actual change
+    needed was adding a `UNIQUE` constraint to the existing column, not
+    adding the column itself. (2) No generic `settings` table exists
+    anywhere in the schema — "Settings persistence" in this codebase means
+    direct writes to each catalog table (services/promos/addons/
+    weekend_slots/lockers/rooms; confirmed via `settings_state.md` and
+    `20260828011724_settings_persistence_rls.sql`), so there was nothing
+    structural to "reuse" for a standalone boolean flag — created a new
+    minimal singleton table (`app_settings`) instead, carrying over only
+    the RLS/actor-attribution *conventions*. (3) `action_logs.action` is
+    plain `text`, not an enum — "add new event type `phone_number_revealed`"
+    has no DB-level schema change to make; it's a convention (a string
+    value future writers use), not a migration.
+  - **Migration 1**
+    (`supabase/migrations/20260829170000_client_portal_phone_and_accounts.sql`):
+    `clients_phone_key` UNIQUE constraint added to the existing
+    `clients.phone` column (no backfill needed/attempted — column already
+    empty). New table `client_portal_accounts` (`id`, `client_id` FK →
+    `clients`, `phone` unique, `pin_hash`, `username` unique, `created_at`)
+    — RLS enabled with zero policies (default-deny for every role until a
+    later prompt designs the real policy matrix; same pattern already used
+    by `therapist_absence`/`therapist_day_off`/etc., confirmed via
+    `get_advisors` showing the expected "RLS enabled, no policy" info-level
+    note and nothing else new). Also relabels `clients.codename`'s display
+    label via `COMMENT ON COLUMN` only ("Name", not "Codename") — the
+    column name itself is unchanged (single free-text identity field, no
+    legal-name column, per ADR-001's Client Identity amendment). **No
+    `.tsx`/`.ts` file was touched for the relabel** — grepped every
+    `codename` reference repo-wide first; all 20+ hits are UI components
+    (`client-browser.tsx`, `booking-form-modal.tsx`, etc.) or the
+    schema-generated `lib/types/database.ts`, both explicitly out of scope
+    per the prompt's regression-risk callout (Locker Board, Call Sheet,
+    client search, receipts) — deferred to the named follow-up prompt.
+  - **Migration 2**
+    (`supabase/migrations/20260829170100_app_settings_manual_points_flag.sql`):
+    new `app_settings` singleton table
+    (`id boolean primary key default true` +
+    `allow_receptionist_manual_points boolean not null default false`,
+    `check (id)` enforces single-row), seeded with its one row by the
+    migration itself. RLS: `app_settings_select` (`is_staff()`),
+    `app_settings_update` (`is_owner()` on both `USING`/`WITH CHECK`,
+    matching "Owner-editable only" — Supervisor/Owner both already bypass
+    the flag's downstream gate per ADR-001, so only Owner needs write
+    access to the flag itself). No INSERT/DELETE policy — singleton,
+    seeded once.
+  - Both migrations applied live via `apply_migration` (the session's
+    auto-mode classifier blocked the first direct-apply attempt on this
+    production project; user explicitly approved re-attempting via the
+    same MCP tool before it was applied). Verified afterward: constraint
+    (`pg_constraint`), both new tables' contents/policies
+    (`pg_policies`), and `get_advisors` (security) read back — only the
+    expected `client_portal_accounts` "RLS enabled, no policy" info note
+    is new; every other advisory item pre-dates this change.
+  - **Explicitly out of scope, confirmed untouched**: Master QR
+    generation, registration UI, login UI, `log_visit` RPC changes, phone
+    masking/reveal UI — all deferred to later Client Portal prompts per
+    the prompt's own scope section.
+  - **Regression risk confirmed clean**: Points Ledger, Bookings, and
+    existing `clients` reads are unaffected — no migration touches
+    `point_transactions`, its triggers, `bookings`, or any existing SELECT
+    path (`app/clients/page.tsx` doesn't select `phone`); no UPDATE policy
+    exists or was added on `clients`, so nothing new can write to it yet.
+    `client_portal_accounts` and `app_settings` are both brand-new tables
+    with zero existing code references — zero blast radius on any
+    existing feature.
+  - See [[client_portal_state]] (new), [[settings_state]], [[logs_state]]
+    for the updated detail.
+
+- **Cleanup: 6C-6 regression test artifacts removed from live DB — complete**
+  (`ohm#2c6h9x4d`, 2026-08-29). Data-only, no code/schema/RLS changes.
+  Deleted the booking, sale, staff row, and weekend slot left behind by
+  6C-6's regression pass, plus two related test rows (a walk-in booking
+  and a locker_occupancy row) found FK-linked to the test sale but not
+  named in the original prompt — approved before deletion. One
+  discrepancy caught and correctly *not* acted on: a real, unlabeled sale
+  (the actual ₱700→₱725 Diego edit) was almost conflated with the "6C-6
+  Walkin Test" sale by the cleanup prompt's description — verified live
+  and left untouched. **Staff Auth phase (6A–6C-6) is now fully closed
+  out with no lingering test data in the live DB.** No commit needed —
+  data-only change, no files modified other than this handoff and
+  `.ai/briefing.md`.
+
 - **Staff Auth — complete (6A through 6C-6, `ohm#8r5m1v7z`, 2026-08-29).**
   This closes the entire Staff Auth phase and the originally-scoped
   6-phase roadmap in full. See `docs/state/staff_state.md` for the final
