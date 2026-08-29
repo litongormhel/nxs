@@ -5,6 +5,83 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Therapist Roster — 3 bug fixes — complete** (`ohm#7k2m9x4p`,
+  2026-08-30). Root cause + fix approach + regression risk presented and
+  approved before any code was written, per the prompt's mandatory gate.
+  - **Bug 1 — kebab menu "does nothing"**: code inspection initially
+    showed the menu already fully wired (open/close state, all 4 items,
+    modals) — flagged as a discrepancy before assuming the bug report was
+    right. Live browser testing (logged in as Diego, Supervisor) then
+    found the *actual* root cause, which code-reading alone missed: React's
+    delegated click listener and the component's own
+    `document.addEventListener("click", handleDocClick)` (click-outside-
+    to-close) are both attached to `document` in this React/Next version.
+    `e.stopPropagation()` on the kebab wrapper only blocks bubbling to
+    *ancestor* nodes — it can't stop a sibling listener on the exact same
+    node, so `handleDocClick` fired right after the button's own onClick
+    opened the menu, closing it in the same tick, every time. Fixed by
+    having `handleDocClick` explicitly ignore clicks whose target is
+    inside a new `data-kebab-root` marker on the kebab wrapper, instead of
+    relying on `stopPropagation()`. Verified live: menu opens, stays open,
+    closes on outside click, and "Mark Absent Today" round-trips through
+    its (intentionally local-only, per prompt scope) toast + state.
+  - **Bug 2 — Weekly Day(s) Off doesn't persist**: root cause was that
+    `components/therapist-browser.tsx` had zero Supabase calls anywhere —
+    the whole component was local mock state seeded from
+    `initialTherapists`/`initialBookings` props only. Deeper than the
+    single toggle: `therapist_day_off` (and `therapist_leave`,
+    `therapist_absence`, `therapist_services`) had `ENABLE ROW LEVEL
+    SECURITY` from the baseline snapshot but **no policies at all**,
+    ever — flagged to the user immediately as a required migration (the
+    prompt said no migration was expected) before writing any app code.
+    - **Migration** `supabase/migrations/20260830000000_therapist_day_off_rls.sql`
+      (verified in a rolled-back transaction first, per the `pax_count`/
+      3-tab-restructure precedent): adds `staff_select` (`is_staff()`),
+      `staff_insert`/`staff_delete` (`is_supervisor_or_above()`) on
+      `therapist_day_off` only — matches the identity-keyed pattern from
+      `20260829150000_settings_catalog_rls.sql`. `therapist_leave`/
+      `therapist_absence`/`therapist_services` deliberately left alone —
+      out of scope (Mark On Leave/Archive stay local-only stubs per the
+      prompt's explicit "do NOT build the reassignment logic here"
+      instruction). Applied live after explicit user confirmation (the
+      auto-mode classifier blocked applying it directly, as expected for
+      a live schema change).
+    - `app/(staff)/therapists/page.tsx` now fetches `therapists.id`
+      (previously `name` only) and `therapist_day_off`, building a
+      `therapist_id -> weekday[]` map passed to the component as a new
+      `initialDayOff` prop.
+    - New `app/(staff)/therapists/actions.ts` (`toggleDayOff`), same
+      shape as `app/(staff)/settings/actions.ts`: insert-or-delete on
+      `therapist_day_off` by `(therapist_id, weekday)`, one `action_logs`
+      row per toggle, `revalidatePath("/therapists")`.
+    - `TherapistBrowser` gained a `therapistIds` (name → real DB id) map
+      alongside the existing name-keyed `therapistMeta`, rather than a
+      full id-rekey of the whole component — kept the change scoped to
+      the day-off path; Mark Absent/Leave/Archive/Edit/Add stay name-keyed
+      and local-only, unchanged. Rename (Edit) now also moves the
+      `therapistIds` entry alongside `therapistMeta`.
+    - Verified live: toggled Dan's Tuesday off, confirmed the row landed
+      in `therapist_day_off` via direct SQL, hard-reloaded the page, and
+      confirmed the pill was still marked off after a fresh SSR fetch —
+      then deleted the test row (plain join-table row, no audit-trail
+      invariant against hard delete here, unlike bookings/sales).
+  - **Bug 3 — date filter defaults stale**: `viewDate` was hardcoded to
+    `"2026-08-26"` instead of using the already-defined-but-unused
+    `todayISO()` helper. Fixing this surfaced a second, related bug in
+    that helper itself: it used `new Date().toISOString().slice(0,10)`,
+    which is a UTC date, not the device/local date the prompt asked for —
+    caught live when the browser's local clock (PHT, UTC+8) read
+    2026-08-30 just after midnight while `toISOString()` still returned
+    2026-08-29 (UTC hadn't rolled over yet). Rewrote `todayISO()` to build
+    the date string from `getFullYear()`/`getMonth()`/`getDate()`
+    (local-time getters) instead. Verified live at the actual skew moment
+    (00:23 local) that the date input now shows the correct local date.
+  - `npx tsc --noEmit` and `eslint` both clean (pre-existing lint findings
+    in this file — 2 unescaped-entity errors, 1 unused-var warning, all
+    outside the touched code — confirmed unchanged via `git stash` diff,
+    not introduced by this change). No changes to Locker Board, Call
+    Sheet, or Sales. See [[therapists_state]].
+
 - **Bookings Tab — 3-Tab Restructure — complete** (`ohm#7q2x9m4k`,
   2026-08-29). Restructures the Bookings tab from a single flat list +
   status pill into 3 tabs (Upcoming / Check-in / Check-out); tab

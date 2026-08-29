@@ -4,22 +4,24 @@ import { TherapistBrowser, BookingInfo } from "@/components/therapist-browser";
 export default async function TherapistsPage() {
   const supabase = await createClient();
 
-  const [{ data: dbTherapists }, { data: dbBookings }] = await Promise.all([
-    supabase
-      .from("therapists")
-      .select("name")
-      .order("name", { ascending: true }),
-    supabase
-      .from("bookings")
-      .select(
-        "id, booking_date, start_time, status, therapists(name), services(name), clients(codename), guest_label"
-      )
-      .order("start_time", { ascending: true }),
-  ]);
+  const [{ data: dbTherapists }, { data: dbBookings }, { data: dbDayOff }] =
+    await Promise.all([
+      supabase
+        .from("therapists")
+        .select("id, name")
+        .order("name", { ascending: true }),
+      supabase
+        .from("bookings")
+        .select(
+          "id, booking_date, start_time, status, therapists(name), services(name), clients(codename), guest_label"
+        )
+        .order("start_time", { ascending: true }),
+      supabase.from("therapist_day_off").select("therapist_id, weekday"),
+    ]);
 
-  const therapistNames =
+  const therapists =
     dbTherapists && dbTherapists.length > 0
-      ? dbTherapists.map((t) => t.name)
+      ? dbTherapists.map((t) => ({ id: t.id, name: t.name }))
       : [
           "Ron",
           "Don",
@@ -31,7 +33,15 @@ export default async function TherapistsPage() {
           "Marco",
           "Akio",
           "Josh",
-        ];
+        ].map((name) => ({ id: name, name }));
+
+  const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dayOffByTherapist: Record<string, string[]> = {};
+  (dbDayOff ?? []).forEach((row) => {
+    const wd = WEEKDAY_NAMES[row.weekday];
+    if (!wd) return;
+    (dayOffByTherapist[row.therapist_id] ??= []).push(wd);
+  });
 
   const bookings: BookingInfo[] = (dbBookings ?? []).map((b: any) => ({
     id: b.id,
@@ -50,7 +60,8 @@ export default async function TherapistsPage() {
       </h1>
 
       <TherapistBrowser
-        initialTherapists={therapistNames}
+        initialTherapists={therapists}
+        initialDayOff={dayOffByTherapist}
         initialBookings={bookings.length > 0 ? bookings : undefined}
       />
     </div>

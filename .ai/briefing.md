@@ -82,7 +82,33 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-29 — Bookings Tab — 3-Tab Restructure** (`ohm#7q2x9m4k`).
+1. **2026-08-30 — Therapist Roster — Kebab Menu / Day-Off Persistence /
+   Date Default** (`ohm#7k2m9x4p`). Plan + regression risk assessment
+   presented and approved before any code was written, per the prompt's
+   mandatory gate. Kebab "does nothing" turned out to be React's own
+   delegated click listener and the component's click-outside-to-close
+   `document.addEventListener` both sitting on `document` — a sibling
+   listener isn't stopped by `e.stopPropagation()`, so the menu closed
+   itself in the same tick it opened; fixed with an explicit
+   `data-kebab-root` target check instead of relying on
+   `stopPropagation()`. Day-off toggle never persisted because
+   `components/therapist-browser.tsx` had zero Supabase calls anywhere —
+   pure local mock state — and `therapist_day_off` had RLS enabled with
+   **no policies at all** since the baseline snapshot; flagged as a
+   required migration mid-task (none was expected) and approved before
+   applying. New migration
+   `20260830000000_therapist_day_off_rls.sql` (staff read, supervisor+
+   write, same pattern as Settings' catalog RLS), new
+   `app/(staff)/therapists/actions.ts` (`toggleDayOff`), `page.tsx` now
+   fetches real therapist `id`s + `therapist_day_off` rows. Date filter's
+   stale `"2026-08-26"` default was swapped for the existing-but-unused
+   `todayISO()` helper — which itself had a bug found live (used UTC via
+   `toISOString()` instead of local date), fixed to use local-time date
+   getters. Verified live end-to-end (menu open/close, DB round-trip
+   survives a hard reload, correct local date at a real UTC/local-day
+   skew moment). No changes to Locker Board, Call Sheet, or Sales. See
+   [[therapists_state]].
+2. **2026-08-29 — Bookings Tab — 3-Tab Restructure** (`ohm#7q2x9m4k`).
    Restructures the flat Bookings list + status pill into 3 tabs
    (Upcoming / Check-in / Check-out); tab membership is derived from
    existing `bookings.status` joined with `locker_occupancy` checkout
@@ -112,7 +138,7 @@ Full invariant list: [[nxs-architecture-locks]].
    and `eslint` both clean; browser verification blocked by Staff Auth
    login (no test credentials available in this session) — flagged, not
    bypassed. See [[bookings_state]] and [[operations_state]].
-2. **2026-08-29 — Bookings: Change modal extension** (`ohm#8p4t2vk6`).
+3. **2026-08-29 — Bookings: Change modal extension** (`ohm#8p4t2vk6`).
    Extends the Change Therapist feature: renames "Change Therapist"
    button/modal title to "Change" on `Booked`/`No-show` rows ("Reassign"
    on `Needs Reassignment` unchanged); adds a `Start Time` input to the
@@ -128,7 +154,7 @@ Full invariant list: [[nxs-architecture-locks]].
    changed (`old_therapist → new_therapist`, `old_time → new_time`, or
    both). No migration required. `npx tsc --noEmit` and `eslint` both
    clean. See [[bookings_state]].
-3. **2026-08-29 — Bookings: Change Therapist action** (`ohm#7k2m9xq4`).
+4. **2026-08-29 — Bookings: Change Therapist action** (`ohm#7k2m9xq4`).
    Adds a "Change Therapist" action on any booking not `Completed`/
    `Cancelled` (`Booked`, `No-show`, `Needs Reassignment`) — reassigns
    `therapist_id` only, room/locker untouched. Plan + regression risk
@@ -149,7 +175,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Verified live: reassignment round-tripped in the browser and the
    Activity Log entry appeared correctly. `npx tsc --noEmit` and `eslint`
    both clean. See [[bookings_state]].
-4. **2026-08-29 — Client Portal 7A-3: Registration/Login Revision —
+5. **2026-08-29 — Client Portal 7A-3: Registration/Login Revision —
    Password Auth** (`ohm#9r3w7t5b`). Rework of the already-shipped 7A-2
    registration/login flow: replaces PIN-based auth with password-based
    auth and makes `username` user-chosen at registration (was
@@ -182,12 +208,3 @@ Full invariant list: [[nxs-architecture-locks]].
    scaffolding added. Verified live: register → confirmation → logout →
    login by both username and phone, staff `/dashboard` unaffected.
    `npx tsc --noEmit` and `eslint` both clean. See [[client_portal_state]].
-
-5. **2026-08-29 — Settings 7B-3: Service/Promo Soft-Delete — Verified
-   Already Complete** (`ohm#1d5r6nz4`). Read-only investigation (plan
-   presented and approved before touching anything, per the prompt's
-   mandatory gate) found soft delete, active-only dropdown filtering,
-   FK-joined historical display, and no `ON DELETE CASCADE` risk on
-   `services`/`promos` were all already in place from `ohm#5x1p8m3v`/6C-4.
-   No migration or code change made. See [[settings_state]] and
-   `.ai/handoff.md` for the full verification trail.

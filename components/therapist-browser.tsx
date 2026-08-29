@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useStaffSim } from "@/lib/staff-context";
+import { toggleDayOff as toggleDayOffAction } from "@/app/(staff)/therapists/actions";
 
 const DEFAULT_THERAPISTS = [
   "Ron",
@@ -44,6 +46,8 @@ export type TherapistMetaRecord = {
   archivedAt?: string;
 };
 
+export type TherapistRecord = { id: string; name: string };
+
 export type BookingInfo = {
   id: string | number;
   therapist: string;
@@ -55,7 +59,11 @@ export type BookingInfo = {
 };
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function fmtDate(iso: string): string {
@@ -96,16 +104,36 @@ function windowOverlap(
 
 export function TherapistBrowser({
   initialTherapists,
+  initialDayOff = {},
   initialBookings = [],
 }: {
-  initialTherapists?: string[];
+  initialTherapists?: TherapistRecord[];
+  initialDayOff?: Record<string, string[]>;
   initialBookings?: BookingInfo[];
 }) {
-  const [therapists, setTherapists] = useState<string[]>(() => {
-    if (initialTherapists && initialTherapists.length > 0)
-      return initialTherapists;
-    return DEFAULT_THERAPISTS;
-  });
+  const { sessionStaff } = useStaffSim();
+
+  const initialRecords: TherapistRecord[] =
+    initialTherapists && initialTherapists.length > 0
+      ? initialTherapists
+      : DEFAULT_THERAPISTS.map((name) => ({ id: name, name }));
+
+  const [therapists, setTherapists] = useState<string[]>(() =>
+    initialRecords.map((r) => r.name)
+  );
+
+  // Maps therapist display name -> real DB id (or the name itself, for
+  // demo-only entries with no backing row — e.g. the DB-empty fallback,
+  // or a therapist added this session via the still-local-only Add flow).
+  const [therapistIds, setTherapistIds] = useState<Record<string, string>>(
+    () => {
+      const ids: Record<string, string> = {};
+      initialRecords.forEach((r) => {
+        ids[r.name] = r.id;
+      });
+      return ids;
+    }
+  );
 
   const [therapistMeta, setTherapistMeta] = useState<
     Record<string, TherapistMetaRecord>
@@ -115,11 +143,15 @@ export function TherapistBrowser({
       Don: ["Combi Massage"],
       Akio: ["Signature Massage"],
     };
-    (initialTherapists || DEFAULT_THERAPISTS).forEach((t) => {
-      meta[t] = {
-        dayOff: t === "Josh" ? ["Sun"] : [],
-        services: restricted[t]
-          ? restricted[t].slice()
+    initialRecords.forEach((r) => {
+      meta[r.name] = {
+        dayOff: initialDayOff[r.id]
+          ? initialDayOff[r.id].slice()
+          : r.name === "Josh" && !initialTherapists
+          ? ["Sun"]
+          : [],
+        services: restricted[r.name]
+          ? restricted[r.name].slice()
           : ALL_THERAPIST_SERVICES.slice(),
         leave: null,
         absentDates: [],
@@ -210,7 +242,7 @@ export function TherapistBrowser({
   });
 
   // Filter controls
-  const [viewDate, setViewDate] = useState<string>("2026-08-26");
+  const [viewDate, setViewDate] = useState<string>(() => todayISO());
   const [viewTime, setViewTime] = useState<string>("20:30");
   const [filter, setFilter] = useState<string>("all");
   const [showArchived, setShowArchived] = useState<boolean>(false);
@@ -250,9 +282,17 @@ export function TherapistBrowser({
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
-  // Click outside to close kebab
+  // Click outside to close kebab. This listener and React's own delegated
+  // click handler both live on `document`, so the kebab button's
+  // `e.stopPropagation()` (which only blocks bubbling to ancestors) can't
+  // stop this sibling listener from firing right after the button's own
+  // onClick opens the menu — it has to explicitly ignore clicks that
+  // landed inside a kebab trigger/menu instead.
   useEffect(() => {
-    const handleDocClick = () => setOpenKebab(null);
+    const handleDocClick = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest("[data-kebab-root]")) return;
+      setOpenKebab(null);
+    };
     document.addEventListener("click", handleDocClick);
     return () => document.removeEventListener("click", handleDocClick);
   }, []);
@@ -293,23 +333,38 @@ export function TherapistBrowser({
     );
   };
 
-  // Day off toggle handler
-  const handleToggleDayOff = (t: string, wd: string) => {
+  // Day off toggle handler — writes through to therapist_day_off
+  const handleToggleDayOff = async (t: string, wd: string) => {
+    const meta = therapistMeta[t];
+    if (!meta || !sessionStaff) return;
+    const isCurrentlyOff = meta.dayOff.includes(wd);
+    const turningOff = !isCurrentlyOff;
+    const therapistId = therapistIds[t];
+    const weekday = WEEKDAYS.indexOf(wd);
+
+    const res = await toggleDayOffAction(
+      therapistId,
+      weekday,
+      turningOff,
+      sessionStaff.id
+    );
+    if (!res.ok) {
+      showToast(`Couldn't update ${t}'s day off — ${res.error}`);
+      return;
+    }
+
     setTherapistMeta((prev) => {
-      const meta = prev[t];
-      if (!meta) return prev;
-      const isCurrentlyOff = meta.dayOff.includes(wd);
-      const updated = isCurrentlyOff
-        ? meta.dayOff.filter((d) => d !== wd)
-        : [...meta.dayOff, wd];
-      showToast(
-        `${t} · ${wd} ${!isCurrentlyOff ? "marked off" : "available again"}`
-      );
+      const current = prev[t];
+      if (!current) return prev;
+      const updated = turningOff
+        ? [...current.dayOff, wd]
+        : current.dayOff.filter((d) => d !== wd);
       return {
         ...prev,
-        [t]: { ...meta, dayOff: updated },
+        [t]: { ...current, dayOff: updated },
       };
     });
+    showToast(`${t} · ${wd} ${turningOff ? "marked off" : "available again"}`);
   };
 
   // Services offered toggle handler
@@ -457,6 +512,12 @@ export function TherapistBrowser({
         delete copy[oldName];
         return copy;
       });
+      setTherapistIds((prev) => {
+        const copy = { ...prev };
+        copy[newName] = copy[oldName];
+        delete copy[oldName];
+        return copy;
+      });
       setBookings((prev) =>
         prev.map((b) =>
           b.therapist === oldName ? { ...b, therapist: newName } : b
@@ -475,6 +536,7 @@ export function TherapistBrowser({
       return;
     }
     setTherapists((prev) => [...prev, name]);
+    setTherapistIds((prev) => ({ ...prev, [name]: name }));
     setTherapistMeta((prev) => ({
       ...prev,
       [name]: {
@@ -670,6 +732,7 @@ export function TherapistBrowser({
 
                   {/* Kebab Action Menu */}
                   <div
+                    data-kebab-root
                     className="relative"
                     onClick={(e) => e.stopPropagation()}
                   >
