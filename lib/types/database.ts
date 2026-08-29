@@ -204,24 +204,24 @@ export type Database = {
           client_id: string
           created_at: string
           id: string
+          password_hash: string
           phone: string
-          pin_hash: string
           username: string
         }
         Insert: {
           client_id: string
           created_at?: string
           id?: string
+          password_hash: string
           phone: string
-          pin_hash: string
           username: string
         }
         Update: {
           client_id?: string
           created_at?: string
           id?: string
+          password_hash?: string
           phone?: string
-          pin_hash?: string
           username?: string
         }
         Relationships: [

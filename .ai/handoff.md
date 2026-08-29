@@ -5,6 +5,86 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Client Portal 7A-3: Registration/Login Revision — Password Auth —
+  complete** (`ohm#9r3w7t5b`, 2026-08-29). Reworks the already-shipped
+  7A-2 registration/login flow: replaces PIN-based auth with password-
+  based auth and makes `username` user-chosen at registration (was
+  system-generated in 7A-2). Plan + regression risk assessment presented
+  and approved before any migration/code was written, per the prompt's
+  mandatory gate.
+  - **Discrepancy caught before planning, not assumed**: `clients.username`
+    and `clients.password_hash` already exist in the live schema — but
+    they pre-date the entire Client Portal feature (baseline snapshot,
+    migration `01`, always `NULL`/auto-generated), are unrelated to
+    `client_portal_accounts`, and were left untouched. Flagged to the user
+    so there's no confusion between that legacy field and the new
+    `client_portal_accounts.password_hash` this prompt adds.
+  - **Migration** `20260829123017_client_portal_password_auth.sql`: on
+    `client_portal_accounts` — deleted the single 7A-2 test row (Test
+    Client 7A2 / `NXS-XKUCU4`, confirmed with the user first, exact row
+    listed before deletion), dropped the plain `unique(username)`
+    constraint and `pin_hash` column, added `password_hash text not null`,
+    added `create unique index ... on (lower(username))` for case-
+    insensitive uniqueness — citext was checked and confirmed unused
+    anywhere in this schema, so a functional index was used instead per
+    the prompt's own instruction. Down-migration included (data loss on
+    rollback is called out in the file's comment, matching this repo's DB
+    change safety rules). The linked `clients` row "Test Client 7A2"
+    itself was left untouched — only the credential row was removed.
+  - **`lib/portal/pin.ts` → `lib/portal/password.ts`**: renamed, not
+    duplicated — same `scrypt` implementation, functions renamed
+    `hashPassword`/`verifyPassword`, `MIN_PASSWORD_LENGTH = 6` added
+    (length-only, no complexity rules, per the prompt's "walk-in spa
+    clientele" guidance). `lib/portal/codes.ts`'s now-unused
+    `generatePortalUsername` removed (username is user-chosen, no longer
+    system-generated).
+  - **New `lib/portal/username.ts`**: format validation
+    (`/^[a-zA-Z0-9_.-]{3,20}$/`) and a case-insensitive-safe
+    `isUsernameTaken` check (LIKE-wildcard characters `%`/`_`/`\` in the
+    input are escaped before the `ilike` query, so a literal underscore in
+    someone's username can't accidentally match other rows). New
+    `app/portal/api/check-username` route backs both the register page's
+    debounced live-availability check and the server-side authoritative
+    check on submit.
+  - **Registration** (`app/portal/register/page.tsx` +
+    `app/portal/api/register/route.ts`): fields are now Name, Username,
+    Phone Number, Password. Username collisions get a specific inline
+    field error (safe to disclose). **Deliberate behavior change from
+    7A-2, required by this prompt's own wording** ("do not leak whether a
+    phone number already has an account"): the existing
+    `client_portal_accounts.phone` collision path used to return
+    `"This phone number is already registered. Please log in instead."`
+    — itself a leak. Replaced with a generic, non-distinguishing error.
+    The `clients.phone` match-vs-create linking logic (preserves
+    points/history on match) is byte-for-byte unchanged — only the
+    surrounding fields and this one response message changed.
+  - **Login** (`app/portal/login/page.tsx` +
+    `app/portal/api/login/route.ts`): single "Username or Phone Number"
+    identifier field + Password. Backend regex-detects phone-shaped input
+    (`/^\d{7,15}$/`) vs. username and looks up accordingly, same
+    `verifyPassword` compare either path.
+  - **`lib/portal/session.ts`**: confirmed unaffected (only signs/verifies
+    `portalAccountId`, no PIN/password reference anywhere in it) — not
+    touched, per the prompt's own "only touch if it actually breaks"
+    instruction.
+  - **Explicitly out of scope, no scaffolding added**: SMS OTP, Forgot
+    Password — clean cut, deferred to a future phase.
+  - **Verified live in the browser, not just typechecked**: registered a
+    new account end-to-end with a user-chosen username
+    (`regtest_7a3` / phone `09991234567`), confirmed the debounced
+    username-availability check fires and clears correctly, logged out
+    (cleared the portal session cookie) and logged back in successfully
+    both by username and by phone number with the same password, and
+    confirmed `/dashboard` still requires the existing staff session and
+    renders the full Sidebar/nav unaffected by any of this. `npx tsc
+    --noEmit` and `eslint` both clean (one `react-hooks/set-state-in-
+    effect` finding on the register page's debounce effect was fixed
+    inline, not left as debt). One test artifact left live, matching this
+    repo's established precedent (`ohm#4m8x1v6q`) of documenting rather
+    than SQL-deleting harmless test data: client_portal_accounts row
+    `regtest_7a3` / phone `09991234567`, linked to a new `clients` row
+    "Regression Test 7A3".
+
 - **Settings 7B-3: Service/Promo Soft-Delete — verified already complete,
   no changes made** (`ohm#1d5r6nz4`, 2026-08-29). Prompt asked to convert
   service/promo deletes from hard to soft delete, filter them out of active

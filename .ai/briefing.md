@@ -82,7 +82,41 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-29 — Settings 7B-3: Service/Promo Soft-Delete — Verified
+1. **2026-08-29 — Client Portal 7A-3: Registration/Login Revision —
+   Password Auth** (`ohm#9r3w7t5b`). Rework of the already-shipped 7A-2
+   registration/login flow: replaces PIN-based auth with password-based
+   auth and makes `username` user-chosen at registration (was
+   system-generated). Plan + regression risk assessment presented and
+   approved before any migration/code was written, per the prompt's
+   mandatory gate. **Discrepancy caught before planning**: `clients.username`
+   and `clients.password_hash` already exist live but pre-date the entire
+   Client Portal feature (baseline snapshot) and are unrelated — flagged,
+   left untouched. Migration
+   `20260829123017_client_portal_password_auth.sql`: deleted the single
+   7A-2 test row (`Test Client 7A2` / `NXS-XKUCU4`, confirmed with the
+   user first), dropped `pin_hash` and the plain unique constraint on
+   `username`, added `password_hash text not null` and a case-insensitive
+   `unique index ... (lower(username))` (citext confirmed unused
+   elsewhere, so a functional index was used instead). `lib/portal/pin.ts`
+   renamed to `lib/portal/password.ts` (`hashPassword`/`verifyPassword`,
+   same scrypt implementation, `MIN_PASSWORD_LENGTH = 6`). New
+   `lib/portal/username.ts` for format validation + LIKE-safe
+   case-insensitive uniqueness checks, backing a new
+   `app/portal/api/check-username` route used by both a debounced
+   client-side check and the authoritative server-side check. Registration
+   fields are now Name/Username/Phone/Password; the `clients.phone`
+   match-vs-create linking logic is unchanged, but the
+   `client_portal_accounts.phone`-collision response was deliberately
+   changed from a leaking message ("this phone is already registered") to
+   a generic one, per the prompt's own leak-prevention requirement. Login
+   is now a single "Username or Phone Number" + Password, backend
+   regex-detects which. `lib/portal/session.ts` confirmed unaffected, not
+   touched. SMS OTP / Forgot Password explicitly out of scope, no
+   scaffolding added. Verified live: register → confirmation → logout →
+   login by both username and phone, staff `/dashboard` unaffected.
+   `npx tsc --noEmit` and `eslint` both clean. See [[client_portal_state]].
+
+2. **2026-08-29 — Settings 7B-3: Service/Promo Soft-Delete — Verified
    Already Complete** (`ohm#1d5r6nz4`). Read-only investigation (plan
    presented and approved before touching anything, per the prompt's
    mandatory gate) found soft delete, active-only dropdown filtering,
@@ -90,7 +124,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `services`/`promos` were all already in place from `ohm#5x1p8m3v`/6C-4.
    No migration or code change made. See [[settings_state]] and
    `.ai/handoff.md` for the full verification trail.
-2. **2026-08-29 — Settings 7B-2: Confirm Dialogs + Global Theme Fix**
+3. **2026-08-29 — Settings 7B-2: Confirm Dialogs + Global Theme Fix**
    (`ohm#4k9p2xq7` + `ohm#7t3m8vw1`). New reusable
    `components/confirm-dialog.tsx` replaces `window.confirm()` on
    Settings' 4 delete flows (Service/Promo/Weekend Slot/Add-on) — Add
@@ -104,7 +138,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Localstorage-only persistence unchanged. Verified live: theme now
    holds across Dashboard/Sales/reload; confirm dialog tested end-to-end.
    See [[settings_state]] and `.ai/handoff.md` for detail.
-3. **2026-08-29 — Client Portal 7A-2: Master QR & Registration Flow**
+4. **2026-08-29 — Client Portal 7A-2: Master QR & Registration Flow**
    (`ohm#4m8x1v6q`). First client-facing surface of the Client Portal —
    builds on 7A-1's schema. Plan + regression risk assessment presented and
    approved before any code was written, per the prompt's mandatory gate;
@@ -165,7 +199,7 @@ Full invariant list: [[nxs-architecture-locks]].
    rather than deleting it via SQL: client "Test Client 7A2"
    (phone `09171234567`), portal account `NXS-XKUCU4`. See
    [[client_portal_state]] for the updated state.
-4. **2026-08-29 — Client Portal 7A-1: Schema Foundation** (`ohm#7a1f9c2k`).
+5. **2026-08-29 — Client Portal 7A-1: Schema Foundation** (`ohm#7a1f9c2k`).
    Database layer only — no UI, no routes. Added a `UNIQUE` constraint to
    the already-existing `clients.phone` column (the prompt described it as
    a new column; live schema check caught it already existed, nullable,
@@ -180,31 +214,3 @@ Full invariant list: [[nxs-architecture-locks]].
    is plain text with no enum, so the new `phone_number_revealed` event
    type is a convention, not a schema change. Both migrations applied live
    and verified via `pg_policies`/`get_advisors`. See [[client_portal_state]].
-5. **2026-08-29 — Cleanup: Remove 6C-6 Regression Test Artifacts from Live
-   DB** (`ohm#2c6h9x4d`). Data-only cleanup, no code/schema/RLS changes.
-   Removed the 4 test artifacts named in `ohm#8r5m1v7z`'s "harmless test
-   artifacts left in place" note: booking "6C-6 Regression Test", sale
-   "6C-6 Walkin Test", staff row "6C-6 Regression Staff", weekend slot
-   "2:15 PM". **One discrepancy caught by reading the live rows before
-   deleting, not assumed from the prompt's description**: the prompt
-   described the "6C-6 Walkin Test" sale as "edited by Diego, ₱700→₱725,"
-   but the live row was unedited (₱700, `edited_by` null, processed by
-   Ana). The real ₱700→₱725 Diego edit turned out to be on a separate,
-   unlabeled sale with no "6C-6" marker — left untouched as real data,
-   per the prompt's "don't delete anything that doesn't clearly match"
-   rule. Flagged to the user before deleting anything; confirmed correct.
-   **Two related test rows not named in the prompt** were found
-   FK/action-log-linked to the "6C-6 Walkin Test" sale (same
-   `quick_walkin` event): booking "6C-6 Walkin Test" (`sales.booking_id`)
-   and a locker_occupancy row (already checked out) sharing the same
-   guest label. Flagged and approved before deletion, since leaving them
-   would've orphaned test residue with no delete UI to clean up later.
-   All 6 rows confirmed live, shown for sign-off, then deleted
-   individually (`sales` → `locker_occupancy` → both `bookings` → `staff`
-   → `weekend_slots`) after explicit approval. `action_logs` entries
-   referencing these artifacts (`quick_walkin`, `staff_add`) were left
-   untouched per ADR-001's append-only invariant. Post-delete verification:
-   table counts dropped as expected (bookings 13→11, sales 11→10, staff
-   11→10, weekend_slots 8→7); the real ₱725 sale confirmed still present
-   and unmodified. This closes out the Staff Auth phase (6A–6C-6) with no
-   lingering test data in the live DB.

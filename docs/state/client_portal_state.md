@@ -15,9 +15,10 @@ No UI, no routes, no client-facing pages exist yet. This is schema-only.
   as PII per ADR-001 — display default (masked, last 4 digits) and staff
   reveal flow are not built yet.
 - **`client_portal_accounts`** (new table): `id`, `client_id` (FK →
-  `clients`), `phone` (unique, not null), `pin_hash` (not null),
-  `username` (unique, not null, system-fixed per ADR-001 — distinct from
-  the client's Name, never encoded in a QR payload), `created_at`. RLS is
+  `clients`), `phone` (unique, not null), `pin_hash` (not null; **replaced
+  by `password_hash` in 7A-3, see below**), `username` (system-fixed per
+  ADR-001 at the time — distinct from the client's Name, never encoded in
+  a QR payload; **became user-chosen in 7A-3**), `created_at`. RLS is
   **enabled with zero policies** — default-deny for every role, including
   staff, until a later prompt designs the real policy matrix (registration
   write path, staff read path for support/lookup, etc.). This matches the
@@ -87,6 +88,46 @@ staff app. No points/history/promos views yet — that's later scope.
   non-expiring, staff-gated, linked from the Settings page. Renders via
   the new `qrcode` dependency, encoding `/portal/register` built from the
   live request host. No token table, no expiry — a fixed URL, per ADR-001.
+
+## Implemented (7A-3, `ohm#9r3w7t5b`, 2026-08-29) — password-based auth
+
+Reworks the registration/login flow shipped in 7A-2. PIN-based auth is
+gone; `username` is now user-chosen at registration instead of
+system-generated.
+
+- **`client_portal_accounts`**: `pin_hash` dropped, `password_hash text
+  not null` added. `username`'s plain `unique` constraint was replaced by
+  a case-insensitive `unique index ... (lower(username))` — not citext
+  (confirmed unused anywhere in this schema). Migration:
+  `20260829123017_client_portal_password_auth.sql`. The single 7A-2 test
+  row (Test Client 7A2 / `NXS-XKUCU4`) was deleted as part of this
+  migration (its PIN credential couldn't be migrated to a password); the
+  linked `clients` row was left untouched.
+- **`lib/portal/password.ts`** (renamed from `pin.ts`): `hashPassword`/
+  `verifyPassword`, same `scrypt` implementation as before. Minimum
+  password length 6 characters (length-only, no complexity rules).
+- **`lib/portal/username.ts`** (new): username format validation
+  (`/^[a-zA-Z0-9_.-]{3,20}$/`) and a LIKE-wildcard-escaped, case-
+  insensitive `isUsernameTaken` check. Backs a new
+  `app/portal/api/check-username` Route Handler used by both the
+  registration page's debounced live-availability check and the
+  authoritative server-side check on submit.
+- **Registration** (`app/portal/register/page.tsx` +
+  `app/portal/api/register/route.ts`): fields are now Name, Username,
+  Phone Number, Password. Username collisions surface a specific inline
+  field error (safe to disclose). The `clients.phone` match-vs-create
+  linking logic from 7A-2 (preserves points/history on match) is
+  unchanged. The `client_portal_accounts.phone`-collision response was
+  changed from a message that named the phone number as already
+  registered to a generic one — the old wording leaked account existence
+  to an anonymous visitor.
+- **Login** (`app/portal/login/page.tsx` +
+  `app/portal/api/login/route.ts`): single "Username or Phone Number"
+  identifier field + Password. Backend regex-detects phone-shaped input
+  (`/^\d{7,15}$/`) vs. username and looks up accordingly.
+- **`lib/portal/session.ts`**: unaffected — only signs/verifies
+  `portalAccountId`, no PIN/password reference. Not touched.
+- **Explicitly deferred, no scaffolding added**: SMS OTP, Forgot Password.
 
 ## Not yet implemented — see roadmap
 

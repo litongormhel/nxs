@@ -1,15 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function PortalRegisterPage() {
   const router = useRouter();
-  const [phone, setPhone] = useState("");
-  const [pin, setPin] = useState("");
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [checkingUsername, setCheckingUsername] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (!username) {
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      setCheckingUsername(true);
+      try {
+        const res = await fetch("/portal/api/check-username", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username }),
+        });
+        const data = await res.json();
+        setUsernameError(data.available ? null : data.error ?? "Username unavailable.");
+      } catch {
+        // Silent — server-side check on submit is authoritative.
+      } finally {
+        setCheckingUsername(false);
+      }
+    }, 400);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [username]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,12 +53,16 @@ export default function PortalRegisterPage() {
       const res = await fetch("/portal/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, pin, name }),
+        body: JSON.stringify({ name, username, phone, password }),
       });
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error ?? "Registration failed.");
+        if (data.field === "username") {
+          setUsernameError(data.error);
+        } else {
+          setError(data.error ?? "Registration failed.");
+        }
         return;
       }
 
@@ -63,6 +100,28 @@ export default function PortalRegisterPage() {
           />
         </div>
         <div>
+          <label htmlFor="username" className="block text-xs text-muted mb-1">
+            Username
+          </label>
+          <input
+            id="username"
+            name="username"
+            type="text"
+            required
+            autoComplete="username"
+            value={username}
+            onChange={(e) => {
+              setUsername(e.target.value);
+              setUsernameError(null);
+            }}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-gold"
+          />
+          {checkingUsername && <p className="text-xs text-muted mt-1">Checking availability...</p>}
+          {!checkingUsername && usernameError && (
+            <p className="text-xs text-red-400 mt-1">{usernameError}</p>
+          )}
+        </div>
+        <div>
           <label htmlFor="phone" className="block text-xs text-muted mb-1">
             Phone number
           </label>
@@ -78,25 +137,24 @@ export default function PortalRegisterPage() {
           />
         </div>
         <div>
-          <label htmlFor="pin" className="block text-xs text-muted mb-1">
-            PIN (4-8 digits)
+          <label htmlFor="password" className="block text-xs text-muted mb-1">
+            Password (min 6 characters)
           </label>
           <input
-            id="pin"
-            name="pin"
+            id="password"
+            name="password"
             type="password"
-            inputMode="numeric"
-            pattern="\d{4,8}"
+            minLength={6}
             required
             autoComplete="new-password"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-gold"
           />
         </div>
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || !!usernameError}
           className="w-full rounded-md bg-gold hover:bg-gold-hover text-background font-medium py-2 text-sm disabled:opacity-50"
         >
           {submitting ? "Registering..." : "Register"}

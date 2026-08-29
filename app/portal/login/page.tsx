@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 
 export default function PortalLoginPage() {
   const router = useRouter();
-  const [phone, setPhone] = useState("");
-  const [pin, setPin] = useState("");
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -19,7 +19,7 @@ export default function PortalLoginPage() {
       const res = await fetch("/portal/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, pin }),
+        body: JSON.stringify({ identifier, password }),
       });
       const data = await res.json();
 
@@ -39,7 +39,7 @@ export default function PortalLoginPage() {
   return (
     <div className="w-full max-w-sm border border-border bg-surface rounded-lg p-8">
       <h1 className="text-lg font-semibold text-gold mb-1">NXS Member Login</h1>
-      <p className="text-sm text-muted mb-6">Sign in with your phone number and PIN.</p>
+      <p className="text-sm text-muted mb-6">Sign in with your username or phone number.</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
@@ -48,34 +48,32 @@ export default function PortalLoginPage() {
           </p>
         )}
         <div>
-          <label htmlFor="phone" className="block text-xs text-muted mb-1">
-            Phone number
+          <label htmlFor="identifier" className="block text-xs text-muted mb-1">
+            Username or Phone Number
           </label>
           <input
-            id="phone"
-            name="phone"
-            type="tel"
+            id="identifier"
+            name="identifier"
+            type="text"
             required
-            autoComplete="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            autoComplete="username"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-gold"
           />
         </div>
         <div>
-          <label htmlFor="pin" className="block text-xs text-muted mb-1">
-            PIN
+          <label htmlFor="password" className="block text-xs text-muted mb-1">
+            Password
           </label>
           <input
-            id="pin"
-            name="pin"
+            id="password"
+            name="password"
             type="password"
-            inputMode="numeric"
-            pattern="\d{4,8}"
             required
             autoComplete="current-password"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-gold"
           />
         </div>

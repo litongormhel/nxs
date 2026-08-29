@@ -10,10 +10,6 @@ function randomCode(length: number): string {
   return code;
 }
 
-export function generatePortalUsername(): string {
-  return `NXS-${randomCode(6)}`;
-}
-
 export function generateMemberCode(): string {
   return `M-${randomCode(6)}`;
 }
