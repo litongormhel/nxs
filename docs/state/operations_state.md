@@ -17,13 +17,13 @@ app-level read of these tables.
 ## RLS
 
 `rooms` and `lockers` both have public-read policies (`USING (true)`).
-`locker_occupancy` has `public_select`/`public_insert` (from Bookings) plus
-a `public_update` policy added in the Operations phase (`ohm#9h4c7x2m`,
-migration `20260828023358_operations_sales_rls.sql`) for Check-Out. All
-`roles: public`, `USING(true)`/`WITH CHECK(true)` — same additive shape as
-every prior policy. App-level-only role gate, same accepted gap as every
-other phase: the DB grants this to any anon/authenticated caller; nothing
-restricts Check-Out by role at the RLS layer.
+`locker_occupancy` RLS (`ohm#3f7n9c1k`, Staff Auth 6C-3, 2026-08-29):
+`staff_select`/`staff_insert`/`staff_update` all `is_staff()`-gated,
+replacing the original `public_select`/`public_insert`/`public_update`
+policies (the latter added in the Operations phase, `ohm#9h4c7x2m`). No
+role restriction on Check-Out — confirmed with the user, any staff tier
+(including Front Desk) can check out a locker. No DELETE policy —
+occupancy rows are never hard-deleted.
 
 ## Implemented (app level) — Operations Phase (`ohm#9h4c7x2m`, 2026-08-28)
 

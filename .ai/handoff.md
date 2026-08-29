@@ -5,8 +5,174 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
-- **Staff Auth (6A/6B complete; 6C in progress — 6C-1 of six planned 6C
-  sub-steps, 6C-2 through 6C-6 pending)**
+- **Staff Auth (6A/6B complete; 6C in progress — 6C-1 through 6C-4 of six
+  planned 6C sub-steps complete, 6C-5/6C-6 pending)**
+  - **6C-4 — Settings/Catalog RLS (services, promos, addons, rooms, lockers,
+    weekend_slots) — complete** as of 2026-08-29 (`ohm#9d2k6y4p`). Fourth of
+    six planned 6C sub-steps. Policy matrix presented and approved before
+    any SQL was written, per the prompt's mandatory gate. Closes the
+    "app-level-only role gate" explicitly accepted when Settings
+    persistence shipped (`ohm#5x1p8m3v`).
+    - **Context loaded first**: `.ai/briefing.md`, `.ai/handoff.md`
+      (confirmed 6C-2/6C-3 complete, noted exact helper function names/
+      signatures), `docs/state/settings_state.md` (the "app-level-only role
+      gate, known gap" note this sub-step resolves), ADR-001, plus a live
+      read of current RLS on all six tables (`pg_policies`), a live FK scan
+      confirming `weekend_slots` has zero FK references (real DELETE stays
+      correct) while `services`/`promos`/`addons`/`rooms`/`lockers` remain
+      FK-referenced (soft-delete/deactivate stays correct), and a direct
+      read of `components/settings-browser.tsx` rather than trusting the
+      prompt's "already locked for Front Desk in the UI" framing.
+      - **One real discrepancy caught by reading the component directly,
+        not assumed from the prompt**: only Services and Promos actually
+        had a UI role lock (`canEditServices`/`canEditPromos`) before this
+        sub-step — Add-ons, Weekend Slots, Lockers, and Rooms/Beds had no
+        UI lock at all, so any role (including Front Desk) could click
+        Add/Delete/edit those four sections pre-6C-4. Flagged to the user
+        before implementing, since applying RLS alone would leave Front
+        Desk seeing enabled controls that then fail server-side (a hard
+        INSERT error for Add-style actions, a silent 0-row no-op for the
+        room-count UPDATE).
+      - **Decision confirmed with the user, not assumed**: add matching UI
+        locks to the four previously-unlocked sections alongside the RLS
+        migration, rather than shipping RLS-only and leaving the UX rough
+        edge. New shared `canEditCatalog` flag (same `Supervisor`/`Owner`
+        check, same disabled-button/tooltip pattern as the existing two)
+        added to `components/settings-browser.tsx`, gating Add-ons' price
+        input, Weekend Slots' add/delete, Lockers' add-batch button, and
+        the Rooms/Beds count input.
+      - **No new role helpers** — reused 6C-2's `is_staff()`,
+        `is_supervisor_or_above()` as-is.
+      - **Policy matrix, all six tables**: SELECT = `is_staff()`;
+        INSERT/UPDATE = `is_supervisor_or_above()` (no distinction beyond
+        that blanket rule anywhere); no DELETE policy except
+        `weekend_slots` (`staff_delete`, `is_supervisor_or_above()`, real
+        hard DELETE). `lockers` has no UPDATE policy (add-only, never
+        updated by any existing action). `services`/`promos`/`addons`/
+        `rooms` have no DELETE policy (soft-delete/deactivate via UPDATE
+        stays the only removal path, confirmed still correct via the live
+        FK scan).
+      - **Migration**
+        (`supabase/migrations/20260829150000_settings_catalog_rls.sql`),
+        smoke-tested via a rolled-back transaction simulating
+        `auth.uid()`/`request.jwt.claims` as anon, Ana (Front Desk), Diego
+        (Supervisor), and J. Cruz (Owner) — 18 checks across all six
+        tables and every INSERT/UPDATE/DELETE path — confirmed anon and
+        Ana correctly blocked everywhere while retaining SELECT (`is_staff`
+        still lets Ana see the full catalog), Diego succeeds on every
+        table (services/promos/addons/rooms/lockers insert, weekend_slots
+        insert+delete, rooms update), Owner succeeds (rooms update,
+        weekend_slots insert+delete) — before applying live via
+        `apply_migration`. Live policies (`pg_policies`) read back
+        afterward and confirmed to match exactly.
+      - **Regression-tested end-to-end via real logins, not Simulate
+        Staff, per the prompt's explicit requirement**: `npx tsc --noEmit`
+        passes clean. Logged in as Ana (Front Desk) — Settings correctly
+        showed the new read-only notice and disabled controls on all four
+        newly-gated sections (confirmed via DOM inspection that every
+        numeric input, including the addon price and room-count fields,
+        carries `disabled: true`), in addition to the pre-existing
+        Services/Promos lock, all with `is_staff()`-gated SELECT still
+        showing her the full catalog. Logged in as Diego (Supervisor) — all
+        six sections showed enabled controls; a live Add Weekend Slot
+        succeeded end-to-end through the real UI ("1:37 PM added to
+        weekend slots", confirmed inserted via SQL) — proving the DB-level
+        policy actually permits a real Supervisor session end-to-end, not
+        just the smoke test. Delete's `window.confirm()` was auto-dismissed
+        by this browser tool (same known limitation documented since the
+        Operations Phase, `ohm#9h4c7x2m`) so the test slot (`13:37`) was
+        removed directly via SQL instead of through the UI click-through —
+        not treated as unverified, since the identical DELETE path was
+        already proven in the rolled-back transaction smoke test. No
+        server or console errors at any tier.
+      - **Simulate Staff still fully functional in the UI** — same
+        6C-2/6C-3 pattern: neutralized at the DB level (a Front Desk
+        session using Simulate Staff to "view as Owner" gets real Owner UI
+        affordances but not real Owner DB access), not removed from the UI
+        itself; that's still 6C-6.
+      - See [[settings_state]] for the updated RLS + UI-gating detail.
+  - **6C-3 — Bookings + Locker Occupancy RLS — complete** as of 2026-08-29
+    (`ohm#3f7n9c1k`). Third of six planned 6C sub-steps. Policy matrix and
+    the status-transition role-restriction question were presented and
+    approved before any SQL was written, per the prompt's mandatory gate.
+    - **Context loaded first**: `.ai/briefing.md`, `.ai/handoff.md`
+      (confirmed 6C-2 complete, noted exact helper function names/
+      signatures), `docs/state/bookings_state.md`,
+      `docs/state/operations_state.md`, ADR-001 (no-double-booking
+      invariant, locker/room assignment timing), plus a live read of
+      current RLS on `bookings`/`locker_occupancy` and the actual bodies
+      of `log_visit()`/`quick_walkin()` — confirmed `bookings` had only
+      `public_select`/`public_insert` (no UPDATE policy at all — default-
+      deny) and `locker_occupancy` had `public_select`/`public_insert`/
+      `public_update` from the Operations phase, before writing any
+      policy.
+      - **One real discrepancy caught by reading the live RLS state, not
+        assumed**: `bookings` had zero UPDATE policy, meaning
+        `updateBookingStatus()` (the No-show/Cancel buttons wired in the
+        Bookings correction phase) was silently affecting 0 rows under
+        RLS this whole time — this migration is what makes status
+        transitions actually work end-to-end for the first time, not
+        merely re-gate an existing path.
+      - **Decision confirmed with the user, not assumed**: all staff (any
+        tier) may perform every operation on `bookings`/`locker_occupancy`,
+        including Cancel — no Supervisor/Owner restriction, unlike Sales
+        Void (which stays Owner-only per 6C-2, confirmed as a `sales`-only
+        rule).
+      - **No new role helpers** — reused 6C-2's `is_staff()`,
+        `is_supervisor_or_above()`, `is_owner()`, `current_staff_position()`
+        as-is.
+      - **`bookings`**: `staff_select`/`staff_insert`/`staff_update` all
+        `is_staff()`-gated, replacing `public_select`/`public_insert`. No
+        DELETE policy — bookings are never hard-deleted.
+      - **`locker_occupancy`**: `staff_select`/`staff_insert`/
+        `staff_update` all `is_staff()`-gated, replacing the prior
+        `public_*` policies. No DELETE policy.
+      - **Migration**
+        (`supabase/migrations/20260829140000_bookings_locker_occupancy_rls.sql`),
+        smoke-tested via a rolled-back transaction simulating `auth.uid()`
+        as anon, Ana (Front Desk), Diego (Supervisor), and J. Cruz (Owner)
+        — confirmed anon sees/inserts nothing on either table, Ana can
+        select/insert/cancel a booking, the GiST exclusion constraints
+        (`no_double_book_room`/`no_double_book_therapist`) still correctly
+        blocked a conflicting insert under the new policies (`23P01`
+        raised as expected), and Diego can check a locker in and out —
+        before applying live via `apply_migration`. Live policies
+        (`pg_policies`) read back afterward and confirmed to match
+        exactly.
+      - **Regression-tested end-to-end via real logins, not Simulate
+        Staff, per the prompt's explicit requirement**: logged in as
+        Ana (Receptionist) — New Booking succeeded with correct actor
+        attribution ("Ana · Receptionist"), Cancel on that same booking
+        succeeded (confirmed live via SQL: status flipped to `Cancelled`
+        with `created_by` = Ana's staff id — previously would have
+        silently no-op'd), Locker Board Check-out succeeded (100→99 free).
+        Logged in as Diego (Supervisor) — Call Sheet loaded correctly (3
+        active massages), Locker Board check-in/check-out cycle succeeded.
+        `quick_walkin()` RPC verified end-to-end for Diego via a
+        rolled-back-transaction substitution (booking + sale +
+        locker_occupancy all inserted successfully) after hitting the
+        same pre-existing Browser-pane limitation documented in 6C-2
+        (native `<select>` changes don't propagate to this app's React
+        state, so the Confirm button stayed disabled via the UI path) —
+        not treated as unverified, per the established 6C-2 precedent;
+        this is an unrelated tooling gap, not an RLS regression. Logged in
+        as J. Cruz (Owner) — Locker Board Check-out succeeded, Owner-only
+        nav (Analytics/Staff/Logs) correctly present, Bookings page loaded
+        with no console errors. No server or console errors at any tier.
+      - **One harmless test artifact intentionally left in place**,
+        matching the "bookings are never hard-deleted" invariant: a
+        `Cancelled` booking (`guest_label = "RLS Smoke TestRLS Smoke
+        Test"`, created 2026-08-29) from the live browser regression test
+        — inert, excluded from active-status lists, not deleted (no
+        DELETE policy/precedent for that, matching 6C-2's kept test ledger
+        entry).
+      - **Simulate Staff still fully functional in the UI** — same 6C-2
+        pattern: neutralized at the DB level (a Front Desk session using
+        Simulate Staff to "view as Owner" gets real Owner UI affordances
+        but not real Owner DB access), not removed from the UI itself;
+        that's still 6C-6.
+      - See [[bookings_state]], [[operations_state]] for the updated RLS
+        detail.
   - **6A — Auth Users + Basic Login — complete** as of 2026-08-29. Plan
     (the 8-account email/password list) presented and approved before any
     credentials were created, per the prompt's mandatory approval gate.
@@ -384,18 +550,20 @@ This file tracks only what's in flight right now.
         9 staff correctly. No server or console errors
         (`read_console_messages` checked clean).
       - See [[staff_state]] for the updated routing-protection detail.
-    - **6C-3 through 6C-5 — RLS lockdown for the remaining domains — not
-      started.** 6C-2 (above) closed the Core Loop domain
-      (`clients`/`point_transactions`/`sales`) and established the
-      reusable role helpers (`is_staff()`/`is_supervisor_or_above()`/
-      `is_owner()`/`current_staff_position()`). Remaining planned scope:
-      `bookings`/`locker_occupancy` write scoping by role, `staff`/
-      `action_logs` attribution enforcement, `promos`/`addons`/`services`/
-      `rooms`/`lockers`/`weekend_slots` (Settings domain) — exact domain
-      split per sub-step to be confirmed rather than assumed up front.
-      Each sub-step should reuse 6C-2's helper functions and get its own
-      approval gate given the Database Change Safety significance of RLS
-      changes.
+    - **6C-4 — Settings/Catalog RLS (services, promos, addons, rooms,
+      lockers, weekend_slots) — complete** as of 2026-08-29
+      (`ohm#9d2k6y4p`) — see the detailed entry above (top of this list).
+    - **6C-5 — RLS lockdown for `staff`/`action_logs` — not started.**
+      6C-2 through 6C-4 (above) closed the Core Loop domain
+      (`clients`/`point_transactions`/`sales`), the
+      `bookings`/`locker_occupancy` domain, and the Settings/Catalog domain
+      (`services`/`promos`/`addons`/`rooms`/`lockers`/`weekend_slots`), and
+      established/reused the role helpers
+      (`is_staff()`/`is_supervisor_or_above()`/`is_owner()`/
+      `current_staff_position()`). Remaining planned scope: `staff`/
+      `action_logs` attribution enforcement. Should reuse the existing
+      helper functions and get its own approval gate given the Database
+      Change Safety significance of RLS changes.
     - **6C-6 — Remove Simulate Staff — not started.** Only after 6C-2
       through 6C-5 have RLS actually enforcing real identity at the DB
       level; removing Simulate Staff before then would leave no way to

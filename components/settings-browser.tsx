@@ -86,6 +86,8 @@ export function SettingsBrowser({
     currentRole === "Supervisor" || currentRole === "Owner";
   const canEditPromos =
     currentRole === "Supervisor" || currentRole === "Owner";
+  const canEditCatalog =
+    currentRole === "Supervisor" || currentRole === "Owner";
 
   // Data states
   const [services, setServices] = useState<Service[]>(() => {
@@ -672,13 +674,20 @@ export function SettingsBrowser({
           <div className="text-[10.5px] font-bold tracking-[0.13em] uppercase text-muted">
             Weekend Fixed Time Slots
           </div>
-          <button
-            onClick={handleAddSlot}
-            className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-[#f3d48b] transition hover:bg-[#c89b3c]/10"
-          >
-            + Add Slot
-          </button>
+          {canEditCatalog && (
+            <button
+              onClick={handleAddSlot}
+              className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-[#f3d48b] transition hover:bg-[#c89b3c]/10"
+            >
+              + Add Slot
+            </button>
+          )}
         </div>
+        {!canEditCatalog && (
+          <div className="text-[10.5px] text-muted mb-2">
+            Read-only for Front Desk. Only Supervisor or Owner roles can edit.
+          </div>
+        )}
         <div className="space-y-2">
           {weekendSlots.map((slot, idx) => (
             <div
@@ -688,12 +697,14 @@ export function SettingsBrowser({
               <div className="flex-1 font-mono text-xs font-semibold text-[#f3d48b]">
                 {fmtTime(slot.slot_time)}
               </div>
-              <button
-                onClick={() => handleDeleteSlot(idx)}
-                className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-[#d18b8b] hover:brightness-125"
-              >
-                Delete
-              </button>
+              {canEditCatalog && (
+                <button
+                  onClick={() => handleDeleteSlot(idx)}
+                  className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-[#d18b8b] hover:brightness-125"
+                >
+                  Delete
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -705,13 +716,20 @@ export function SettingsBrowser({
           <div className="text-[10.5px] font-bold tracking-[0.13em] uppercase text-muted">
             Add-ons
           </div>
-          <button
-            onClick={handleAddAddon}
-            className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-[#f3d48b] transition hover:bg-[#c89b3c]/10"
-          >
-            + Add Add-on
-          </button>
+          {canEditCatalog && (
+            <button
+              onClick={handleAddAddon}
+              className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-[#f3d48b] transition hover:bg-[#c89b3c]/10"
+            >
+              + Add Add-on
+            </button>
+          )}
         </div>
+        {!canEditCatalog && (
+          <div className="text-[10.5px] text-muted mb-2">
+            Read-only for Front Desk. Only Supervisor or Owner roles can edit.
+          </div>
+        )}
         <div className="space-y-2">
           {addons.map((a, idx) => (
             <div
@@ -728,15 +746,18 @@ export function SettingsBrowser({
                   defaultValue={a.price}
                   key={`${a.id}-price-${a.price}`}
                   onBlur={(e) => handleUpdateAddonPrice(idx, e.target.value)}
-                  className="w-[70px] rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none focus:border-gold"
+                  disabled={!canEditCatalog}
+                  className="w-[70px] rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none focus:border-gold disabled:opacity-50"
                 />
               </div>
-              <button
-                onClick={() => handleDeleteAddon(idx)}
-                className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-[#d18b8b] hover:brightness-125"
-              >
-                Delete
-              </button>
+              {canEditCatalog && (
+                <button
+                  onClick={() => handleDeleteAddon(idx)}
+                  className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-[#d18b8b] hover:brightness-125"
+                >
+                  Delete
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -747,18 +768,25 @@ export function SettingsBrowser({
         <div className="text-[10.5px] font-bold tracking-[0.13em] uppercase text-muted mb-2.5">
           Capacity
         </div>
+        {!canEditCatalog && (
+          <div className="text-[10.5px] text-muted mb-2">
+            Read-only for Front Desk. Only Supervisor or Owner roles can edit.
+          </div>
+        )}
         <div className="space-y-2.5">
           <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-4 flex-wrap gap-2.5">
             <div>
               <div className="text-[13px] font-bold text-foreground">Lockers</div>
               <div className="text-[11px] text-muted mt-0.5">{lockerCount} total</div>
             </div>
-            <button
-              onClick={handleAddLockers}
-              className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-[#f3d48b] transition hover:bg-[#c89b3c]/10"
-            >
-              + Add 10 Lockers
-            </button>
+            {canEditCatalog && (
+              <button
+                onClick={handleAddLockers}
+                className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-[#f3d48b] transition hover:bg-[#c89b3c]/10"
+              >
+                + Add 10 Lockers
+              </button>
+            )}
           </div>
 
           <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-4 flex-wrap gap-2.5">
@@ -775,7 +803,8 @@ export function SettingsBrowser({
               value={roomCountDraft}
               onChange={(e) => setRoomCountDraft(e.target.value)}
               onBlur={(e) => handleUpdateRoomCount(e.target.value)}
-              className="w-20 rounded-lg border border-border bg-surface px-2.5 py-2 font-mono text-xs text-foreground outline-none focus:border-gold"
+              disabled={!canEditCatalog}
+              className="w-20 rounded-lg border border-border bg-surface px-2.5 py-2 font-mono text-xs text-foreground outline-none focus:border-gold disabled:opacity-50"
             />
           </div>
         </div>

@@ -87,7 +87,106 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-29 — Staff Auth 6C-2: Role Helper Functions + Core Loop RLS
+1. **2026-08-29 — Staff Auth 6C-4: Settings/Catalog RLS (services, promos,
+   addons, rooms, lockers, weekend_slots)** (`ohm#9d2k6y4p`). Fourth of six
+   planned 6C sub-steps — reused 6C-2's role helpers as-is (`is_staff()`,
+   `is_supervisor_or_above()`), no new helpers created. Closes the
+   "app-level-only role gate" explicitly accepted when Settings persistence
+   shipped (`ohm#5x1p8m3v`). Policy matrix was presented and approved before
+   any SQL was written, per the prompt's mandatory gate.
+   **One real discrepancy caught by reading `settings-browser.tsx` directly,
+   not assumed from the prompt's "already locked in the UI" framing**: only
+   Services and Promos actually had a UI role lock (`canEditServices`/
+   `canEditPromos`) — Add-ons, Weekend Slots, Lockers, and Rooms/Beds had no
+   UI lock at all, so any role could click Add/Delete/edit those four
+   sections pre-6C-4. Flagged and confirmed with the user before
+   implementing: added matching UI locks (new shared `canEditCatalog` flag,
+   same pattern as the existing two) alongside the RLS migration, so Front
+   Desk sees disabled controls instead of hitting a DB rejection.
+   **Policy matrix, all six tables**: SELECT = `is_staff()`; INSERT/UPDATE =
+   `is_supervisor_or_above()`; no DELETE policy except `weekend_slots`
+   (`staff_delete`, `is_supervisor_or_above()`, real hard DELETE — confirmed
+   via a live FK scan that nothing references it). `lockers` has no UPDATE
+   policy (add-only, never updated); `services`/`promos`/`addons`/`rooms`
+   have no DELETE policy (all four still FK-referenced by historical rows —
+   soft-delete/deactivate via UPDATE stays correct, confirmed live).
+   **Migration**
+   (`supabase/migrations/20260829150000_settings_catalog_rls.sql`),
+   smoke-tested via a rolled-back transaction simulating `auth.uid()` as
+   anon, Ana (Front Desk), Diego (Supervisor), and J. Cruz (Owner) across
+   all six tables (18 checks total) — confirmed anon and Ana are blocked on
+   every INSERT/UPDATE/DELETE while retaining SELECT, Diego and Owner
+   succeed on every table — before applying live via `apply_migration`.
+   Live policies read back afterward and confirmed to match exactly.
+   Regression-tested end-to-end via real logins (not Simulate Staff):
+   logged in as Ana — Settings correctly showed the new read-only notice
+   and disabled controls (including numeric inputs, confirmed via DOM
+   inspection) on all four newly-gated sections, in addition to the
+   pre-existing Services/Promos lock. Logged in as Diego — all six sections
+   showed enabled controls; a live Add Weekend Slot succeeded end-to-end
+   through the real UI (`"1:37 PM added to weekend slots"`, confirmed
+   inserted via SQL), proving the DB-level policy actually permits a real
+   Supervisor session, not just the smoke test. Delete's `window.confirm()`
+   was auto-dismissed by this browser tool (same known limitation
+   documented since the Operations Phase, `ohm#9h4c7x2m`) so the test slot
+   was removed directly via SQL instead — not treated as unverified, since
+   the identical DELETE path was already proven in the rolled-back
+   transaction smoke test. No server or console errors at any tier.
+   **Next**: 6C-5 (Staff/Logs RLS) and 6C-6 (removing Simulate Staff)
+   remain, tracked in `.ai/handoff.md`.
+2. **2026-08-29 — Staff Auth 6C-3: Bookings + Locker Occupancy RLS**
+   (`ohm#3f7n9c1k`). Third of six planned 6C sub-steps — reused 6C-2's role
+   helpers as-is (`is_staff()`, `is_supervisor_or_above()`, `is_owner()`,
+   `current_staff_position()`), no new helpers created. Policy matrix and
+   the status-transition role-restriction question were presented and
+   approved before any SQL was written, per the prompt's mandatory gate:
+   the user picked "all staff, no restriction" for both `bookings` and
+   `locker_occupancy` (unlike Sales Void, which stays Owner-only per 6C-2 —
+   confirmed this is a `sales`-only rule, not a `bookings` one).
+   **`bookings`**: `staff_select`/`staff_insert`/`staff_update` all
+   `is_staff()`-gated, replacing the old `public_select`/`public_insert`
+   pair. **One real gap closed, not just re-scoped**: `bookings` previously
+   had no UPDATE policy at all (default-deny), so `updateBookingStatus()`
+   (the No-show/Cancel buttons wired in the Bookings correction phase) was
+   silently affecting 0 rows under RLS — confirmed live via `pg_policies`
+   before writing the migration, not assumed from the docs. This migration
+   is what makes status transitions actually work end-to-end for the first
+   time, not merely re-gate an existing path. No DELETE policy — bookings
+   are never hard-deleted. **`locker_occupancy`**: `staff_select`/
+   `staff_insert`/`staff_update` all `is_staff()`-gated, replacing the prior
+   `public_*` policies (Check-Out already had an UPDATE policy from the
+   Operations phase; this just re-scopes it to real staff identity). No
+   DELETE policy. **Migration**
+   (`supabase/migrations/20260829140000_bookings_locker_occupancy_rls.sql`),
+   smoke-tested via a rolled-back transaction simulating `auth.uid()` as
+   anon, Ana (Front Desk), Diego (Supervisor), and J. Cruz (Owner) —
+   confirmed anon sees/inserts nothing on both tables, Ana can select/
+   insert/cancel a booking, the GiST exclusion constraints
+   (`no_double_book_room`/`no_double_book_therapist`) still correctly
+   blocked a conflicting insert under the new policies, and Diego/Owner
+   can check a locker in and out — before applying live via
+   `apply_migration`. Live policies read back afterward and confirmed to
+   match exactly. Regression-tested end-to-end via real logins (not
+   Simulate Staff): logged in as Ana — New Booking succeeded (actor
+   attribution correctly showed "Ana · Receptionist"), Cancel on that same
+   booking succeeded (confirmed live via SQL: status flipped to
+   `Cancelled`, previously would have silently no-op'd), Locker Board
+   Check-out succeeded. Logged in as Diego — Call Sheet loaded correctly
+   (3 active massages), `quick_walkin()` RPC succeeded end-to-end via a
+   rolled-back-transaction substitution (booking + sale + locker_occupancy
+   all inserted) after hitting the same pre-existing Browser-pane
+   limitation from 6C-2 (native `<select>` changes not propagating to
+   React state — unrelated to RLS, not a regression). Logged in as J. Cruz
+   (Owner) — Locker Board Check-out succeeded, Owner-only nav
+   (Analytics/Staff/Logs) correctly present. No server or console errors
+   at any tier. One harmless test artifact left in place, matching the
+   "bookings are never hard-deleted" invariant: a `Cancelled` booking
+   (`guest_label = "RLS Smoke TestRLS Smoke Test"`) from the live browser
+   test — inert, excluded from active-status lists. **Next**: 6C-4 and
+   6C-5 (RLS for `staff`/`action_logs` attribution and the Settings/Catalog
+   domain) and 6C-6 (removing Simulate Staff) remain, tracked in
+   `.ai/handoff.md`.
+3. **2026-08-29 — Staff Auth 6C-2: Role Helper Functions + Core Loop RLS
    (clients, point_transactions, sales)** (`ohm#5m8t2x6b`). Second of six
    planned 6C sub-steps — first real RLS lockdown step (6C-1 was routes
    only, no RLS). Helper-function shape, the policy-per-table-per-operation
@@ -142,7 +241,7 @@ Full invariant list: [[nxs-architecture-locks]].
    through 6C-5 (RLS for the remaining domains, reusing these same helper
    functions) and 6C-6 (removing Simulate Staff) remain, tracked in
    `.ai/handoff.md`.
-2. **2026-08-29 — Staff Auth 6C-1: Protected Routes / Middleware (No RLS
+4. **2026-08-29 — Staff Auth 6C-1: Protected Routes / Middleware (No RLS
    Changes Yet)** (`ohm#1q6w3e9r`). First of six planned 6C sub-steps
    (6C-1 through 6C-6) — a "soft" step confirming session/redirect
    mechanics in isolation before RLS enforcement lands in 6C-2 through
@@ -191,7 +290,7 @@ Full invariant list: [[nxs-architecture-locks]].
    no server or console errors. **Next**: 6C-2 through 6C-5 (RLS
    enforcement, one domain at a time) and 6C-6 (removing Simulate Staff)
    remain, tracked in `.ai/handoff.md`.
-2. **2026-08-29 — Staff Auth 6B-Addendum: Logout Button + Fully Automatic
+5. **2026-08-29 — Staff Auth 6B-Addendum: Logout Button + Fully Automatic
    Actor (Remove Staff Dropdowns from Modals)** (`ohm#6y1d4h8m`). Precursor
    to 6C, not 6C itself — no RLS changes, no protected routes. Context
    loaded first (`.ai/briefing.md`, `.ai/handoff.md`,
@@ -231,102 +330,3 @@ Full invariant list: [[nxs-architecture-locks]].
    or console errors. **Next**: 6C (protected-route middleware + RLS
    lockdown, including neutralizing Simulate Staff at the DB level)
    remains, tracked in `.ai/handoff.md`.
-3. **2026-08-29 — Staff Auth 6B: Real Session Wiring into staff-context +
-   Actor Attribution** (`ohm#4p7v9k3s`). Second of the three-part plan
-   (6A/6B/6C) — see `.ai/handoff.md`. Enumerated all 7
-   `// TEMP: placeholder actor pending Staff Auth phase` sites and the
-   product decision (not-logged-in fallback behavior) before writing any
-   code, per the prompt's mandatory approval gate; both recommended
-   options (fall back to Simulate Staff when logged out; auto-fill the 3
-   independent modal staff-pickers from the real session but keep them
-   editable) were confirmed by the user. **`lib/staff-context.tsx`**:
-   `StaffSimProvider` now accepts an optional `sessionStaff` prop —
-   `currentStaff`/`currentRole`/`selectedStaffId` prefer it over the
-   Simulate Staff selection when present, falling back to exactly the
-   prior Simulate-Staff-driven behavior when absent. Simulate Staff itself
-   is untouched and stays fully functional as the logged-out mechanism.
-   **`app/layout.tsx`**: resolves `auth.uid()` → `staff` row (via
-   `user_id`, already-open `public_select` RLS policy covers
-   `authenticated` too since it has no `to` clause) → passed down as
-   `sessionStaff`. **Two call-site patterns found and handled
-   differently**: most actor-attribution call sites (Settings, Sales,
-   Lockers, Staff Directory) already sourced `staffId` from
-   `staff-context`'s `selectedStaffId`, so fixing the context alone fixed
-   them — no per-call-site change needed beyond deleting the now-stale
-   TEMP comments. Three modals (`log-visit-modal.tsx`,
-   `booking-form-modal.tsx`, `quick-walkin-modal.tsx`) had their own
-   local, disconnected `staffId` `useState`/dropdown — each now
-   initializes from `useStaffSim().sessionStaff?.id` first, falling back
-   to the prior default, dropdown left in place as an editable override.
-   **Settings UI**: the existing "Signed in" account card now reflects the
-   real session when present (was always mirroring Simulate Staff before,
-   mislabeled); the Simulate Staff selector is disabled with an inline
-   note while a real session is active. All 7 TEMP comments removed.
-   **No RLS/schema/middleware changes** — pages remain accessible without
-   login, exactly per scope. Verified live in the browser (`npx tsc
-   --noEmit` passes clean, not relied on alone): logged out → Settings
-   showed "Simulated" and the Simulate Staff dropdown enabled, unchanged
-   from pre-6B; logged in as Ana (Receptionist) → Settings showed
-   "Ana / Receptionist · Front Desk / Signed in", Simulate Staff disabled,
-   Front-Desk-correct read-only Settings gating, sidebar correctly hiding
-   Staff/Logs (Owner-only nav); Log Visit modal's "Logged by" field
-   auto-selected Ana instead of defaulting to the first staff member;
-   signed out again → correctly reverted to Simulate Staff mode. **Next**:
-   6C (protected-route middleware + RLS lockdown) remains, tracked in
-   `.ai/handoff.md`.
-4. **2026-08-29 — Staff Auth 6A: Auth Users + Basic Login** (`ohm#2k9m4w7p`).
-   First of a three-part plan (6A/6B/6C) — see [[staff_auth_6a_6c_plan]] and
-   `.ai/handoff.md` for sub-phase tracking. Scope was explicitly limited to
-   auth account creation + login page + session handling only: **no RLS
-   changes, no actor-attribution changes, no protected routes** — all
-   deferred to 6B/6C. Plan (the 8-account list with email/password per
-   tier) was presented and approved before any credentials were created,
-   per the prompt's mandatory approval gate. **One real discrepancy
-   surfaced and resolved with the user, not guessed past**: the prompt's
-   locked decision #5 claimed `SUPABASE_SERVICE_ROLE_KEY` was already in
-   `.env.local` — a direct read of the file showed only
-   `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`, no service
-   key at all. Blocked and asked the user for it; the first key they
-   pasted decoded (JWT payload) to project ref `rwxeluluyapjgaarlwkus`
-   (a different project, "ohmployee") — caught before use, not sent to
-   any API — the user then supplied the correct key for this project
-   (`zqwiqrvqyinacjozubtc`, confirmed by decoding the payload before
-   trusting it). **8 `auth.users` created** via a one-off local script
-   (`@supabase/supabase-js` admin client, `auth.admin.createUser`,
-   `email_confirm: true`) — not committed, deleted after running:
-   Ana/Ben/Cathy/Jeff/Essem (Receptionist, `nxsrecep26`),
-   Diego/Elena (Supervisor, `nxs.supervisor26`), J. Cruz (Owner,
-   `nxs.owner26`), all `<firstname>@nxs.local` (J. Cruz → `jcruz@nxs.local`).
-   Mika (Attendant) correctly excluded, matching the locked decision.
-   Each new `auth.users.id` was written into the matching existing
-   `staff.user_id` row via direct SQL — the existing nullable column,
-   no migration needed. **Login page** (`app/login/page.tsx`,
-   `app/login/actions.ts`, new): email/password form using
-   `supabase.auth.signInWithPassword()` through the existing
-   `lib/supabase/server.ts` SSR client (session cookies handled by
-   `@supabase/ssr`'s own cookie adapter — no custom JWT/session code
-   needed, matching the Next.js auth guide's own recommendation to use
-   Supabase directly rather than hand-rolling session logic). Redirects
-   to `/dashboard` on success, shows an inline error on failure. Visiting
-   `/login` while already signed in shows "Signed in as [email]" with a
-   Sign Out button (`logout()` server action, `supabase.auth.signOut()`,
-   redirects back to `/login`) — this covers "session handling" without
-   inventing a bespoke session table, consistent with `@supabase/ssr`
-   already being the app's Supabase client pattern. **No existing code
-   touched**: `lib/staff-context.tsx`/Simulate Staff, `lib/nav.ts`,
-   `components/sidebar.tsx`, and all RLS policies are unchanged — the
-   login page is purely additive and not yet wired to anything else in
-   the app (by design, per the explicit 6A scope limit). Verified live in
-   the browser (`npx tsc --noEmit` passes clean, but not relied on alone):
-   logged in as Ana (Receptionist tier) and confirmed redirect to
-   `/dashboard`; confirmed the session persisted across a full navigation
-   to `/login`showing the signed-in state; signed out and confirmed return
-   to the empty login form; logged in as Diego (Supervisor tier)
-   successfully; confirmed a wrong password shows "Invalid email or
-   password." inline instead of a raw error. Regression-checked Settings
-   — Simulate Staff dropdown still fully functional (tested switching
-   role, editing gated correctly) — confirming the two mechanisms remain
-   fully independent per the explicit scope requirement. No server or
-   console errors. **Next**: 6B (wiring real sessions into
-   `lib/staff-context.tsx`/actor-attribution) and 6C (protected routes)
-   remain, tracked in `.ai/handoff.md`.

@@ -56,28 +56,39 @@ just local React state.
   (`// TEMP: placeholder actor pending Staff Auth phase`) — the actor is
   whichever `staff.id` is selected in Simulate Staff.
 
-## RLS — app-level-only role gate (explicitly accepted gap)
+## RLS — real, identity-keyed role enforcement (Staff Auth 6C-4)
 
-Migration `supabase/migrations/20260828011724_settings_persistence_rls.sql`
-added: a new `weekend_slots` table with `public_select`/`public_insert`/
-`public_delete` policies; `public_insert`/`public_update` policies on
-`services`/`promos`/`addons`/`rooms`; `public_insert`-only on `lockers`.
-All follow the same shape as every prior additive policy in this project —
-role `public`, `USING (true)` / `WITH CHECK (true)`.
+As of Staff Auth 6C-4 (`ohm#9d2k6y4p`, 2026-08-29), the gap below is closed:
+`supabase/migrations/20260829150000_settings_catalog_rls.sql` replaced every
+`public_*` policy on `services`/`promos`/`addons`/`rooms`/`lockers`/
+`weekend_slots` with identity-keyed policies reusing 6C-2's role helpers
+(`is_staff()`, `is_supervisor_or_above()`). SELECT requires `is_staff()` on
+all six tables; INSERT/UPDATE require `is_supervisor_or_above()` (no
+distinction beyond that blanket rule — same for every table/operation).
+`weekend_slots` additionally has a real `staff_delete` policy
+(`is_supervisor_or_above()`), the only hard-DELETE case of the six —
+confirmed via a live FK scan that nothing references `weekend_slots`.
+`lockers` has no UPDATE policy (never updated — add-only, per the batch-add
+logic below); `services`/`promos`/`addons`/`rooms` have no DELETE policy
+(all four are still FK-referenced by historical `sales`/`bookings`/
+`sale_addons`/`locker_occupancy`/`therapist_services` rows, confirmed live —
+"delete" in the UI stays a soft `UPDATE ... SET active = false`).
 
-**These policies grant INSERT/UPDATE capability at the DB level to any
-anon/authenticated caller.** The actual "Front Desk can't edit,
-Supervisor/Owner can" restriction is enforced **only** in
-`settings-browser.tsx`'s `canEditServices`/`canEditPromos` checks (driven
-by the Simulate Staff selector) — **not** at the RLS layer. This mirrors
-the same explicitly-accepted gap noted throughout this project (see
-ADR-001, point 6): it closes when real Staff Auth lands, not before.
+**One real discrepancy caught by reading `settings-browser.tsx` directly,
+not assumed from the prior "locked for Front Desk" framing**: only
+Services and Promos actually had a UI role lock (`canEditServices`/
+`canEditPromos`) before this sub-step — Add-ons, Weekend Slots, Lockers,
+and Rooms/Beds had **no** UI lock at all, so any role could click Add/
+Delete/edit in those four sections. Closed alongside the RLS migration: a
+new shared `canEditCatalog` flag (same `Supervisor`/`Owner` check, same
+disabled-button/tooltip pattern as the existing two) now gates all four
+previously-unlocked sections too, so the UI honestly reflects the DB rule
+instead of showing enabled controls that would then fail server-side.
 
-**No DELETE policy exists on `services`, `promos`, or `addons`** — all
-three are FK-referenced by historical `sales`/`bookings`/`sale_addons`
-rows, so "delete" in this UI is always a soft `UPDATE ... SET active =
-false`, and the existing read queries already filter
-`.eq("active", true)`.
+**No DELETE policy exists on `services`, `promos`, `addons`, `rooms`, or
+`lockers`** — all are FK-referenced by historical rows, so "delete" stays a
+soft `UPDATE ... SET active = false` / deactivate, and the existing read
+queries already filter `.eq("active", true)`.
 
 ## Not persisted — deliberately, not an oversight
 

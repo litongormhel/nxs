@@ -21,12 +21,15 @@
   room or same therapist while status is `Booked`/`Completed`/
   `Needs Reassignment`: `no_double_book_room`, `no_double_book_therapist`.
   Confirmed live and unchanged by this phase.
-- RLS: `public_select` (SELECT, `USING (true)`) and `public_insert`
-  (INSERT, `WITH CHECK (true)`) added this phase, same shape as Core Loop's
-  policies on other tables. **No UPDATE/DELETE policy** — status
-  transitions (Booked→Completed/No-show/Cancelled) have no write path from
-  the anon client yet; deliberately not built this phase (would need a new
-  UPDATE policy, flagged rather than opened ad hoc).
+- RLS (`ohm#3f7n9c1k`, Staff Auth 6C-3, 2026-08-29): `staff_select`/
+  `staff_insert`/`staff_update` all `is_staff()`-gated, replacing the
+  original `public_select`/`public_insert` pair. No role restriction on
+  any status transition, including Cancel — confirmed with the user
+  (unlike Sales Void, which is Owner-only). **Real gap closed**: there was
+  previously no UPDATE policy at all, so `updateBookingStatus()` had been
+  silently affecting 0 rows under RLS since it was wired — this migration
+  is what makes status transitions actually enforce and work end-to-end.
+  No DELETE policy — bookings are never hard-deleted.
 
 `public.promos`, `public.addons`, `public.locker_occupancy`, `public.sale_addons`
 (correction, `ohm#8r3n6y1q`):
@@ -157,9 +160,6 @@
 
 ## Not yet implemented — see roadmap
 
-- Status-change UI (Booked→Completed/No-show/Cancelled) — blocked on an
-  `anon` UPDATE policy for `bookings` that was intentionally not opened
-  this phase.
 - Calendar/week view — day-list only for now.
 - Companion tagging for Squad Goals — still explicitly out of scope per
   [[clients_state]] (no schema for it beyond the `pax_count` headcount
@@ -169,9 +169,10 @@
   it will likely consume `bookings` + `therapists` once built.
 - `completeWalkinBooking()` ("Complete Walk-in Visit" — converting an
   existing `Booked` booking into a paid walk-in checkout) is not built.
-  Explicitly excluded from `ohm#8r3n6y1q`'s scope, confirmed with the
-  user: it needs the same `anon` UPDATE policy on `bookings` that
-  status-change UI needs (still not opened, see above).
+  Explicitly excluded from `ohm#8r3n6y1q`'s scope. The `bookings` UPDATE
+  policy it would have needed now exists (`staff_update`, `is_staff()`,
+  added `ohm#3f7n9c1k`) — the remaining gap is purely that the feature
+  itself was never written, not an RLS blocker.
 - The `pax_count` column and its original RLS policies (Bookings phase)
   still predate version-controlled migrations — the baseline snapshot
   (`20260827130641_baseline_snapshot.sql`) captures them retroactively,
