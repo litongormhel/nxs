@@ -146,15 +146,18 @@ export function BookingBrowser({
   function openReassign(row: BookingRow) {
     setReassignBooking(row);
     setReassignTherapistId("");
-    setReassignStartTime(row.start_time);
+    setReassignStartTime("");
     setReassignError(null);
     setAvailabilityMap({});
   }
 
-  // Live therapist availability — re-runs whenever the modal is open or the time changes.
-  // Debounced 300 ms to avoid a query storm while the user types a custom time.
+  // Live slot availability — re-runs whenever a therapist is selected.
+  // Queries same-day bookings for that therapist and marks each slot as
+  // free or busy using slotsOverlap(). Debounced 300 ms.
   useEffect(() => {
-    if (!reassignBooking) return;
+    if (!reassignBooking || !reassignTherapistId) {
+      return;
+    }
 
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -165,23 +168,22 @@ export function BookingBrowser({
         .from("bookings")
         .select("therapist_id, start_time, duration_minutes, status")
         .eq("booking_date", reassignBooking.booking_date)
+        .eq("therapist_id", reassignTherapistId)
         .in("status", ["Booked", "Completed", "Needs Reassignment"])
         .neq("id", reassignBooking.id);
 
       if (cancelled) return;
       const map: Record<string, boolean> = {};
-      for (const t of therapists) {
-        const conflict = (sameDayBookings ?? []).some(
-          (b) =>
-            b.therapist_id === t.id &&
-            slotsOverlap(
-              reassignStartTime,
-              reassignBooking.duration_minutes ?? 60,
-              b.start_time,
-              b.duration_minutes ?? 60
-            )
+      for (const slot of timeSlots) {
+        const conflict = (sameDayBookings ?? []).some((b) =>
+          slotsOverlap(
+            slot,
+            reassignBooking.duration_minutes ?? 60,
+            b.start_time,
+            b.duration_minutes ?? 60
+          )
         );
-        map[t.id] = !conflict; // true = available
+        map[slot] = !conflict; // true = available
       }
       setAvailabilityMap(map);
       setAvailabilityLoading(false);
@@ -191,8 +193,7 @@ export function BookingBrowser({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [reassignBooking, reassignStartTime, therapists]);
-
+  }, [reassignBooking, reassignTherapistId, timeSlots]);
 
   async function handleConfirmReassign() {
     if (!reassignBooking || !reassignTherapistId || !reassignStartTime || !sessionStaff) return;
@@ -429,31 +430,14 @@ export function BookingBrowser({
 
       {reassignBooking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4">
             <h3 className="text-base font-bold text-foreground">Change</h3>
             <p className="text-xs text-muted">
               {clientLabel(reassignBooking)} · {fmtDate(reassignBooking.booking_date)} · Currently:{" "}
               {fmtTime(reassignBooking.start_time)} · {therapistName(reassignBooking.therapist_id)}
             </p>
 
-            {/* Time input */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-muted" htmlFor="change-start-time">
-                Start Time
-              </label>
-              <input
-                id="change-start-time"
-                type="time"
-                value={reassignStartTime}
-                onChange={(e) => {
-                  setReassignStartTime(e.target.value);
-                  setReassignTherapistId("");
-                }}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
-              />
-            </div>
-
-            {/* Therapist select */}
+            {/* Step 1 — Therapist */}
             <div className="space-y-1">
               <label className="text-xs font-semibold text-muted" htmlFor="change-therapist">
                 Therapist
@@ -461,27 +445,57 @@ export function BookingBrowser({
               <select
                 id="change-therapist"
                 value={reassignTherapistId}
-                onChange={(e) => setReassignTherapistId(e.target.value)}
+                onChange={(e) => {
+                  setReassignTherapistId(e.target.value);
+                  setReassignStartTime("");
+                }}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
               >
-                <option value="" disabled>
-                  Select therapist
-                </option>
+                <option value="" disabled>Select therapist</option>
                 {therapists
                   .filter((t) => t.id !== reassignBooking.therapist_id)
-                  .map((t) => {
-                    const available = availabilityMap[t.id] ?? true;
-                    return (
-                      <option key={t.id} value={t.id} disabled={!available}>
-                        {t.name}{!available ? " — Unavailable" : ""}
-                      </option>
-                    );
-                  })}
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
               </select>
               {availabilityLoading && (
                 <p className="text-[10px] text-muted">Checking availability…</p>
               )}
             </div>
+
+            {/* Step 2 — Time Slot (only shown once a therapist is selected) */}
+            {reassignTherapistId && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted">Time Slot</label>
+                {timeSlots.length === 0 ? (
+                  <p className="text-xs text-muted">No time slots configured. Add some in Settings.</p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2">
+                    {timeSlots.map((s) => {
+                      const available = availabilityMap[s] ?? true;
+                      const selected = reassignStartTime === s;
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          disabled={!available}
+                          onClick={() => setReassignStartTime(s)}
+                          className={`rounded-md border px-2 py-2 font-mono text-xs transition-all ${
+                            !available
+                              ? "border-dashed border-border/70 text-red-400/50 line-through opacity-50 cursor-not-allowed bg-transparent"
+                              : selected
+                              ? "border-gold bg-gradient-to-br from-[#c89b3c] to-[#a97e2e] text-black font-bold shadow-sm"
+                              : "border-border bg-background text-foreground hover:border-gold/50"
+                          }`}
+                        >
+                          {fmtTime(s)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {reassignError && <p className="text-xs text-accent-red">{reassignError}</p>}
             <div className="flex gap-2 pt-2">
@@ -494,7 +508,7 @@ export function BookingBrowser({
               </button>
               <button
                 type="button"
-                disabled={!reassignTherapistId || reassignSaving}
+                disabled={!reassignTherapistId || !reassignStartTime || reassignSaving}
                 onClick={handleConfirmReassign}
                 className="flex-1 rounded-lg border border-[#a97e2e] bg-gold/10 py-2 text-xs font-bold text-accent-gold hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -504,6 +518,7 @@ export function BookingBrowser({
           </div>
         </div>
       )}
+
 
     </div>
   );
