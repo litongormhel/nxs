@@ -20,6 +20,8 @@ import {
   updateRoomCount,
 } from "@/app/(staff)/settings/actions";
 import { compareSlotTimes } from "@/lib/bookings/slots";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useTheme } from "@/lib/theme-context";
 
 export type Service = {
   id: string;
@@ -69,12 +71,8 @@ export function SettingsBrowser({
 }) {
   const router = useRouter();
 
-  // Theme state
-  const [isLightMode, setIsLightMode] = useState(false);
-
-  useEffect(() => {
-    setIsLightMode(localStorage.getItem("theme") === "light");
-  }, []);
+  // Theme state (global, see lib/theme-context.tsx)
+  const { isLightMode, setIsLightMode } = useTheme();
 
   const { currentStaff, currentRole, sessionStaff } = useStaffSim();
   const selectedStaffId = sessionStaff?.id ?? "";
@@ -149,17 +147,12 @@ export function SettingsBrowser({
     onConfirm: (values: Record<string, string>) => void | Promise<void>;
   } | null>(null);
 
-  // Theme toggle effect
-  useEffect(() => {
-    if (isLightMode) {
-      document.body.classList.add("light");
-    } else {
-      document.body.classList.remove("light");
-    }
-    return () => {
-      document.body.classList.remove("light");
-    };
-  }, [isLightMode]);
+  // Confirm dialog state for delete actions
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
 
   // Handlers for Services
   const handleUpdateServicePrice = async (index: number, val: string) => {
@@ -224,17 +217,23 @@ export function SettingsBrowser({
     });
   };
 
-  const handleDeleteService = async (index: number) => {
+  const handleDeleteService = (index: number) => {
     const svc = services[index];
-    if (!window.confirm(`Delete ${svc.name}?`)) return;
-    const res = await deleteService(svc.id, selectedStaffId);
-    if (!res.ok) {
-      showToast(`Failed to remove ${svc.name}: ${res.error}`);
-      return;
-    }
-    setServices((prev) => prev.filter((_, i) => i !== index));
-    showToast(`${svc.name} removed`);
-    router.refresh();
+    setDeleteConfirm({
+      title: "Delete Service",
+      message: `Are you sure you want to delete ${svc.name}?`,
+      onConfirm: async () => {
+        setDeleteConfirm(null);
+        const res = await deleteService(svc.id, selectedStaffId);
+        if (!res.ok) {
+          showToast(`Failed to remove ${svc.name}: ${res.error}`);
+          return;
+        }
+        setServices((prev) => prev.filter((_, i) => i !== index));
+        showToast(`${svc.name} removed`);
+        router.refresh();
+      },
+    });
   };
 
   // Handlers for Promos
@@ -282,17 +281,23 @@ export function SettingsBrowser({
     });
   };
 
-  const handleDeletePromo = async (index: number) => {
+  const handleDeletePromo = (index: number) => {
     const promo = promos[index];
-    if (!window.confirm(`Delete ${promo.label}?`)) return;
-    const res = await deletePromo(promo.id, selectedStaffId);
-    if (!res.ok) {
-      showToast(`Failed to remove ${promo.label}: ${res.error}`);
-      return;
-    }
-    setPromos((prev) => prev.filter((_, i) => i !== index));
-    showToast(`${promo.label} removed`);
-    router.refresh();
+    setDeleteConfirm({
+      title: "Delete Promo",
+      message: `Are you sure you want to delete ${promo.label}?`,
+      onConfirm: async () => {
+        setDeleteConfirm(null);
+        const res = await deletePromo(promo.id, selectedStaffId);
+        if (!res.ok) {
+          showToast(`Failed to remove ${promo.label}: ${res.error}`);
+          return;
+        }
+        setPromos((prev) => prev.filter((_, i) => i !== index));
+        showToast(`${promo.label} removed`);
+        router.refresh();
+      },
+    });
   };
 
   // Handlers for Weekend Slots
@@ -330,17 +335,23 @@ export function SettingsBrowser({
     });
   };
 
-  const handleDeleteSlot = async (index: number) => {
+  const handleDeleteSlot = (index: number) => {
     const slot = weekendSlots[index];
-    if (!window.confirm(`Remove ${fmtTime(slot.slot_time)} from weekend slots?`)) return;
-    const res = await deleteWeekendSlot(slot.id, selectedStaffId);
-    if (!res.ok) {
-      showToast(`Failed to remove slot: ${res.error}`);
-      return;
-    }
-    setWeekendSlots((prev) => prev.filter((_, i) => i !== index));
-    showToast(`${fmtTime(slot.slot_time)} removed`);
-    router.refresh();
+    setDeleteConfirm({
+      title: "Delete Weekend Slot",
+      message: `Are you sure you want to remove ${fmtTime(slot.slot_time)} from weekend slots?`,
+      onConfirm: async () => {
+        setDeleteConfirm(null);
+        const res = await deleteWeekendSlot(slot.id, selectedStaffId);
+        if (!res.ok) {
+          showToast(`Failed to remove slot: ${res.error}`);
+          return;
+        }
+        setWeekendSlots((prev) => prev.filter((_, i) => i !== index));
+        showToast(`${fmtTime(slot.slot_time)} removed`);
+        router.refresh();
+      },
+    });
   };
 
   // Handlers for Add-ons
@@ -388,21 +399,27 @@ export function SettingsBrowser({
     });
   };
 
-  const handleDeleteAddon = async (index: number) => {
+  const handleDeleteAddon = (index: number) => {
     if (addons.length <= 1) {
       alert("At least one add-on must remain.");
       return;
     }
     const addon = addons[index];
-    if (!window.confirm(`Delete ${addon.name}?`)) return;
-    const res = await deleteAddon(addon.id, selectedStaffId);
-    if (!res.ok) {
-      showToast(`Failed to remove ${addon.name}: ${res.error}`);
-      return;
-    }
-    setAddons((prev) => prev.filter((_, i) => i !== index));
-    showToast(`${addon.name} removed`);
-    router.refresh();
+    setDeleteConfirm({
+      title: "Delete Add-on",
+      message: `Are you sure you want to delete ${addon.name}?`,
+      onConfirm: async () => {
+        setDeleteConfirm(null);
+        const res = await deleteAddon(addon.id, selectedStaffId);
+        if (!res.ok) {
+          showToast(`Failed to remove ${addon.name}: ${res.error}`);
+          return;
+        }
+        setAddons((prev) => prev.filter((_, i) => i !== index));
+        showToast(`${addon.name} removed`);
+        router.refresh();
+      },
+    });
   };
 
   // Handlers for Capacity
@@ -466,10 +483,7 @@ export function SettingsBrowser({
                 type="checkbox"
                 className="opacity-0 w-0 h-0"
                 checked={isLightMode}
-                onChange={(e) => {
-                  setIsLightMode(e.target.checked);
-                  localStorage.setItem("theme", e.target.checked ? "light" : "dark");
-                }}
+                onChange={(e) => setIsLightMode(e.target.checked)}
               />
               <span
                 className={`absolute inset-0 rounded-full border transition-colors ${
@@ -833,6 +847,17 @@ export function SettingsBrowser({
             </div>
           </form>
         </div>
+      )}
+
+      {/* Delete Confirm Dialog */}
+      {deleteConfirm && (
+        <ConfirmDialog
+          title={deleteConfirm.title}
+          message={deleteConfirm.message}
+          confirmLabel="Confirm Delete"
+          onConfirm={deleteConfirm.onConfirm}
+          onCancel={() => setDeleteConfirm(null)}
+        />
       )}
 
       {/* Toast Notification */}

@@ -12,7 +12,14 @@ just local React state.
 - **Display & Appearance**: dark/light theme toggle switch (sun/moon icons,
   dynamic subtitle), toggles the `.light` class on `document.body`.
   **Local/session-only by design** — no DB write, confirmed with the user
-  that a theme preference doesn't need persistence.
+  that a theme preference doesn't need persistence. As of `ohm#7t3m8vw1`
+  (2026-08-29), theme state lives in a root-level `lib/theme-context.tsx`
+  (`ThemeProvider`/`useTheme()`, wrapped around `{children}` in
+  `app/layout.tsx`) instead of local state inside `SettingsBrowser` — the
+  previous local-state version reverted to dark the instant you navigated
+  away from Settings, because its `useEffect` cleanup ran on unmount and
+  unconditionally stripped `.light` from `document.body`. Persistence is
+  still `localStorage` only, read/written by the provider.
 - **Account**: signed-in staff badge showing name/position/role. As of
   Staff Auth 6C-6 (`ohm#8r5m1v7z`, 2026-08-29), there is no role-switching
   control here — the real authenticated session (`sessionStaff.id` from
@@ -41,6 +48,21 @@ just local React state.
   Add-on` → `addAddon`. Delete → `deleteAddon` (**soft delete**; the
   "minimum 1 active add-on" safeguard is now enforced **server-side**,
   not just via a disabled button).
+- **Delete confirmation** (`ohm#4k9p2xq7`, 2026-08-29): all 4 delete flows
+  above (Service/Promo/Weekend Slot/Add-on) go through a shared
+  `components/confirm-dialog.tsx` (`ConfirmDialog`) instead of the native
+  `window.confirm()` — styled to match the existing Add-flow form-modal.
+  Add flows across Settings/Staff/Therapist Roster were left as-is: they
+  are already form-modal submissions with Cancel/Confirm, which the
+  prompt's own scope treats as not needing an extra confirm step. Staff
+  and Therapist Roster have no delete UI at all (add-only), so there was
+  nothing to change there.
+- **Soft-delete + historical-record preservation for Services/Promos**
+  (`ohm#1d5r6nz4`, 2026-08-29) — re-verified, not changed: this prompt's
+  requirements (soft delete instead of hard delete, active-only dropdown
+  filtering, FK-joined historical display, no `ON DELETE CASCADE` risk)
+  were all already satisfied by `ohm#5x1p8m3v`/6C-4 (see the bullets
+  above and the RLS section below). No migration or code change was made.
 - **Capacity**:
   - **Lockers**: `+ Add 10 Lockers` → `addLockerBatch`, inserts 10 new
     rows at `max(number)+1 .. +10`, `active = true`. Never updates or

@@ -5,6 +5,78 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Settings 7B-3: Service/Promo Soft-Delete — verified already complete,
+  no changes made** (`ohm#1d5r6nz4`, 2026-08-29). Prompt asked to convert
+  service/promo deletes from hard to soft delete, filter them out of active
+  selectors, keep them visible in historical views, and confirm no
+  `ON DELETE CASCADE` FK risk. Read-only investigation (per the prompt's
+  approval gate, plan was presented before any migration/code was written)
+  found every requirement already satisfied by `ohm#5x1p8m3v`/Staff Auth
+  6C-4: `deleteService`/`deletePromo` in
+  `app/(staff)/settings/actions.ts` already do `update({ active: false })`,
+  not a hard delete; every dropdown source (`app/(staff)/bookings/page.tsx`,
+  `app/(staff)/clients/page.tsx`, `app/(staff)/settings/page.tsx`) already
+  filters `.eq("active", true)`; `app/(staff)/sales/page.tsx` and
+  `app/(staff)/analytics/page.tsx` already join `services(name)`/
+  `promos(label)` by FK, so a soft-deleted row still displays its name in
+  history. Checked every FK from `sales`/`bookings`/`point_transactions` to
+  `services`/`promos` in `supabase/migrations/20260827130641_baseline_snapshot.sql`
+  — none are `ON DELETE CASCADE` (default RESTRICT); the only `CASCADE` on
+  `services` is on the unrelated `therapist_services` join table, which is
+  correct as-is. No migration, no code change, no state-doc rewrite needed
+  — this entry exists so a future prompt doesn't re-investigate the same
+  question from scratch.
+
+- **Settings 7B-2: Confirm Dialogs + Global Theme Fix — complete**
+  (`ohm#4k9p2xq7` + `ohm#7t3m8vw1`, 2026-08-29). Two prompts implemented
+  together since both touch `components/settings-browser.tsx`. Plan +
+  regression risk assessment presented and approved before any code was
+  written, per both prompts' mandatory gates.
+  - **Confirm dialogs** (`ohm#4k9p2xq7`): investigation found Add flows
+    across Settings/Staff/Therapist Roster already use a proper form-modal
+    with Cancel/Confirm (no change needed, per the prompt's own carve-out
+    for "simple form submit" flows), and neither Staff nor Therapist
+    Roster has a delete UI at all (add-only, confirmed by repo-wide grep
+    for `window.confirm`/`handleDelete*`) — so the only real gap was
+    Settings' 4 delete flows (Service/Promo/Weekend Slot/Add-on) using the
+    unstyled native `window.confirm()`. New `components/confirm-dialog.tsx`
+    — a reusable `ConfirmDialog` matching the existing form-modal's
+    border/surface/gold-accent styling — replaces all 4 call sites in
+    `components/settings-browser.tsx` (`handleDeleteService`,
+    `handleDeletePromo`, `handleDeleteSlot`, `handleDeleteAddon`), each
+    showing the item name in the confirmation message. The add-on
+    "at least one must remain" guard stays a plain `alert()` — it blocks
+    an invalid action, it isn't confirming a valid one.
+  - **Light mode propagation fix** (`ohm#7t3m8vw1`): root cause traced in
+    code, not guessed — `isLightMode` state and the `document.body`
+    class-toggle lived entirely inside `SettingsBrowser`, which unmounts on
+    navigation; its `useEffect` cleanup unconditionally ran
+    `document.body.classList.remove("light")` on unmount, stripping light
+    mode the instant you left the Settings tab regardless of the saved
+    preference. The `body.light` CSS itself (`app/globals.css`) was already
+    global — this was purely a state-lifetime bug. Fix: new
+    `lib/theme-context.tsx` (`ThemeProvider`/`useTheme()`) owns
+    `isLightMode`, reads/writes `localStorage("theme")`, and toggles
+    `.light` on `document.body` with no unmount cleanup; `app/layout.tsx`
+    wraps `{children}` in `ThemeProvider` (above both the `(staff)` and
+    `/portal` route groups); `SettingsBrowser` now consumes `useTheme()`
+    instead of local state. Persistence stays localStorage-only, unchanged
+    from the already-confirmed "no DB needed, per-device preference"
+    decision.
+  - **Verified live in the browser, not just typechecked**: toggled light
+    mode on Settings, navigated to Dashboard and Sales — theme stayed
+    light on both (previously would have reverted to dark); full page
+    reload preserved the light preference via `localStorage`; toggled back
+    to dark to leave the app in its default state. Confirm-dialog flow
+    tested live (Delete → styled dialog appears with correct item name →
+    Cancel closes without deleting). No console errors observed.
+    `npx tsc --noEmit` clean. One pre-existing `react-hooks/set-state-in-
+    effect` ESLint finding in the moved-into `lib/theme-context.tsx` code
+    (reading `localStorage` inside a `useEffect`) — confirmed via
+    `git stash` that this exact violation already existed in the original
+    `settings-browser.tsx` before this change, so left as-is rather than
+    fixed as out-of-scope debt.
+
 - **Client Portal 7A-2: Master QR & Registration Flow — complete**
   (`ohm#4m8x1v6q`, 2026-08-29). First client-facing surface of the Client
   Portal domain, on top of 7A-1's schema. Plan + regression risk
