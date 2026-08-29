@@ -5,6 +5,104 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Staff Auth (`ohm#2k9m4w7p` — 6A of a three-part 6A/6B/6C plan)**
+  - **6A — Auth Users + Basic Login — complete** as of 2026-08-29. Plan
+    (the 8-account email/password list) presented and approved before any
+    credentials were created, per the prompt's mandatory approval gate.
+    Scope was explicitly limited: no RLS changes, no actor-attribution
+    changes, no protected routes — those are 6B/6C.
+    - **Context loaded first**: `.ai/briefing.md`, `.ai/handoff.md`,
+      `docs/state/staff_state.md`, ADR-001 (Staff Auth deferred
+      status/RBAC section), plus a live read of the `staff` table —
+      confirmed all 8 target names present and matching exactly (Ana,
+      Ben, Cathy, Jeff, Essem, Diego, Elena, J. Cruz), Mika (Attendant)
+      correctly not in scope.
+    - **One real discrepancy surfaced and resolved with the user, not
+      guessed past**: the prompt's locked decision #5 stated
+      `SUPABASE_SERVICE_ROLE_KEY` was already in `.env.local` and
+      gitignored. A direct read of the file showed only
+      `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY` — no
+      service key present at all. Blocked and asked the user for it
+      directly rather than proceeding without it or fabricating one.
+      The first key the user pasted was decoded (JWT payload, not
+      trusted at face value) and turned out to reference project ref
+      `rwxeluluyapjgaarlwkus` ("ohmployee") — a different Supabase
+      project than this repo's `zqwiqrvqyinacjozubtc` — caught and
+      flagged before it was ever used against any API. The user then
+      supplied the correct key, decoded and confirmed to match
+      `zqwiqrvqyinacjozubtc` before use.
+    - **8 `auth.users` created** via a one-off local Node script
+      (`@supabase/supabase-js` service-role admin client,
+      `auth.admin.createUser({ email, password, email_confirm: true })`)
+      — written to `scripts/_seed-staff-auth.mjs`, run once, then deleted
+      immediately after (not committed, not left in the tree). Emails:
+      `<firstname>@nxs.local` pattern (`ana@`, `ben@`, `cathy@`, `jeff@`,
+      `essem@`, `diego@`, `elena@`, and `jcruz@` for J. Cruz — confirmed
+      with the user during the approval gate since "firstname" doesn't
+      map cleanly for a two-part name). Passwords per the three locked
+      tiers: `nxsrecep26` (Receptionist), `nxs.supervisor26` (Supervisor),
+      `nxs.owner26` (Owner).
+    - **Linked to `staff.user_id`**: each returned `auth.users.id` was
+      written into the matching existing `staff` row via direct SQL
+      (`update staff set user_id = '<uuid>' where id = '<staff-id>'`) —
+      used the existing nullable column exactly as locked, no migration
+      file needed or written. Verified live afterward: all 8 target rows
+      show the correct `user_id`, Mika's stayed `null`.
+    - **Login page** (`app/login/page.tsx`, `app/login/actions.ts`, both
+      new): plain email/password `<form>` posting to a `login()` Server
+      Action that calls `supabase.auth.signInWithPassword()` through the
+      existing `lib/supabase/server.ts` SSR client — session cookies are
+      handled entirely by `@supabase/ssr`'s own cookie adapter (already
+      wired in that file), so **no custom JWT/session-table code was
+      written** — this matches both the Next.js auth guide's own guidance
+      (use your auth provider's built-in session handling rather than
+      hand-rolling one) and the fact that Supabase is already this app's
+      only backend. Redirects to `/dashboard` on success; shows an inline
+      "Invalid email or password." on failure (no raw Postgres/Auth error
+      leaked to the UI). Visiting `/login` while already signed in shows
+      "Signed in as [email]" plus a Sign Out button
+      (`logout()` Server Action → `supabase.auth.signOut()` →
+      redirect to `/login`) — this is the full extent of "session
+      handling" for 6A: no logout button was added anywhere else in the
+      app (e.g. Sidebar/Settings) to keep the footprint minimal and avoid
+      touching the Simulate Staff area at all.
+    - **Nothing else in the app was touched, by design**: the login page
+      is not yet linked to `lib/staff-context.tsx`, `lib/nav.ts`,
+      `components/sidebar.tsx`, or any RLS policy. `useStaffSim`'s
+      Simulate Staff dropdown remains the only thing driving role-based
+      UI anywhere in the app — logging in via `/login` currently has zero
+      effect on the rest of the app. This is intentional 6A scope, not an
+      oversight: wiring the real session into `staff-context`/role
+      gating and adding actor-attribution is explicitly 6B's job, and
+      protecting routes so unauthenticated visitors can't reach them is
+      explicitly 6C's job.
+    - Verified live in the browser (`npx tsc --noEmit` passes clean, but
+      not relied on alone): logged in as Ana (Receptionist tier),
+      confirmed redirect to `/dashboard`; navigated to `/login` again and
+      confirmed the session persisted ("Signed in as ana@nxs.local");
+      clicked Sign Out and confirmed return to the empty login form;
+      logged in as Diego (Supervisor tier) successfully; submitted a
+      wrong password and confirmed the inline error message (not a raw
+      exception). Regression-checked Settings — Simulate Staff dropdown
+      still fully functional, role switching and edit-gating unchanged —
+      confirming the two mechanisms are fully independent, per the
+      explicit "Simulate Staff keeps working normally" requirement. No
+      server or console errors (`preview_logs` checked clean).
+    - See [[staff_state]] for the updated auth-linkage detail.
+  - **6B — not started.** Planned scope (subject to confirmation when
+    that session starts): wire the real Supabase Auth session into
+    `lib/staff-context.tsx` (replace or supplement the client-side
+    Simulate Staff selection with `auth.uid()` → `staff.user_id` lookup),
+    and switch `action_logs` actor-attribution from the placeholder
+    staff-picker pattern (`// TEMP: placeholder actor pending Staff Auth
+    phase`, present in `log-visit-modal.tsx` and every `actions.ts` file
+    since Core Loop) to the real authenticated staff member. Likely needs
+    its own RLS decisions (this is where "no RLS changes" from 6A ends).
+  - **6C — not started.** Planned scope: protected routes (redirect
+    unauthenticated visitors away from the app, e.g. proxy/middleware or
+    per-page session checks), replacing the current "wide open, gated
+    only by client-side Simulate Staff" posture with real enforcement.
+
 - **Analytics Phase: Owner-Only Reporting Dashboard (Spa-Day Bucketing)**
   (`ohm#7v2q8f5c`) — **complete** as of 2026-08-28. Plan + regression
   assessment presented and approved before implementation, per the
@@ -751,16 +849,23 @@ This file tracks only what's in flight right now.
   `app/settings`, `app/staff`, `app/logs`, `app/sales`, `app/lockers`,
   `app/call-sheet`, and `app/analytics` all have real implementations now.
   No route is still an 8-line "Coming soon." stub.
-- Staff auth is still not wired up anywhere in the app code (no login page,
-  no real session). `app/layout.tsx` now does fetch the `staff` table
-  server-side (`ohm#3z8k1p6d`) to seed a client-side "simulated role"
-  context (`lib/staff-context.tsx`) — this is still the Simulate Staff
-  placeholder pattern, not real auth; there is no `auth.uid()`-keyed
-  session anywhere. The app's server/browser Supabase clients use the
+- Staff Auth 6A (`ohm#2k9m4w7p`) added a real login page (`/login`) and
+  real Supabase Auth sessions (email/password, 8 `auth.users` linked to
+  `staff.user_id`) — but **nothing else in the app reads that session
+  yet**. `app/layout.tsx` still fetches the `staff` table server-side to
+  seed the client-side "simulated role" context (`lib/staff-context.tsx`,
+  `ohm#3z8k1p6d`) — Simulate Staff is still the only thing driving
+  role-based UI anywhere in the app, completely independent of whether
+  anyone is actually logged in via `/login`. There is no `auth.uid()`-keyed
+  session used anywhere in app logic, no protected routes, and
+  `action_logs` actor-attribution still uses the placeholder staff-picker
+  pattern. Wiring the real session into `staff-context`/actor-attribution
+  is 6B; protected routes are 6C — both not started, see
+  `ohm#2k9m4w7p` above. The app's server/browser Supabase clients use the
   anon key. RLS now has narrow, additive SELECT/INSERT policies on
   `staff` (SELECT + INSERT) and `action_logs` (INSERT + SELECT), among
   the other tables opened by prior phases — everything else is
-  default-deny for `anon`/`authenticated`.
+  default-deny for `anon`/`authenticated`. RLS was not touched by 6A.
 - Owner-only route gating (`Staff`, `Logs` nav items, and each page's own
   content) is enforced only in app code via `lib/staff-context.tsx`'s
   `currentRole`, driven by the client-side Simulate Staff selection — not

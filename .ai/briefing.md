@@ -87,7 +87,63 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-28 — Analytics Phase: Owner-Only Reporting Dashboard
+1. **2026-08-29 — Staff Auth 6A: Auth Users + Basic Login** (`ohm#2k9m4w7p`).
+   First of a three-part plan (6A/6B/6C) — see [[staff_auth_6a_6c_plan]] and
+   `.ai/handoff.md` for sub-phase tracking. Scope was explicitly limited to
+   auth account creation + login page + session handling only: **no RLS
+   changes, no actor-attribution changes, no protected routes** — all
+   deferred to 6B/6C. Plan (the 8-account list with email/password per
+   tier) was presented and approved before any credentials were created,
+   per the prompt's mandatory approval gate. **One real discrepancy
+   surfaced and resolved with the user, not guessed past**: the prompt's
+   locked decision #5 claimed `SUPABASE_SERVICE_ROLE_KEY` was already in
+   `.env.local` — a direct read of the file showed only
+   `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`, no service
+   key at all. Blocked and asked the user for it; the first key they
+   pasted decoded (JWT payload) to project ref `rwxeluluyapjgaarlwkus`
+   (a different project, "ohmployee") — caught before use, not sent to
+   any API — the user then supplied the correct key for this project
+   (`zqwiqrvqyinacjozubtc`, confirmed by decoding the payload before
+   trusting it). **8 `auth.users` created** via a one-off local script
+   (`@supabase/supabase-js` admin client, `auth.admin.createUser`,
+   `email_confirm: true`) — not committed, deleted after running:
+   Ana/Ben/Cathy/Jeff/Essem (Receptionist, `nxsrecep26`),
+   Diego/Elena (Supervisor, `nxs.supervisor26`), J. Cruz (Owner,
+   `nxs.owner26`), all `<firstname>@nxs.local` (J. Cruz → `jcruz@nxs.local`).
+   Mika (Attendant) correctly excluded, matching the locked decision.
+   Each new `auth.users.id` was written into the matching existing
+   `staff.user_id` row via direct SQL — the existing nullable column,
+   no migration needed. **Login page** (`app/login/page.tsx`,
+   `app/login/actions.ts`, new): email/password form using
+   `supabase.auth.signInWithPassword()` through the existing
+   `lib/supabase/server.ts` SSR client (session cookies handled by
+   `@supabase/ssr`'s own cookie adapter — no custom JWT/session code
+   needed, matching the Next.js auth guide's own recommendation to use
+   Supabase directly rather than hand-rolling session logic). Redirects
+   to `/dashboard` on success, shows an inline error on failure. Visiting
+   `/login` while already signed in shows "Signed in as [email]" with a
+   Sign Out button (`logout()` server action, `supabase.auth.signOut()`,
+   redirects back to `/login`) — this covers "session handling" without
+   inventing a bespoke session table, consistent with `@supabase/ssr`
+   already being the app's Supabase client pattern. **No existing code
+   touched**: `lib/staff-context.tsx`/Simulate Staff, `lib/nav.ts`,
+   `components/sidebar.tsx`, and all RLS policies are unchanged — the
+   login page is purely additive and not yet wired to anything else in
+   the app (by design, per the explicit 6A scope limit). Verified live in
+   the browser (`npx tsc --noEmit` passes clean, but not relied on alone):
+   logged in as Ana (Receptionist tier) and confirmed redirect to
+   `/dashboard`; confirmed the session persisted across a full navigation
+   to `/login`showing the signed-in state; signed out and confirmed return
+   to the empty login form; logged in as Diego (Supervisor tier)
+   successfully; confirmed a wrong password shows "Invalid email or
+   password." inline instead of a raw error. Regression-checked Settings
+   — Simulate Staff dropdown still fully functional (tested switching
+   role, editing gated correctly) — confirming the two mechanisms remain
+   fully independent per the explicit scope requirement. No server or
+   console errors. **Next**: 6B (wiring real sessions into
+   `lib/staff-context.tsx`/actor-attribution) and 6C (protected routes)
+   remain, tracked in `.ai/handoff.md`.
+2. **2026-08-28 — Analytics Phase: Owner-Only Reporting Dashboard
    (Spa-Day Bucketing)** (`ohm#7v2q8f5c`). Plan + regression assessment
    presented and approved before implementation, per the prompt's
    mandatory gate. Two discrepancies surfaced during context loading and
@@ -140,7 +196,7 @@ Full invariant list: [[nxs-architecture-locks]].
    and clear for Owner (J. Cruz). Regression-checked Sales, Bookings,
    Staff Directory, and Activity Logs — all load with no server or
    console errors.
-2. **2026-08-28 — Operations Phase: Locker Board, Call Sheet, Sales
+3. **2026-08-28 — Operations Phase: Locker Board, Call Sheet, Sales
    (Edit/Void)** (`ohm#9h4c7x2m`). Plan + regression assessment presented
    and approved before implementation, per the prompt's mandatory gate.
    Both required discrepancy questions were resolved by reading the actual
@@ -192,7 +248,7 @@ Full invariant list: [[nxs-architecture-locks]].
    DB after verification so state matches pre-session. Regression-checked
    Dashboard (Total Lockers still reads 100), Bookings, and Settings — all
    load with no server or console errors.
-3. **2026-08-28 — Management Phase: Staff Directory + Activity Logs Tab
+4. **2026-08-28 — Management Phase: Staff Directory + Activity Logs Tab
    (Owner-only)** (`ohm#3z8k1p6d`). Plan + regression assessment presented
    and approved before implementation, per the prompt's mandatory gate.
    Two real discrepancies surfaced during context loading, not guessed
@@ -259,7 +315,7 @@ Full invariant list: [[nxs-architecture-locks]].
    via `localStorage`. Regression-checked Settings (dropdown
    options/labels/gating behavior unchanged), Bookings, Therapists, and
    Client Profile — all load with no server or console errors.
-4. **2026-08-28 — Settings Persistence — Wire Existing UI to Supabase
+5. **2026-08-28 — Settings Persistence — Wire Existing UI to Supabase
    (Direct Table Writes)** (`ohm#5x1p8m3v`). Wired the full-parity Settings
    UI (`ohm#6j2v9s4k`) to real Supabase persistence via direct writes to
    `services`/`promos`/`addons`/`rooms`/`lockers`, plus a new
@@ -308,16 +364,3 @@ Full invariant list: [[nxs-architecture-locks]].
    with the correct actor; regression-checked Bookings, Client Profile,
    and Therapists — all load with no server or console errors. Test rows
    cleaned up from the live DB after verification.
-5. **2026-08-28 — Closeout: Commit Reviewed Therapist-Tab Work + Fix Stale
-   Settings State Doc** (`ohm#6w9d3n8h`). Two-item closeout from audit
-   `ohm#4t7b2k9w`. **Item 1**: no commit was made — `git status` showed a
-   clean working tree at session start; the Therapist-tab work the audit
-   described was already committed as `90c5329` before this session began
-   (verified the diff matches exactly). **Item 2**: rewrote
-   `docs/state/settings_state.md`, which still described an 8-line stub,
-   to reflect the actual full-parity Settings UI (`ohm#6j2v9s4k`) while
-   explicitly flagging it as UI-only with no Supabase persistence — verified
-   directly against `app/settings/page.tsx` (read-only seed fetch) and
-   `components/settings-browser.tsx` (no mutation calls, no `actions.ts`).
-   Settings persistence/wiring remains a separate, explicitly out-of-scope
-   follow-up.
