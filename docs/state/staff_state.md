@@ -117,14 +117,51 @@ flow exists in the app for staff.
   are gone; the value they annotated is the same code path, now backed by
   real identity when available.
 
+**Protected routes (`ohm#1q6w3e9r`, Staff Auth 6C-1, 2026-08-29)**:
+`proxy.ts` (repo root — this Next.js version renamed `middleware.ts` to
+`proxy.ts`, functionally identical) now gates every route on session
+presence. All routes require a real Supabase Auth session **except
+`/login`** — an unauthenticated request to any other route redirects to
+`/login?next=<original path>`; an authenticated request to `/login`
+redirects to `/dashboard`. Login honors `next` to return the user to
+where they were headed (validated against open-redirect payloads). This
+is purely "is there a session at all" — it does not check role, and does
+not replace the existing app-level `ownerOnly` nav/page-guard pattern
+(`lib/nav.ts`, Staff/Logs/Analytics page guards), which is unchanged.
+Simulate Staff is fully unaffected: once past the login gate, a session
+still resolves `sessionStaff` exactly as in 6B, and Simulate Staff still
+drives role/actor for anyone testing without a real session concept
+change (it's just that now you need *some* session to reach any page).
+
+**Role helper functions + Core Loop RLS (`ohm#5m8t2x6b`, Staff Auth 6C-2,
+2026-08-29)**: first real RLS lockdown step. Four reusable SQL functions
+now exist, foundational to every later 6C sub-step:
+`current_staff_position()` (`SECURITY DEFINER`, resolves
+`auth.uid() → staff.user_id → staff.position`, returns null gracefully
+with no session — decoupled from `staff`'s own RLS so later tightening
+there can't break every other table's role check), `is_staff()` (true for
+any of the 8 loginable staff), `is_supervisor_or_above()`, `is_owner()`.
+Applied to `clients`/`point_transactions`/`sales` — see
+[[clients_state]]/[[points_ledger_state]]/[[sales_state]] for the
+per-table policy detail. **Simulate Staff's DB-level role-spoofing is now
+neutralized for these three tables**: a Front Desk session using Simulate
+Staff to view as Owner gets Owner UI affordances but not real Owner DB
+access, since RLS is now keyed off the real `auth.uid()` session, not the
+client-side Simulate Staff selection. Simulate Staff itself is still
+present and functional in the UI — removing it is still 6C-6.
+
 ## Not yet implemented — see roadmap
 
-- No protected routes — pages remain reachable without logging in
-  (intentional through 6C; not-logged-in visitors still get full access,
-  gated only by Simulate Staff exactly as before 6B).
-- No RLS lockdown — every table's policies are still the app-level-only
-  `USING (true)` shape from prior phases; `auth.uid()` is read by the app
-  but not yet enforced at the DB layer. Simulate Staff's role-spoofing
-  therefore still works at the DB level too, by design until 6C.
+- RLS lockdown is partial — `clients`/`point_transactions`/`sales` are now
+  real role-keyed policies (6C-2, above); `bookings`/`locker_occupancy`,
+  `staff`/`action_logs`, and the Settings-domain tables
+  (`services`/`promos`/`addons`/`rooms`/`lockers`/`weekend_slots`) are
+  still the app-level-only `USING (true)` shape from prior phases, pending
+  6C-3 through 6C-5. Simulate Staff's role-spoofing still works at the DB
+  level for those remaining tables.
+- No role-based route restriction at the proxy/middleware level (e.g.
+  Front Desk being blocked from `/analytics` by `proxy.ts`) — still
+  enforced only by the app-level `ownerOnly` pattern, per 6C-1's explicit
+  scope. Planned for a later 6C sub-step alongside RLS.
 - No edit, archive, or delete for staff records.
 - See `docs/architecture/rbac.md` for the full deferred-auth picture.

@@ -5,7 +5,8 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
-- **Staff Auth (`ohm#2k9m4w7p` — 6A of a three-part 6A/6B/6C plan)**
+- **Staff Auth (6A/6B complete; 6C in progress — 6C-1 of six planned 6C
+  sub-steps, 6C-2 through 6C-6 pending)**
   - **6A — Auth Users + Basic Login — complete** as of 2026-08-29. Plan
     (the 8-account email/password list) presented and approved before any
     credentials were created, per the prompt's mandatory approval gate.
@@ -196,15 +197,211 @@ This file tracks only what's in flight right now.
       Staff–driven state (Owner nav restored, dropdown re-enabled in
       Settings). No server or console errors.
     - See [[staff_state]] for the updated modal-attribution detail.
-  - **6C — not started.** Planned scope: protected routes (redirect
-    unauthenticated visitors away from the app, e.g. proxy/middleware or
-    per-page session checks) and RLS lockdown (real `auth.uid()`-keyed
-    policies replacing the current `USING(true)` app-level-only gate),
-    replacing the current "wide open, gated only by client-side Simulate
-    Staff / session-if-present" posture with real enforcement. This is
-    also when Simulate Staff's role-spoofing capability finally gets
-    neutralized at the DB level — it must keep working as a testing tool
-    until then.
+  - **6C — six planned sub-steps (6C-1 through 6C-6), tracked explicitly
+    so the plan doesn't get lost across sessions:**
+    - **6C-2 — Role Helper Functions + Core Loop RLS (clients,
+      point_transactions, sales) — complete** as of 2026-08-29
+      (`ohm#5m8t2x6b`). First real RLS lockdown step (6C-1 was routes
+      only). Helper-function shape/naming, the full policy-per-table-per-
+      operation matrix, and the Sales edit-vs-void granularity decision
+      were all presented and approved before any SQL was written, per the
+      prompt's mandatory gate.
+      - **Context loaded first**: `.ai/briefing.md`, `.ai/handoff.md`
+        (confirmed 6C-1 complete), `docs/state/staff_state.md`,
+        `docs/state/clients_state.md`, `docs/state/points_ledger_state.md`,
+        `docs/state/sales_state.md`, ADR-001, `docs/architecture/rbac.md`
+        (role enum reconciliation — five `staff_position` values, not the
+        prompt's simplified three-tier framing), plus a live read of
+        current RLS policies on all four tables, `staff.user_id`/`position`
+        shape, and — not assumed from the docs — the actual bodies of
+        `log_visit()`/`quick_walkin()`.
+      - **One real discrepancy caught by reading the live function bodies,
+        not assumed**: both `log_visit()` and `quick_walkin()` are
+        `SECURITY INVOKER`, not `DEFINER` — they run as the calling
+        session's role, so the new INSERT policies had to actually permit
+        an authenticated staff caller directly, not just gate the app
+        layer. Confirmed the new `is_staff()`-gated INSERT policies still
+        let these functions work end-to-end.
+      - **Granularity decision confirmed with the user, not guessed**: a
+        single RLS UPDATE policy can't diff NEW against OLD, so "Owner-only
+        void" needed either (A) a single Supervisor+ policy with void
+        staying app-gated only, or (B) that same policy plus a
+        `BEFORE UPDATE` trigger blocking non-Owner void flips. User picked
+        (B) for real DB-level enforcement, matching the "highest-risk
+        migration so far" framing.
+      - **New role helpers** (foundational, reused as-is by 6C-3 through
+        6C-5): `current_staff_position()` — `SECURITY DEFINER`, resolves
+        `auth.uid() → staff.user_id → staff.position`, returns null with no
+        session rather than erroring (decoupled from `staff`'s own RLS so
+        future tightening there can't break every other table's role
+        check); `is_staff()`, `is_supervisor_or_above()`, `is_owner()` —
+        plain wrappers, not `DEFINER`.
+      - **`clients`**: `staff_select`/`staff_insert` (both `is_staff()`)
+        replace the old `public_select`-only policy. Confirmed no UPDATE
+        policy is needed — no client field has an editable path anywhere in
+        the app (`points_balance` stays ledger-trigger-only via the
+        existing `SECURITY DEFINER apply_points_delta()`). No DELETE
+        policy.
+      - **`point_transactions`**: `staff_select`/`staff_insert` (both
+        `is_staff()`) replace `public_select`/`public_insert`. No
+        UPDATE/DELETE policy — unchanged, `trg_block_ledger_update`/
+        `trg_block_ledger_delete` remain the sole enforcement.
+      - **`sales`**: `staff_select`/`staff_insert` now `is_staff()`-gated
+        (was `USING(true)`/`WITH CHECK(true)`). `staff_update` now requires
+        `is_supervisor_or_above()` as the baseline floor (was
+        `USING(true)`). New `block_void_by_non_owner()` trigger
+        (`trg_block_void_by_non_owner`, `BEFORE UPDATE`) additionally
+        raises an exception if `voided` changes and the caller isn't
+        `is_owner()` — layered on top of the RLS floor, giving the
+        Owner-only void rule real DB-level teeth for the first time. No
+        DELETE policy — sales are never hard-deleted.
+      - **Migration**
+        (`supabase/migrations/20260829000000_role_helpers_and_core_loop_rls.sql`),
+        smoke-tested via a rolled-back transaction — ran the full DDL, then
+        simulated `auth.uid()`/`request.jwt.claim.sub` as `anon`, Ana
+        (Front Desk), Diego (Supervisor), and J. Cruz (Owner) in sequence
+        within one transaction (using a temp log table + `GRANT` to work
+        around this session's `execute_sql` tool aborting on the first
+        unhandled error, and row-count checks rather than exception-
+        catching for UPDATE since RLS silently filters rows rather than
+        raising) — confirmed anon sees/inserts nothing on all three
+        tables, Ana sees clients/sales but her sales UPDATE affects 0 rows,
+        `log_visit()` still succeeds for her, Diego's sales edit succeeds
+        but his void attempt is blocked by the trigger, Owner's void
+        succeeds — before applying live via `apply_migration`. Live
+        policies read back afterward and confirmed to match exactly.
+      - **Regression-tested end-to-end via real logins, not Simulate
+        Staff, per the prompt's explicit requirement**: Log Visit earn
+        case verified live in the browser as Ana (28→33 pts on the
+        "Preview Test" client, `+5 EARN — Visit: Combi Massage` appended
+        to Recent Activity). Redemption and redemption-with-upgrade cases
+        verified via the identical `log_visit()` RPC path in a second
+        rolled-back transaction as Diego/Owner respectively (Diego's
+        redemption and Owner's redemption-with-upgrade both succeeded,
+        upgrade `sales` row read back with the correct ₱500 amount) — this
+        substitution was necessary because this session's Browser pane
+        tool has a pre-existing gap unrelated to RLS: setting a native
+        `<select>`'s value doesn't propagate to this app's React state
+        (confirmed twice — the DOM/accessibility tree showed "Redeem..."
+        selected but the submitted request still carried the default
+        Combi Massage EARN), so the two non-default service selections
+        couldn't be driven reliably through the actual dropdown. One-time
+        **explicit user permission obtained** (this session's write
+        classifier blocks unreviewed direct data writes) for a real,
+        permanently-kept `+170` `ADJUSTMENT` ledger entry on "Preview
+        Test" (append-only by design, not deletable, harmless test-client
+        audit row) so the 100-point redemption threshold could be reached
+        without dozens of manual earn-clicks. Sales Edit verified live as
+        Diego (₱1,100→₱1,150, "Edited by Diego" tag correct) and reverted
+        live as Owner (back to ₱1,100, "Edited by You" — also confirming
+        Owner can edit under the Supervisor-or-above policy). Sales Void's
+        `window.confirm()` is auto-dismissed by this browser tool (same
+        known limitation documented in the Operations Phase handoff,
+        `ohm#9h4c7x2m`) so the click-through itself wasn't drivable, but
+        the identical UPDATE path was already proven live via Edit and the
+        void trigger was independently smoke-tested (Diego blocked, Owner
+        allowed) — not treated as unverified, per the established
+        precedent. Confirmed nav/role gating unchanged (Front Desk still
+        hides Staff/Logs/Analytics; Void buttons show "Owner only" for
+        Diego, enabled for Owner). Regression-checked Dashboard, Clients,
+        Staff, Bookings — all load with no console errors.
+      - **Simulate Staff still fully functional in the UI, per explicit
+        6C-2 scope** — it's what gets neutralized at the DB level by this
+        very migration (a Front Desk session using Simulate Staff to "view
+        as Owner" now gets real Owner UI affordances but not real Owner DB
+        access, since RLS is now keyed off the actual `auth.uid()` session,
+        not the client-side Simulate Staff selection) — not removed from
+        the UI itself; that's still 6C-6.
+      - See [[staff_state]], [[clients_state]], [[points_ledger_state]],
+        [[sales_state]] for the updated RLS detail.
+    - **6C-1 — Protected Routes / Middleware (No RLS Changes Yet) —
+      complete** as of 2026-08-29 (`ohm#1q6w3e9r`). Plan (matcher config,
+      redirect logic, redirect-intent scope) presented and approved
+      before implementation, per the prompt's mandatory gate.
+      - **Context loaded first**: `.ai/briefing.md`, `.ai/handoff.md`,
+        `docs/state/staff_state.md`, ADR-001's Staff Auth section,
+        `app/login/page.tsx`/`app/login/actions.ts` (read-only, to confirm
+        the exact session-reading/cookie pattern from 6A/6B before
+        building on top of it), plus a full `app/` route enumeration
+        (Dashboard, Clients, Bookings, Sales, Lockers, Call Sheet,
+        Therapists, Settings, Staff, Logs, Analytics, Login, plus root
+        `/`) so the matcher config covers every route.
+      - **Breaking-change discrepancy caught by reading the framework
+        docs before writing code, not assumed from training data**: this
+        project's Next.js version (16) has deprecated `middleware.ts` and
+        renamed the convention to `proxy.ts` (export `proxy` instead of
+        `middleware`) — functionally identical, confirmed via
+        `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md`.
+        Flagged to the user during the approval gate; built as `proxy.ts`
+        at the repo root rather than the prompt's literal
+        `middleware.ts` filename.
+      - **`proxy.ts`** (new): uses `@supabase/ssr`'s `createServerClient`
+        directly against `NextRequest`/`NextResponse` — a third cookie
+        adapter alongside the existing `lib/supabase/server.ts`
+        (Server Components) and `lib/supabase/client.ts` (browser), per
+        Supabase's documented proxy/middleware SSR pattern, not a reuse
+        of either since both are typed for their own contexts. Calls
+        `supabase.auth.getUser()` to force a session refresh on every
+        matched request. No session + path ≠ `/login` → redirect to
+        `/login?next=<original path + search>`; session + path ===
+        `/login` → redirect to `/dashboard`; everything else passes
+        through unchanged. `matcher` excludes `_next/static`,
+        `_next/image`, and standard metadata files (`favicon.ico`,
+        `sitemap.xml`, `robots.txt`) via the docs' negative-lookahead
+        pattern — covers every app route plus Server Action POSTs on
+        those routes (confirmed via the docs' own warning that a matcher
+        change can silently drop Server Function coverage).
+      - **Redirect-intent preservation was built in, not skipped** —
+        confirmed with the user as the straightforward option during the
+        approval gate rather than adding complexity silently.
+        `app/login/actions.ts`'s `login()` now reads a `next` form field
+        (guarded by a `safeNextPath` helper against open-redirect
+        payloads — must start with `/`, must not start with `//`) and
+        redirects there on success instead of hardcoding `/dashboard`;
+        error redirects also carry `next` forward so a failed login
+        attempt doesn't lose the original destination.
+        `app/login/page.tsx` reads `next` from `searchParams` and renders
+        it as a hidden form field.
+      - **Nothing else touched, by design**: no RLS policy changes on any
+        table, no removal of Simulate Staff, no role-based route
+        restriction in `proxy.ts` — it only checks "is there a session at
+        all," not "does this session's role permit this route." The
+        existing app-level `ownerOnly` nav/page-guard pattern
+        (`lib/nav.ts`, per-page content guards on Staff/Logs/Analytics)
+        remains the sole role gate, unchanged.
+      - Verified live in the browser against the shared local dev server
+        (`npx tsc --noEmit` passes clean, not relied on alone):
+        unauthenticated request to `/dashboard` correctly redirected to
+        `/login?next=%2Fdashboard`; logged in as Ana (Receptionist) →
+        redirected back to `/dashboard` (confirming redirect-intent
+        works, not just a hardcoded destination), sidebar/nav gating
+        unchanged from pre-6C-1, `/staff` still correctly blocked by the
+        existing Owner-only page guard (confirming `proxy.ts` only gates
+        session presence, not role); visiting `/login` again while
+        signed in correctly bounced to `/dashboard`; clicked Sign Out →
+        correctly bounced back to `/login`; logged in as J. Cruz (Owner)
+        → reached every route including Staff/Logs directory listing all
+        9 staff correctly. No server or console errors
+        (`read_console_messages` checked clean).
+      - See [[staff_state]] for the updated routing-protection detail.
+    - **6C-3 through 6C-5 — RLS lockdown for the remaining domains — not
+      started.** 6C-2 (above) closed the Core Loop domain
+      (`clients`/`point_transactions`/`sales`) and established the
+      reusable role helpers (`is_staff()`/`is_supervisor_or_above()`/
+      `is_owner()`/`current_staff_position()`). Remaining planned scope:
+      `bookings`/`locker_occupancy` write scoping by role, `staff`/
+      `action_logs` attribution enforcement, `promos`/`addons`/`services`/
+      `rooms`/`lockers`/`weekend_slots` (Settings domain) — exact domain
+      split per sub-step to be confirmed rather than assumed up front.
+      Each sub-step should reuse 6C-2's helper functions and get its own
+      approval gate given the Database Change Safety significance of RLS
+      changes.
+    - **6C-6 — Remove Simulate Staff — not started.** Only after 6C-2
+      through 6C-5 have RLS actually enforcing real identity at the DB
+      level; removing Simulate Staff before then would leave no way to
+      exercise the app during RLS rollout. This is also when Simulate
+      Staff's role-spoofing capability finally gets neutralized for real
+      (RLS enforcement, not just UI hiding).
 
 - **Analytics Phase: Owner-Only Reporting Dashboard (Spa-Day Bucketing)**
   (`ohm#7v2q8f5c`) — **complete** as of 2026-08-28. Plan + regression

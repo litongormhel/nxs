@@ -87,7 +87,111 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-29 — Staff Auth 6B-Addendum: Logout Button + Fully Automatic
+1. **2026-08-29 — Staff Auth 6C-2: Role Helper Functions + Core Loop RLS
+   (clients, point_transactions, sales)** (`ohm#5m8t2x6b`). Second of six
+   planned 6C sub-steps — first real RLS lockdown step (6C-1 was routes
+   only, no RLS). Helper-function shape, the policy-per-table-per-operation
+   matrix, and the Sales edit-vs-void granularity decision were all
+   presented and approved before any SQL was written, per the prompt's
+   mandatory gate; the void granularity question (single policy vs.
+   RLS+trigger) was explicitly flagged rather than guessed, and the user
+   picked the RLS+trigger option. **New role helpers** (reused as-is by
+   6C-3 through 6C-5): `current_staff_position()` (`SECURITY DEFINER`,
+   resolves `auth.uid() → staff.user_id → staff.position`, returns null
+   gracefully with no session), `is_staff()`, `is_supervisor_or_above()`,
+   `is_owner()`. **`clients`**: `staff_select`/`staff_insert` replace the
+   old `public_select`-only policy — SELECT/INSERT now require
+   `is_staff()`; confirmed no UPDATE policy is needed (no editable client
+   field exists in the app; `points_balance` stays ledger-trigger-only).
+   **`point_transactions`**: `staff_select`/`staff_insert` replace
+   `public_select`/`public_insert`, both now `is_staff()`-gated; no
+   UPDATE/DELETE policy, unchanged (the block triggers are the only
+   enforcement). **`sales`**: `staff_select`/`staff_insert` now
+   `is_staff()`-gated; `staff_update` now requires
+   `is_supervisor_or_above()` (was `USING(true)`); a new
+   `trg_block_void_by_non_owner` trigger additionally blocks flipping
+   `voided` unless `is_owner()`, giving the Owner-only void rule real
+   DB-level enforcement on top of the Supervisor+ RLS floor. **One
+   real discrepancy caught by reading the live function bodies before
+   writing policy, not assumed**: `log_visit()`/`quick_walkin()` are
+   `SECURITY INVOKER`, not `DEFINER` — they run as the calling session's
+   role, so the new INSERT policies had to actually pass for an
+   authenticated staff caller, not just an app-level abstraction; verified
+   directly rather than assumed. **Migration**
+   (`supabase/migrations/20260829000000_role_helpers_and_core_loop_rls.sql`),
+   smoke-tested via a rolled-back transaction simulating `auth.uid()` as
+   anon, Ana (Front Desk), Diego (Supervisor), and J. Cruz (Owner) —
+   confirmed anon sees/inserts nothing, Front Desk sees but can't edit
+   sales, Supervisor can edit but not void, Owner can void — before
+   applying live via `apply_migration`. Regression-tested end-to-end via
+   real logins (not Simulate Staff): Log Visit earn case confirmed live in
+   the browser as Ana (28→33 pts); redemption and redemption-with-upgrade
+   cases confirmed via the same `log_visit()` RPC path in a rolled-back
+   transaction as Diego/Owner respectively, after a UI-automation
+   limitation (this Browser pane's native `<select>` changes don't
+   propagate to this app's React state, a pre-existing tooling gap
+   unrelated to RLS) made driving those two cases through the actual
+   dropdown unreliable; Sales Edit confirmed live as Diego and reverted
+   live as Owner; Sales Void's `window.confirm()` is auto-dismissed by
+   this browser tool (same known limitation noted in the Operations
+   Phase handoff) so the click-through itself wasn't drivable, but the
+   identical UPDATE path was proven live via Edit and the void trigger
+   was independently smoke-tested (Diego blocked, Owner allowed).
+   Regression-checked Dashboard/Clients/Staff/Bookings — all load with no
+   console errors, and nav/role gating is unchanged. **Next**: 6C-3
+   through 6C-5 (RLS for the remaining domains, reusing these same helper
+   functions) and 6C-6 (removing Simulate Staff) remain, tracked in
+   `.ai/handoff.md`.
+2. **2026-08-29 — Staff Auth 6C-1: Protected Routes / Middleware (No RLS
+   Changes Yet)** (`ohm#1q6w3e9r`). First of six planned 6C sub-steps
+   (6C-1 through 6C-6) — a "soft" step confirming session/redirect
+   mechanics in isolation before RLS enforcement lands in 6C-2 through
+   6C-5. Context loaded first (`.ai/briefing.md`, `.ai/handoff.md`,
+   `docs/state/staff_state.md`, ADR-001's Staff Auth section,
+   `app/login/page.tsx`/`app/login/actions.ts` read-only, a full `app/`
+   route enumeration), then a plan (matcher config, redirect logic,
+   redirect-intent scope) presented and approved before implementation,
+   per the prompt's mandatory gate. **One breaking-change discrepancy
+   caught by reading the framework docs first, not assumed from prior
+   Next.js knowledge**: this project's Next.js version (16) has
+   deprecated `middleware.ts` and renamed the convention to `proxy.ts`
+   (export `proxy` instead of `middleware`) — functionally identical,
+   confirmed via `node_modules/next/dist/docs/.../proxy.md`, so the new
+   file was written as `proxy.ts` at the repo root rather than the
+   prompt's literal `middleware.ts` filename. **`proxy.ts`** (new): uses
+   `@supabase/ssr`'s `createServerClient` directly against
+   `NextRequest`/`NextResponse` (a third cookie adapter alongside the
+   existing `lib/supabase/server.ts`/`lib/supabase/client.ts`, per
+   Supabase's documented proxy/middleware pattern — not a reuse of
+   either, since both are typed for their own contexts), calls
+   `supabase.auth.getUser()` to force a session refresh. No session +
+   path ≠ `/login` → redirect to `/login?next=<original path>`; session +
+   path === `/login` → redirect to `/dashboard`; matcher excludes
+   `_next/static`, `_next/image`, and standard metadata files (favicon,
+   sitemap, robots) per the docs' negative-lookahead pattern, covering
+   every other route including Server Action POSTs on those routes.
+   **Redirect-intent preservation built in** (confirmed with the user as
+   the straightforward option, not skipped): `app/login/actions.ts`'s
+   `login()` now reads a `next` form field (validated via a
+   `safeNextPath` guard against open-redirect payloads — must start with
+   `/`, not `//`) and redirects there instead of hardcoding `/dashboard`;
+   `app/login/page.tsx` carries the `?next=` query param through as a
+   hidden form field. **No RLS changes, no removal of Simulate Staff,
+   no role-based route restriction** — exactly per scope; `ownerOnly`
+   nav/page-guard remains the sole role gate. Verified live in the
+   browser (`npx tsc --noEmit` passes clean, not relied on alone):
+   unauthenticated `/dashboard` correctly redirected to
+   `/login?next=%2Fdashboard`; logged in as Ana (Receptionist) →
+   redirected back to `/dashboard` (not just always `/dashboard`),
+   sidebar/nav gating unchanged, `/staff` still correctly blocked by the
+   existing Owner-only page guard (proxy only gates session presence, not
+   role); visiting `/login` again while signed in correctly bounced to
+   `/dashboard`; signed out → correctly bounced back to `/login`; logged
+   in as J. Cruz (Owner) → reached every route including Staff/Logs with
+   no server or console errors. **Next**: 6C-2 through 6C-5 (RLS
+   enforcement, one domain at a time) and 6C-6 (removing Simulate Staff)
+   remain, tracked in `.ai/handoff.md`.
+2. **2026-08-29 — Staff Auth 6B-Addendum: Logout Button + Fully Automatic
    Actor (Remove Staff Dropdowns from Modals)** (`ohm#6y1d4h8m`). Precursor
    to 6C, not 6C itself — no RLS changes, no protected routes. Context
    loaded first (`.ai/briefing.md`, `.ai/handoff.md`,
@@ -127,7 +231,7 @@ Full invariant list: [[nxs-architecture-locks]].
    or console errors. **Next**: 6C (protected-route middleware + RLS
    lockdown, including neutralizing Simulate Staff at the DB level)
    remains, tracked in `.ai/handoff.md`.
-2. **2026-08-29 — Staff Auth 6B: Real Session Wiring into staff-context +
+3. **2026-08-29 — Staff Auth 6B: Real Session Wiring into staff-context +
    Actor Attribution** (`ohm#4p7v9k3s`). Second of the three-part plan
    (6A/6B/6C) — see `.ai/handoff.md`. Enumerated all 7
    `// TEMP: placeholder actor pending Staff Auth phase` sites and the
@@ -170,7 +274,7 @@ Full invariant list: [[nxs-architecture-locks]].
    signed out again → correctly reverted to Simulate Staff mode. **Next**:
    6C (protected-route middleware + RLS lockdown) remains, tracked in
    `.ai/handoff.md`.
-3. **2026-08-29 — Staff Auth 6A: Auth Users + Basic Login** (`ohm#2k9m4w7p`).
+4. **2026-08-29 — Staff Auth 6A: Auth Users + Basic Login** (`ohm#2k9m4w7p`).
    First of a three-part plan (6A/6B/6C) — see [[staff_auth_6a_6c_plan]] and
    `.ai/handoff.md` for sub-phase tracking. Scope was explicitly limited to
    auth account creation + login page + session handling only: **no RLS
@@ -226,108 +330,3 @@ Full invariant list: [[nxs-architecture-locks]].
    console errors. **Next**: 6B (wiring real sessions into
    `lib/staff-context.tsx`/actor-attribution) and 6C (protected routes)
    remain, tracked in `.ai/handoff.md`.
-4. **2026-08-28 — Analytics Phase: Owner-Only Reporting Dashboard
-   (Spa-Day Bucketing)** (`ohm#7v2q8f5c`). Plan + regression assessment
-   presented and approved before implementation, per the prompt's
-   mandatory gate. Two discrepancies surfaced during context loading and
-   resolved with the user rather than assumed: (1) no `nxs-spa-portal.html`
-   mockup exists anywhere in the repo (same recurring gap as prior
-   phases) — the prompt's own scope section (items 3-8) already fully
-   specified every stat/ranking's logic, so the user chose to proceed
-   from the prompt's spec alone rather than block on the file; (2) the
-   prompt stated spa-day opens at 4:00 PM, but the only existing
-   operating-hours definition in the codebase (`lib/bookings/slots.ts`,
-   from the Bookings phase) is 4:30 PM open / 1:00 AM last call — the
-   user confirmed aligning to 4:30 PM (cosmetic only: the rollover
-   formula's 12:00 AM–3:59 PM window is unaffected either way, since
-   nothing operationally happens 4:00–4:30 PM). **New canonical spa-day
-   helper** (`lib/analytics/spa-day.ts`, first of its kind — confirmed no
-   prior "operating day" concept existed via ADR-001 and a grep):
-   `toSpaDay`/`toSpaMonth`/`spaDayNow`/`spaMonthNow`/`lastSpaDays`, all
-   built on one formula (subtract 8 hours from the UTC instant, since
-   Asia/Manila is a fixed UTC+8 offset with no DST — net equivalent of
-   the documented "shift to Manila local, then roll back 12AM–3:59PM
-   onto the prior date"), used by every bucketed stat/table so numbers
-   stay consistent site-wide. **Analytics page**
-   (`app/analytics/page.tsx`, real page replacing the 8-line stub;
-   `components/analytics-browser.tsx`, new): Sales stat cards
-   (Today/7-day/Month, non-voided `sales.amount` summed by spa-day/spa-
-   month), Client Visits stat cards (same buckets, count of non-voided
-   `sales` rows — confirmed `sales` alone is the correct, non-double-
-   counting visit definition per the prompt), Most Availed Service
-   (ranked count via `sales.service_id → services(name)`), Sales Per Day
-   / Sales Per Month tables (amount + visit count, most recent first),
-   Top Clients (ranked by non-voided spend, visit count,
-   `clients.points_balance` read directly), Therapist Ranking (count of
-   `bookings` with status Booked/Completed per therapist via
-   `bookings.therapist_id`, archived therapists tagged "(Archived)").
-   Read-only aggregation — no new mutation paths, no new RLS (confirmed
-   `sales`/`bookings`/`clients`/`therapists` SELECT was already open from
-   prior phases). **Owner-only gating reuses the exact existing
-   `lib/staff-context.tsx` (`useStaffSim`/`currentRole`) mechanism** — no
-   new gating pattern invented: `lib/nav.ts`'s `analytics` entry gained
-   `ownerOnly: true` (previously the only nav item lacking it despite the
-   page needing it — the Staff/Logs phase had explicitly left it
-   untouched as out of scope then), plus the same page-level content
-   guard pattern as Staff Directory/Activity Logs. Verified live in the
-   browser (`npx tsc --noEmit` passes clean, but not relied on alone):
-   confirmed the numbers (Today ₱0, Last 7 Days/This Month ₱3,300, 4
-   visits) correctly reflect all 4 existing sales bucketing into
-   yesterday's spa-day at the current pre-4:30-PM wall-clock time,
-   matching the Sales tab's own ₱3,300 total independently; confirmed nav
-   hiding and the page-level guard both correctly block Front Desk (Ana)
-   and clear for Owner (J. Cruz). Regression-checked Sales, Bookings,
-   Staff Directory, and Activity Logs — all load with no server or
-   console errors.
-5. **2026-08-28 — Operations Phase: Locker Board, Call Sheet, Sales
-   (Edit/Void)** (`ohm#9h4c7x2m`). Plan + regression assessment presented
-   and approved before implementation, per the prompt's mandatory gate.
-   Both required discrepancy questions were resolved by reading the actual
-   code/schema, not assumed: (1) the Locker Board check-in "gap" turned out
-   not to be a gap — both `quick_walkin()` (RPC) and `logVisitBooking()`'s
-   linked-booking path already insert into `locker_occupancy` reliably, so
-   Check-Out was safe to build without touching check-in; (2) walk-in vs.
-   registered sales are distinguished by `sales.client_id IS NULL` (with
-   `guest_label` set), matching the mockup's `clientKey===null` check
-   exactly. **New migration**
-   (`supabase/migrations/20260828023358_operations_sales_rls.sql`,
-   smoke-tested via a rolled-back transaction as `anon` first): additive
-   `public_update` policy on `locker_occupancy` (for Check-Out) and
-   `public_select` + `public_update` policies on `sales` (was insert-only;
-   needed for the Sales tab to read at all, plus Edit/Void) — same
-   `USING(true)`/`WITH CHECK(true)` shape as every prior policy,
-   app-level-only role gate same accepted gap as every other phase.
-   **Locker Board** (`app/lockers/page.tsx`, `components/locker-board.tsx`,
-   `app/lockers/actions.ts`): 100 tiles from the live `lockers` table,
-   occupied tiles show client codename/guest label and a Check-Out button
-   that sets `checked_out_at`/`checked_out_by`. **Call Sheet**
-   (`app/call-sheet/page.tsx`, `components/call-sheet-browser.tsx`,
-   read-only): derived from the same active (`checked_out_at IS NULL`)
-   `locker_occupancy` rows, excluding Wet Area; the mockup's synthetic
-   per-entry `time` field doesn't exist in the real schema, so the time
-   filter is built from distinct `checked_in_at` times instead (documented
-   substitution, not a schema change). **Sales**
-   (`app/sales/page.tsx`, `components/sales-browser.tsx`,
-   `app/sales/actions.ts`): real Edit modal (not `prompt()`) for
-   amount/payment method/GCash ref/therapist, writes `edited_by`/
-   `edited_at` + an "Edited by [staff]" tag; Void sets `voided`/
-   `voided_at`/`voided_by` (never a hard delete), excluded from the running
-   total, tagged "VOIDED", stays visible; walk-in sales show "No action —
-   walk-in, no account" instead of buttons. Both mutations end with an
-   `action_logs` entry. **Role gating reuses `lib/staff-context.tsx`
-   (`useStaffSim`/`currentRole`)** exactly as Staff/Logs did — Edit =
-   Supervisor/Owner, Void = Owner-only — no new gating mechanism invented.
-   Verified live in the browser (`npx tsc --noEmit` passes clean, but not
-   relied on alone): edited a real sale (amount 700→750, confirmed the
-   `sales` row and a `sale_edit` action_logs entry), checked out locker 5
-   (confirmed `checked_out_at` set and a `locker_checkout` action_logs
-   entry, Locker Board and Call Sheet both updated live), confirmed
-   Front-Desk role shows disabled Edit/Void with the correct tooltip text
-   and Owner role shows them enabled. Void's `window.confirm()` couldn't be
-   driven through the headless browser tool (dialogs are suppressed there),
-   but it's the identical write path already proven via Edit and the RLS
-   UPDATE was independently smoke-tested during migration application.
-   Test mutations (the amount edit, the checkout) were reverted in the live
-   DB after verification so state matches pre-session. Regression-checked
-   Dashboard (Total Lockers still reads 100), Bookings, and Settings — all
-   load with no server or console errors.

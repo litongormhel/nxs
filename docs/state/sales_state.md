@@ -25,16 +25,29 @@
   to the staff member picked in the modal's placeholder-actor dropdown.
   This is the **only** write path; nothing in the app edits, voids, or
   lists `sales` directly yet.
-- RLS: `anon` had an `INSERT`-only policy (`public_insert`,
-  `WITH CHECK (true)`) from Core Loop. The Operations phase
-  (`ohm#9h4c7x2m`, migration `20260828023358_operations_sales_rls.sql`)
-  added `public_select` (`USING (true)`) and `public_update`
-  (`USING(true)`/`WITH CHECK(true)`) — needed once the Sales tab started
-  reading and mutating rows. Same additive shape as every prior policy.
-  **App-level-only role gate, same accepted gap as every other phase**:
-  the DB grants SELECT/UPDATE to any anon/authenticated caller; the actual
-  Edit = Supervisor/Owner, Void = Owner-only restriction is enforced only
-  in app code via `lib/staff-context.tsx`'s `currentRole`.
+- **RLS, real role-based as of Staff Auth 6C-2 (`ohm#5m8t2x6b`,
+  2026-08-29)**: the additive `public_select`/`public_insert`/
+  `public_update` (`USING`/`WITH CHECK (true)`) policies from Core
+  Loop/Operations are gone. `staff_select`/`staff_insert` now require
+  `is_staff()` (any of the 8 loginable staff). `staff_update` now requires
+  `is_supervisor_or_above()` as a DB-level floor — Front Desk sessions can
+  no longer UPDATE a sale at all (previously silently allowed, just
+  app-hidden). **Void is now also DB-enforced, not just app-gated**: a new
+  `BEFORE UPDATE` trigger (`trg_block_void_by_non_owner` →
+  `block_void_by_non_owner()`) raises an exception if `voided` changes and
+  the caller isn't `is_owner()`, layered on top of the `staff_update` RLS
+  floor — a Supervisor can still edit amount/payment/therapist but cannot
+  flip `voided`, matching ADR-001's "Supervisor can edit, Owner-only can
+  void" exactly, now at the DB layer. No DELETE policy — sales are never
+  hard-deleted. **This closes the "app-level-only role gate" accepted gap
+  noted below for every prior phase** — real DB access now matches the
+  UI's Edit/Void role gating, and a Simulate-Staff-only session (no real
+  `auth.uid()`) gets no real sales access regardless of the simulated
+  role. Smoke-tested via a rolled-back transaction (anon/Front
+  Desk/Supervisor/Owner) and regression-verified live via real logins:
+  Diego (Supervisor) edited a sale successfully but is blocked from
+  voiding; J. Cruz (Owner) voids successfully. See [[staff_state]] for the
+  shared role-helper functions.
 
 ## Implemented (app level) — Operations Phase (`ohm#9h4c7x2m`, 2026-08-28)
 

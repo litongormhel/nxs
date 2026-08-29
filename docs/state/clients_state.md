@@ -36,17 +36,24 @@ No legal-name column exists. No companion/tagging construct exists.
 
 ## RLS
 
-`clients` has row-level security enabled. Public-select access was added
-then explicitly locked down (migrations `add_public_select_policies_...`
-then `12_lock_down_clients_public_select`), then re-added narrowly by Core
-Loop (`core_loop_rls_policies`: `public_select`, `SELECT`, `USING (true)`)
-so the anon client can read the Client Profile page and the Log Visit
-modal's staff/service pickers. **No UPDATE policy exists on `clients` and
-none was added** — `points_balance` only ever changes via the
-`SECURITY DEFINER` trigger described in [[points_ledger_state]], never a
-direct client-side update. Check the current policy definition directly in
-Supabase before assuming what's readable/writable by the anon client; do
-not assume it matches an older migration in isolation.
+**Real role-based RLS as of Staff Auth 6C-2 (`ohm#5m8t2x6b`, 2026-08-29)**:
+the prior `public_select` (`USING (true)`) policy is gone. `clients` now
+has `staff_select` (`SELECT`, `USING (is_staff())`) and `staff_insert`
+(`INSERT`, `WITH CHECK (is_staff())`) — both keyed off the new
+`is_staff()` helper (`auth.uid() → staff.user_id → staff.position`, true
+for any of the 8 loginable staff, false/no-error with no session). A
+Simulate-Staff-only session (no real `auth.uid()`) now gets **no** DB
+access to this table regardless of the simulated role — Simulate Staff no
+longer grants real data access, only UI affordances. **No UPDATE policy
+exists on `clients` and none was added** — confirmed no client field has
+an editable path anywhere in the app; `points_balance` only ever changes
+via the `SECURITY DEFINER` trigger described in [[points_ledger_state]],
+never a direct client-side update. No DELETE policy. Smoke-tested via a
+rolled-back transaction simulating `auth.uid()` as anon/Front
+Desk/Supervisor/Owner before applying live — see [[staff_state]] for the
+full helper-function and cross-table detail. Check the current policy
+definition directly in Supabase before assuming what's readable/writable;
+do not assume it matches an older migration in isolation.
 
 ## Not yet implemented — see roadmap
 

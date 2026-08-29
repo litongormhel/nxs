@@ -46,10 +46,21 @@
     never merged into one entry.
   - Called from `app/clients/actions.ts` (`logVisit` server action) via
     `supabase.rpc("log_visit", ...)`.
-- RLS: `anon` has `SELECT`/`INSERT` policies on `point_transactions`
-  (`public_select`, `public_insert`, both `USING/WITH CHECK (true)`) — no
-  `UPDATE`/`DELETE` policy exists or is needed; the block triggers are the
-  only enforcement and were verified intact before and after this change.
+- **RLS, real role-based as of Staff Auth 6C-2 (`ohm#5m8t2x6b`,
+  2026-08-29)**: the prior `public_select`/`public_insert`
+  (`USING`/`WITH CHECK (true)`) policies are gone, replaced by
+  `staff_select` (`SELECT`, `USING (is_staff())`) and `staff_insert`
+  (`INSERT`, `WITH CHECK (is_staff())`) — `is_staff()` resolves
+  `auth.uid() → staff.user_id → staff.position`, true for any of the 8
+  loginable staff. Confirmed `log_visit()` (see below) still works
+  end-to-end under this policy despite being `SECURITY INVOKER` — it
+  inserts as the calling session's role, so the INSERT policy has to (and
+  does) actually pass for an authenticated staff caller, not just gate the
+  app layer. No `UPDATE`/`DELETE` policy exists or is needed — the block
+  triggers remain the sole enforcement, verified intact before and after
+  this change. Ledger immutability itself is unchanged by this migration;
+  only who may `SELECT`/`INSERT` changed. See [[staff_state]] for the
+  shared role-helper functions this and every other 6C-2+ policy uses.
 
 ## Not yet implemented — see roadmap
 
