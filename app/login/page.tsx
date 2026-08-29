@@ -4,9 +4,9 @@ import { login, logout } from "./actions";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, next } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -34,6 +34,7 @@ export default async function LoginPage({
           </div>
         ) : (
           <form action={login} className="space-y-4">
+            <input type="hidden" name="next" value={next ?? "/dashboard"} />
             {error && (
               <p className="text-sm text-red-400 border border-red-900/50 bg-red-950/30 rounded-md px-3 py-2">
                 {error}
