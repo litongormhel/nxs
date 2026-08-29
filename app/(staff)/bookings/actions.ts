@@ -199,7 +199,8 @@ export type ChangeTherapistResult =
 export async function changeBookingTherapist(
   bookingId: string,
   newTherapistId: string,
-  staffId: string
+  staffId: string,
+  newStartTime: string
 ): Promise<ChangeTherapistResult> {
   const supabase = await createClient();
 
@@ -216,17 +217,20 @@ export async function changeBookingTherapist(
   if (booking.status === "Completed" || booking.status === "Cancelled") {
     return {
       ok: false,
-      error: "Therapist cannot be changed on a Completed or Cancelled booking.",
+      error: "Cannot change a Completed or Cancelled booking.",
     };
   }
 
-  if (booking.therapist_id === newTherapistId) {
-    return { ok: false, error: "That therapist is already assigned to this booking." };
+  const therapistChanged = booking.therapist_id !== newTherapistId;
+  const timeChanged = booking.start_time !== newStartTime;
+
+  if (!therapistChanged && !timeChanged) {
+    return { ok: false, error: "No changes were made." };
   }
 
   const { error: updateErr } = await supabase
     .from("bookings")
-    .update({ therapist_id: newTherapistId })
+    .update({ therapist_id: newTherapistId, start_time: newStartTime })
     .eq("id", bookingId);
 
   if (updateErr) {
@@ -239,18 +243,27 @@ export async function changeBookingTherapist(
     return { ok: false, error: updateErr.message };
   }
 
-  const { data: therapists } = await supabase
-    .from("therapists")
-    .select("id, name")
-    .in("id", [booking.therapist_id, newTherapistId].filter((id): id is string => !!id));
+  // Build activity log detail — only log what actually changed.
+  const logParts: string[] = [`booking_id=${bookingId} date=${booking.booking_date}`];
 
-  const oldName = therapists?.find((t) => t.id === booking.therapist_id)?.name ?? "Unassigned";
-  const newName = therapists?.find((t) => t.id === newTherapistId)?.name ?? newTherapistId;
+  if (therapistChanged) {
+    const ids = [booking.therapist_id, newTherapistId].filter((id): id is string => !!id);
+    const { data: therapistRows } = ids.length
+      ? await supabase.from("therapists").select("id, name").in("id", ids)
+      : { data: [] };
+    const oldName = therapistRows?.find((t) => t.id === booking.therapist_id)?.name ?? "Unassigned";
+    const newName = therapistRows?.find((t) => t.id === newTherapistId)?.name ?? newTherapistId;
+    logParts.push(`old_therapist=${oldName} new_therapist=${newName}`);
+  }
+
+  if (timeChanged) {
+    logParts.push(`old_time=${booking.start_time} new_time=${newStartTime}`);
+  }
 
   await supabase.from("action_logs").insert({
     staff_id: staffId,
     action: "change_therapist",
-    detail: `booking_id=${bookingId} date=${booking.booking_date} time=${booking.start_time} old_therapist=${oldName} new_therapist=${newName}`,
+    detail: logParts.join(" "),
   });
 
   revalidatePath("/bookings");

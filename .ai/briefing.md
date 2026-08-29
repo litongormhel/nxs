@@ -82,7 +82,23 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-29 — Bookings: Change Therapist action** (`ohm#7k2m9xq4`).
+1. **2026-08-29 — Bookings: Change modal extension** (`ohm#8p4t2vk6`).
+   Extends the Change Therapist feature: renames "Change Therapist"
+   button/modal title to "Change" on `Booked`/`No-show` rows ("Reassign"
+   on `Needs Reassignment` unchanged); adds a `Start Time` input to the
+   modal pre-filled with the booking's current time; excludes the currently
+   assigned therapist from the dropdown entirely; adds a debounced
+   (300 ms) live availability `useEffect` that re-queries same-day
+   bookings and uses `slotsOverlap()` to grey out / disable conflicting
+   therapists with a "— Unavailable" suffix (room availability explicitly
+   excluded per task instructions); extends `changeBookingTherapist()`
+   server action with a `newStartTime` parameter — writes `start_time` to
+   the DB (trigger recomputes `start_ts`/`end_ts`, GiST constraint enforces
+   the new window), and conditionally logs only the fields that actually
+   changed (`old_therapist → new_therapist`, `old_time → new_time`, or
+   both). No migration required. `npx tsc --noEmit` and `eslint` both
+   clean. See [[bookings_state]].
+2. **2026-08-29 — Bookings: Change Therapist action** (`ohm#7k2m9xq4`).
    Adds a "Change Therapist" action on any booking not `Completed`/
    `Cancelled` (`Booked`, `No-show`, `Needs Reassignment`) — reassigns
    `therapist_id` only, room/locker untouched. Plan + regression risk
@@ -103,7 +119,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Verified live: reassignment round-tripped in the browser and the
    Activity Log entry appeared correctly. `npx tsc --noEmit` and `eslint`
    both clean. See [[bookings_state]].
-2. **2026-08-29 — Client Portal 7A-3: Registration/Login Revision —
+3. **2026-08-29 — Client Portal 7A-3: Registration/Login Revision —
    Password Auth** (`ohm#9r3w7t5b`). Rework of the already-shipped 7A-2
    registration/login flow: replaces PIN-based auth with password-based
    auth and makes `username` user-chosen at registration (was
@@ -137,7 +153,7 @@ Full invariant list: [[nxs-architecture-locks]].
    login by both username and phone, staff `/dashboard` unaffected.
    `npx tsc --noEmit` and `eslint` both clean. See [[client_portal_state]].
 
-3. **2026-08-29 — Settings 7B-3: Service/Promo Soft-Delete — Verified
+4. **2026-08-29 — Settings 7B-3: Service/Promo Soft-Delete — Verified
    Already Complete** (`ohm#1d5r6nz4`). Read-only investigation (plan
    presented and approved before touching anything, per the prompt's
    mandatory gate) found soft delete, active-only dropdown filtering,
@@ -145,7 +161,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `services`/`promos` were all already in place from `ohm#5x1p8m3v`/6C-4.
    No migration or code change made. See [[settings_state]] and
    `.ai/handoff.md` for the full verification trail.
-4. **2026-08-29 — Settings 7B-2: Confirm Dialogs + Global Theme Fix**
+5. **2026-08-29 — Settings 7B-2: Confirm Dialogs + Global Theme Fix**
    (`ohm#4k9p2xq7` + `ohm#7t3m8vw1`). New reusable
    `components/confirm-dialog.tsx` replaces `window.confirm()` on
    Settings' 4 delete flows (Service/Promo/Weekend Slot/Add-on) — Add
@@ -159,64 +175,3 @@ Full invariant list: [[nxs-architecture-locks]].
    Localstorage-only persistence unchanged. Verified live: theme now
    holds across Dashboard/Sales/reload; confirm dialog tested end-to-end.
    See [[settings_state]] and `.ai/handoff.md` for detail.
-5. **2026-08-29 — Client Portal 7A-2: Master QR & Registration Flow**
-   (`ohm#4m8x1v6q`). First client-facing surface of the Client Portal —
-   builds on 7A-1's schema. Plan + regression risk assessment presented and
-   approved before any code was written, per the prompt's mandatory gate;
-   a follow-up layout question (root layout unconditionally rendering the
-   staff Sidebar around all routes) was flagged and approved separately
-   before touching it.
-   **One thing verified, not trusted, before starting**: the prompt claimed
-   7A-1 (`ohm#7a1f9c2k`) was "completed and merged" — at first read this was
-   false (no migration, no commit, no `docs/state/client_portal_state.md`
-   anywhere in the repo; the ADR-001/briefing.md text describing it was an
-   uncommitted working-tree edit with a literal unfilled `[DATE]`
-   changelog placeholder). Flagged to the user before any implementation;
-   the user then applied the actual 7A-1 migration live, confirmed via
-   `list_migrations`/`list_tables` before proceeding — `client_portal_accounts`
-   and the `clients.phone` unique constraint are real and committed.
-   **Route-group refactor** (approved separately, not in the original
-   plan): `app/layout.tsx` was the literal HTML root and unconditionally
-   wrapped every route in the staff `Sidebar`/`StaffSimProvider`/staff
-   session lookup — a portal page nested under it would still show staff
-   nav and run a needless staff-session query. Moved all 13 existing route
-   folders into `app/(staff)/` with their own layout carrying the exact
-   same Sidebar/session logic (mechanical, same URLs — parenthesized route
-   groups don't affect routing); slimmed `app/layout.tsx` to bare
-   `html`/`body` + fonts. Every `@/app/<route>/actions` import across
-   `components/*.tsx` updated to the new `@/app/(staff)/<route>/actions`
-   path. **`proxy.ts`**: added an early return excluding `/portal/*` from
-   the staff-session gate — the only touch to shared staff logic; the
-   existing redirect/matcher logic for staff routes is unchanged.
-   **New `/portal/*` surface**: registration (Phone/PIN/Name → match
-   existing `clients.phone` or create new client, preserving points/history
-   on match) and login (Phone+PIN), both via server-only Route Handlers
-   using the service-role Supabase client — required because
-   `client_portal_accounts` is RLS default-deny and `clients` INSERT
-   requires `is_staff()`, so an anonymous visitor cannot register through
-   the anon-key path the rest of the app uses; this is a deliberate,
-   narrowly-scoped exception to the repo's anon-key-only convention,
-   confined to two Route Handlers. PIN hashed with Node's built-in
-   `crypto.scrypt` (no new dependency); portal session is a separate
-   HMAC-signed cookie (`nxs_portal_session`, scoped to `/portal`,
-   signed with `SUPABASE_SERVICE_ROLE_KEY`) — entirely distinct from
-   Supabase Auth's staff session cookies. System-generated portal
-   `username` (e.g. `NXS-XKUCU4`) shown on a minimal confirmation screen,
-   never editable, never encoded in the QR. **Master QR**: static
-   `qrcode`-rendered image (new dependency) on a staff-gated page at
-   `/settings/master-qr`, linked from the existing Settings page — encodes
-   `/portal/register` built from the live request host so it's correct in
-   every environment without new env config. **Verified live in the
-   browser, not just typechecked**: registration created a real client +
-   portal account end-to-end, login with the same phone/PIN round-tripped
-   to the same account, `/dashboard` and other staff routes still required
-   the existing staff session and rendered the full Sidebar/Owner nav
-   unaffected by the refactor, Master QR rendered and correctly encoded
-   the registration URL. `npx tsc --noEmit` and `eslint` both clean.
-   Explicitly out of scope per the prompt (next prompts): Member QR,
-   `log_visit` RPC lookup integration, phone masking/reveal UI, points/
-   history/promos views. One test artifact left live, matching this
-   repo's established precedent of leaving harmless test data documented
-   rather than deleting it via SQL: client "Test Client 7A2"
-   (phone `09171234567`), portal account `NXS-XKUCU4`. See
-   [[client_portal_state]] for the updated state.

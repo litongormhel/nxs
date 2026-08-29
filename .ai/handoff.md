@@ -5,6 +5,36 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Bookings: Change modal extension — complete** (`ohm#8p4t2vk6`,
+  2026-08-29). Extends the existing Change Therapist feature into a
+  general "Change" action: renames button and modal title to "Change",
+  adds a `Start Time` input (pre-filled from booking's current time),
+  excludes the current therapist from the picker, and adds live therapist
+  availability greying that re-checks on every time change (debounced
+  300 ms, client-side Supabase query + `slotsOverlap()`).
+  - **No schema change / no migration** — `trg_bookings_set_computed_fields`
+    fires on `BEFORE INSERT OR UPDATE`, so writing `start_time` in the
+    UPDATE payload recomputes `start_ts`/`end_ts` automatically. The
+    existing `no_double_book_therapist` GiST constraint then enforces on
+    the new time window. Confirmed from migration before writing code.
+  - **Files changed**:
+    - `app/(staff)/bookings/actions.ts` — `changeBookingTherapist()` gains
+      a fourth param `newStartTime: string`; UPDATE payload now writes both
+      `therapist_id` and `start_time`; activity log detail is conditional
+      (`old_therapist → new_therapist` / `old_time → new_time` / both),
+      logged only for changed fields. No-op guard now covers both fields.
+    - `components/booking-browser.tsx` — "Change Therapist" button →
+      "Change"; modal title "Change Therapist" → "Change"; `reassignStartTime`
+      + `availabilityMap` + `availabilityLoading` state added; live
+      availability `useEffect` (debounced, with `cancelled` flag to prevent
+      stale state); therapist picker excludes current therapist; disabled
+      options labelled "— Unavailable"; time input in modal resets
+      therapist selection on change.
+  - **Room availability**: explicitly NOT checked — only therapist
+    conflicts matter here, as specified. Room reassignment on time change
+    is out of scope.
+  - **Verified**: `npx tsc --noEmit` and `eslint` both clean.
+
 - **Bookings: Change Therapist action — complete** (`ohm#7k2m9xq4`,
   2026-08-29). Adds a "Change Therapist" action on an existing booking,
   reassigning `therapist_id` only — room/locker untouched. Plan +

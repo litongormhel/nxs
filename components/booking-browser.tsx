@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { updateBookingStatus, changeBookingTherapist } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
+import { slotsOverlap } from "@/lib/bookings/slots";
 import { BookingFormModal } from "@/components/booking-form-modal";
 import { QuickWalkinModal } from "@/components/quick-walkin-modal";
 import { LogVisitModal } from "@/components/log-visit-modal";
@@ -93,8 +94,11 @@ export function BookingBrowser({
   const [logVisitBooking, setLogVisitBooking] = useState<BookingRow | null>(null);
   const [reassignBooking, setReassignBooking] = useState<BookingRow | null>(null);
   const [reassignTherapistId, setReassignTherapistId] = useState("");
+  const [reassignStartTime, setReassignStartTime] = useState("");
   const [reassignError, setReassignError] = useState<string | null>(null);
   const [reassignSaving, setReassignSaving] = useState(false);
+  const [availabilityMap, setAvailabilityMap] = useState<Record<string, boolean>>({});
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const loading = loadedFor !== date;
 
   useEffect(() => {
@@ -141,15 +145,65 @@ export function BookingBrowser({
 
   function openReassign(row: BookingRow) {
     setReassignBooking(row);
-    setReassignTherapistId(row.therapist_id ?? "");
+    setReassignTherapistId("");
+    setReassignStartTime(row.start_time);
     setReassignError(null);
+    setAvailabilityMap({});
   }
 
+  // Live therapist availability — re-runs whenever the modal is open or the time changes.
+  // Debounced 300 ms to avoid a query storm while the user types a custom time.
+  useEffect(() => {
+    if (!reassignBooking) return;
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      if (cancelled) return;
+      setAvailabilityLoading(true);
+      const supabase = createClient();
+      const { data: sameDayBookings } = await supabase
+        .from("bookings")
+        .select("therapist_id, start_time, duration_minutes, status")
+        .eq("booking_date", reassignBooking.booking_date)
+        .in("status", ["Booked", "Completed", "Needs Reassignment"])
+        .neq("id", reassignBooking.id);
+
+      if (cancelled) return;
+      const map: Record<string, boolean> = {};
+      for (const t of therapists) {
+        const conflict = (sameDayBookings ?? []).some(
+          (b) =>
+            b.therapist_id === t.id &&
+            slotsOverlap(
+              reassignStartTime,
+              reassignBooking.duration_minutes ?? 60,
+              b.start_time,
+              b.duration_minutes ?? 60
+            )
+        );
+        map[t.id] = !conflict; // true = available
+      }
+      setAvailabilityMap(map);
+      setAvailabilityLoading(false);
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [reassignBooking, reassignStartTime, therapists]);
+
+
   async function handleConfirmReassign() {
-    if (!reassignBooking || !reassignTherapistId || !sessionStaff) return;
+    if (!reassignBooking || !reassignTherapistId || !reassignStartTime || !sessionStaff) return;
     setReassignSaving(true);
     setReassignError(null);
-    const res = await changeBookingTherapist(reassignBooking.id, reassignTherapistId, sessionStaff.id);
+    const res = await changeBookingTherapist(
+      reassignBooking.id,
+      reassignTherapistId,
+      sessionStaff.id,
+      reassignStartTime
+    );
     setReassignSaving(false);
     if (!res.ok) {
       setReassignError(res.error);
@@ -159,6 +213,7 @@ export function BookingBrowser({
     reload();
     router.refresh();
   }
+
 
   return (
     <div className="mt-6 space-y-6">
@@ -302,7 +357,7 @@ export function BookingBrowser({
                           onClick={() => openReassign(row)}
                           className="rounded-md border border-border bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-muted hover:brightness-125 transition-all"
                         >
-                          Change Therapist
+                          Change
                         </button>
                       )}
                     </div>
@@ -375,26 +430,59 @@ export function BookingBrowser({
       {reassignBooking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-foreground">Change Therapist</h3>
+            <h3 className="text-base font-bold text-foreground">Change</h3>
             <p className="text-xs text-muted">
-              {clientLabel(reassignBooking)} · {fmtDate(reassignBooking.booking_date)}{" "}
-              {fmtTime(reassignBooking.start_time)} · Currently:{" "}
-              {therapistName(reassignBooking.therapist_id)}
+              {clientLabel(reassignBooking)} · {fmtDate(reassignBooking.booking_date)} · Currently:{" "}
+              {fmtTime(reassignBooking.start_time)} · {therapistName(reassignBooking.therapist_id)}
             </p>
-            <select
-              value={reassignTherapistId}
-              onChange={(e) => setReassignTherapistId(e.target.value)}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
-            >
-              <option value="" disabled>
-                Select therapist
-              </option>
-              {therapists.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
+
+            {/* Time input */}
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted" htmlFor="change-start-time">
+                Start Time
+              </label>
+              <input
+                id="change-start-time"
+                type="time"
+                value={reassignStartTime}
+                onChange={(e) => {
+                  setReassignStartTime(e.target.value);
+                  setReassignTherapistId("");
+                }}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+              />
+            </div>
+
+            {/* Therapist select */}
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted" htmlFor="change-therapist">
+                Therapist
+              </label>
+              <select
+                id="change-therapist"
+                value={reassignTherapistId}
+                onChange={(e) => setReassignTherapistId(e.target.value)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+              >
+                <option value="" disabled>
+                  Select therapist
                 </option>
-              ))}
-            </select>
+                {therapists
+                  .filter((t) => t.id !== reassignBooking.therapist_id)
+                  .map((t) => {
+                    const available = availabilityMap[t.id] ?? true;
+                    return (
+                      <option key={t.id} value={t.id} disabled={!available}>
+                        {t.name}{!available ? " — Unavailable" : ""}
+                      </option>
+                    );
+                  })}
+              </select>
+              {availabilityLoading && (
+                <p className="text-[10px] text-muted">Checking availability…</p>
+              )}
+            </div>
+
             {reassignError && <p className="text-xs text-accent-red">{reassignError}</p>}
             <div className="flex gap-2 pt-2">
               <button
@@ -416,6 +504,7 @@ export function BookingBrowser({
           </div>
         </div>
       )}
+
     </div>
   );
 }

@@ -183,6 +183,47 @@ room/locker.
 - No changes to Points Ledger or Sales — confirmed no code path in this
   change writes to `point_transactions` or `sales`.
 
+**Correction, `ohm#8p4t2vk6` (2026-08-29)** — extends the Change action to
+also update `start_time`, renames labels to "Change", and adds live
+therapist availability greying.
+
+- **Rename**: "Change Therapist" button (on `Booked`/`No-show` rows) and
+  shared modal title both renamed to "Change". The "Reassign" button on
+  `Needs Reassignment` rows is unchanged.
+- **Time field**: modal now contains a `Start Time` input above the
+  therapist select, pre-filled with the booking's current `start_time`.
+  Changing the time clears the therapist selection and triggers a live
+  re-query.
+- **Current therapist excluded**: the therapist currently assigned to the
+  booking is removed from the dropdown entirely (not just default-selected).
+  Server action already rejected a no-op reassignment; the exclusion is
+  additive defense-in-depth UX.
+- **Live availability greying**: a `useEffect` debounced at 300 ms fires
+  on every time change (and on modal open) — fetches all same-date bookings
+  with status `Booked`/`Completed`/`Needs Reassignment` excluding the
+  booking being changed, then uses `slotsOverlap()` (from
+  `lib/bookings/slots.ts`) client-side to determine which therapists
+  conflict. Conflicting therapists are disabled and labelled "— Unavailable"
+  in the select. A "Checking availability…" hint shows while the query is
+  in flight. Room availability is **not** checked here — explicitly out of
+  scope per task instructions.
+- **Server action extended** (`changeBookingTherapist`): now accepts a
+  fourth parameter `newStartTime: string`. Writes `start_time` to the
+  `bookings` row alongside `therapist_id`; `trg_bookings_set_computed_fields`
+  fires on UPDATE and recomputes `start_ts`/`end_ts` automatically, so
+  `no_double_book_therapist` GiST constraint enforces on the new time window.
+  23P01 error path unchanged. **No migration required.**
+- **Conditional activity logging**: the action now logs only what changed —
+  `old_therapist → new_therapist` if therapist changed, `old_time →
+  new_time` if time changed, or both if both changed. A no-op (neither
+  changed) is rejected early. Action name in `action_logs` stays
+  `"change_therapist"`.
+- `No-show` conflict scope caveat (existing, unchanged): `No-show` is
+  outside the GiST constraint's `WHERE` predicate, so a time/therapist
+  change on a `No-show` booking is not DB-conflict-checked. The UI
+  availability query is a best-effort hint regardless; the constraint's
+  existing designed scope is unchanged.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - Therapist options are not filtered by `therapist_services` (which
