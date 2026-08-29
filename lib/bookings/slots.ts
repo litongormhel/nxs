@@ -24,6 +24,17 @@ function toMinutesSinceOpen(time: string): number {
   return minutes < 16 * 60 ? minutes + 24 * 60 : minutes;
 }
 
+// Sorts HH:MM times in operating-day order (4:30 PM open through 1:00 AM last call)
+// rather than plain string/24-hr order, so slots configured in Settings display and
+// populate the booking pickers in the order they actually occur during the shift.
+export function sortSlotTimes(times: string[]): string[] {
+  return [...times].sort((a, b) => toMinutesSinceOpen(a) - toMinutesSinceOpen(b));
+}
+
+export function compareSlotTimes(a: string, b: string): number {
+  return toMinutesSinceOpen(a) - toMinutesSinceOpen(b);
+}
+
 export function slotsOverlap(
   startA: string,
   durationA: number,

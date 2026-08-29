@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { SettingsBrowser } from "@/components/settings-browser";
+import { compareSlotTimes } from "@/lib/bookings/slots";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -27,10 +28,7 @@ export default async function SettingsPage() {
       .select("id, name, price")
       .eq("active", true)
       .order("name", { ascending: true }),
-    supabase
-      .from("weekend_slots")
-      .select("id, slot_time")
-      .order("slot_time", { ascending: true }),
+    supabase.from("weekend_slots").select("id, slot_time"),
     supabase
       .from("lockers")
       .select("*", { count: "exact", head: true })
@@ -51,10 +49,12 @@ export default async function SettingsPage() {
         initialServices={services ?? []}
         initialPromos={promos ?? []}
         initialAddons={addons ?? []}
-        initialWeekendSlots={(weekendSlots ?? []).map((s) => ({
-          id: s.id,
-          slot_time: s.slot_time.slice(0, 5),
-        }))}
+        initialWeekendSlots={(weekendSlots ?? [])
+          .map((s) => ({
+            id: s.id,
+            slot_time: s.slot_time.slice(0, 5),
+          }))
+          .sort((a, b) => compareSlotTimes(a.slot_time, b.slot_time))}
         initialLockersCount={lockersCount ?? 100}
         initialRoomsCount={roomsCount ?? 18}
       />

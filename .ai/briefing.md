@@ -87,7 +87,50 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-29 — Staff Auth 6A: Auth Users + Basic Login** (`ohm#2k9m4w7p`).
+1. **2026-08-29 — Staff Auth 6B: Real Session Wiring into staff-context +
+   Actor Attribution** (`ohm#4p7v9k3s`). Second of the three-part plan
+   (6A/6B/6C) — see `.ai/handoff.md`. Enumerated all 7
+   `// TEMP: placeholder actor pending Staff Auth phase` sites and the
+   product decision (not-logged-in fallback behavior) before writing any
+   code, per the prompt's mandatory approval gate; both recommended
+   options (fall back to Simulate Staff when logged out; auto-fill the 3
+   independent modal staff-pickers from the real session but keep them
+   editable) were confirmed by the user. **`lib/staff-context.tsx`**:
+   `StaffSimProvider` now accepts an optional `sessionStaff` prop —
+   `currentStaff`/`currentRole`/`selectedStaffId` prefer it over the
+   Simulate Staff selection when present, falling back to exactly the
+   prior Simulate-Staff-driven behavior when absent. Simulate Staff itself
+   is untouched and stays fully functional as the logged-out mechanism.
+   **`app/layout.tsx`**: resolves `auth.uid()` → `staff` row (via
+   `user_id`, already-open `public_select` RLS policy covers
+   `authenticated` too since it has no `to` clause) → passed down as
+   `sessionStaff`. **Two call-site patterns found and handled
+   differently**: most actor-attribution call sites (Settings, Sales,
+   Lockers, Staff Directory) already sourced `staffId` from
+   `staff-context`'s `selectedStaffId`, so fixing the context alone fixed
+   them — no per-call-site change needed beyond deleting the now-stale
+   TEMP comments. Three modals (`log-visit-modal.tsx`,
+   `booking-form-modal.tsx`, `quick-walkin-modal.tsx`) had their own
+   local, disconnected `staffId` `useState`/dropdown — each now
+   initializes from `useStaffSim().sessionStaff?.id` first, falling back
+   to the prior default, dropdown left in place as an editable override.
+   **Settings UI**: the existing "Signed in" account card now reflects the
+   real session when present (was always mirroring Simulate Staff before,
+   mislabeled); the Simulate Staff selector is disabled with an inline
+   note while a real session is active. All 7 TEMP comments removed.
+   **No RLS/schema/middleware changes** — pages remain accessible without
+   login, exactly per scope. Verified live in the browser (`npx tsc
+   --noEmit` passes clean, not relied on alone): logged out → Settings
+   showed "Simulated" and the Simulate Staff dropdown enabled, unchanged
+   from pre-6B; logged in as Ana (Receptionist) → Settings showed
+   "Ana / Receptionist · Front Desk / Signed in", Simulate Staff disabled,
+   Front-Desk-correct read-only Settings gating, sidebar correctly hiding
+   Staff/Logs (Owner-only nav); Log Visit modal's "Logged by" field
+   auto-selected Ana instead of defaulting to the first staff member;
+   signed out again → correctly reverted to Simulate Staff mode. **Next**:
+   6C (protected-route middleware + RLS lockdown) remains, tracked in
+   `.ai/handoff.md`.
+2. **2026-08-29 — Staff Auth 6A: Auth Users + Basic Login** (`ohm#2k9m4w7p`).
    First of a three-part plan (6A/6B/6C) — see [[staff_auth_6a_6c_plan]] and
    `.ai/handoff.md` for sub-phase tracking. Scope was explicitly limited to
    auth account creation + login page + session handling only: **no RLS
@@ -143,7 +186,7 @@ Full invariant list: [[nxs-architecture-locks]].
    console errors. **Next**: 6B (wiring real sessions into
    `lib/staff-context.tsx`/actor-attribution) and 6C (protected routes)
    remain, tracked in `.ai/handoff.md`.
-2. **2026-08-28 — Analytics Phase: Owner-Only Reporting Dashboard
+3. **2026-08-28 — Analytics Phase: Owner-Only Reporting Dashboard
    (Spa-Day Bucketing)** (`ohm#7v2q8f5c`). Plan + regression assessment
    presented and approved before implementation, per the prompt's
    mandatory gate. Two discrepancies surfaced during context loading and
@@ -196,7 +239,7 @@ Full invariant list: [[nxs-architecture-locks]].
    and clear for Owner (J. Cruz). Regression-checked Sales, Bookings,
    Staff Directory, and Activity Logs — all load with no server or
    console errors.
-3. **2026-08-28 — Operations Phase: Locker Board, Call Sheet, Sales
+4. **2026-08-28 — Operations Phase: Locker Board, Call Sheet, Sales
    (Edit/Void)** (`ohm#9h4c7x2m`). Plan + regression assessment presented
    and approved before implementation, per the prompt's mandatory gate.
    Both required discrepancy questions were resolved by reading the actual
@@ -248,7 +291,7 @@ Full invariant list: [[nxs-architecture-locks]].
    DB after verification so state matches pre-session. Regression-checked
    Dashboard (Total Lockers still reads 100), Bookings, and Settings — all
    load with no server or console errors.
-4. **2026-08-28 — Management Phase: Staff Directory + Activity Logs Tab
+5. **2026-08-28 — Management Phase: Staff Directory + Activity Logs Tab
    (Owner-only)** (`ohm#3z8k1p6d`). Plan + regression assessment presented
    and approved before implementation, per the prompt's mandatory gate.
    Two real discrepancies surfaced during context loading, not guessed
@@ -315,52 +358,3 @@ Full invariant list: [[nxs-architecture-locks]].
    via `localStorage`. Regression-checked Settings (dropdown
    options/labels/gating behavior unchanged), Bookings, Therapists, and
    Client Profile — all load with no server or console errors.
-5. **2026-08-28 — Settings Persistence — Wire Existing UI to Supabase
-   (Direct Table Writes)** (`ohm#5x1p8m3v`). Wired the full-parity Settings
-   UI (`ohm#6j2v9s4k`) to real Supabase persistence via direct writes to
-   `services`/`promos`/`addons`/`rooms`/`lockers`, plus a new
-   `weekend_slots` table (nothing in the schema modeled weekend slots
-   before this). Plan + regression assessment presented and approved
-   before implementation, including three explicit decision points
-   confirmed with the user: (1) Rooms/Beds count decreases deactivate the
-   highest-numbered active rooms rather than hard-deleting; (2) a new
-   `weekend_slots` table was the right call, not a generic settings blob;
-   (3) Services delete got wired too (soft-delete) even though the
-   prompt's literal scope omitted it, since the UI already shipped a
-   working Delete button for it. **Migration**
-   (`supabase/migrations/20260828011724_settings_persistence_rls.sql`,
-   smoke-tested via a rolled-back transaction as the `anon` role before
-   applying for real): new `weekend_slots` table + `public_insert`
-   INSERT/UPDATE RLS policies on `services`/`promos`/`addons`/`rooms`,
-   INSERT-only on `lockers` — same `roles: {public}`, `USING(true)` shape
-   as every prior additive policy. **Deletes for services/promos/addons
-   are soft** (`active = false` via UPDATE, never hard `DELETE`) since all
-   three are FK-referenced by historical sales/bookings/sale_addons rows —
-   no DELETE policy exists for them. A second migration
-   (`20260828011900_seed_weekend_slots_defaults.sql`) seeded the 7 default
-   slot times the UI already displayed, so switching to persistence didn't
-   visually wipe the list. **Server actions**
-   (`app/settings/actions.ts`, new file): one action per mutation point in
-   `settings-browser.tsx` (services price/points/add/delete, promos
-   add/discount/delete, weekend slots add/delete, add-ons add/price/delete
-   with the "minimum 1 active add-on" guard now enforced server-side too,
-   lockers add-10-batch, room count increase/decrease), each ending with
-   an `action_logs` insert using the same placeholder-actor pattern as
-   Bookings/Core Loop and `revalidatePath("/settings")`. **UI wiring**:
-   every local-only `useState` handler in `settings-browser.tsx` now calls
-   its server action first and only commits local state + toast on
-   success (numeric inputs switched from per-keystroke `onChange` to
-   commit-on-`blur` to avoid a DB write per digit typed); theme toggle and
-   Staff Simulation stay local-only by design (confirmed with the user, no
-   DB write needed for either). **App-level-only role gate, same
-   explicitly-accepted gap as every other phase**: the new RLS grants
-   INSERT/UPDATE at the DB level to any anon/authenticated caller — the
-   actual Front-Desk-locked / Supervisor-Owner-editable restriction is
-   enforced only in the UI via the existing Simulate Staff selection, not
-   at the RLS layer, pending real Staff Auth. Verified live in the browser
-   (not just `npx tsc --noEmit`, which passes clean): updated a service
-   price, added a weekend slot, added a locker batch, and shrank the room
-   count, confirming each write landed in the live DB and in `action_logs`
-   with the correct actor; regression-checked Bookings, Client Profile,
-   and Therapists — all load with no server or console errors. Test rows
-   cleaned up from the live DB after verification.

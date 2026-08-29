@@ -15,6 +15,10 @@ type StaffSimContextValue = {
   setSelectedStaffId: (id: string) => void;
   currentStaff: SimStaffMember;
   currentRole: string;
+  /** The real authenticated staff member for this session, or null if not
+   * logged in. When present, this — not Simulate Staff — drives
+   * currentStaff/currentRole/selectedStaffId everywhere. */
+  sessionStaff: SimStaffMember | null;
 };
 
 const STORAGE_KEY = "nxs_sim_staff_id";
@@ -28,9 +32,11 @@ const StaffSimContext = createContext<StaffSimContextValue | null>(null);
 
 export function StaffSimProvider({
   initialStaff,
+  sessionStaff = null,
   children,
 }: {
   initialStaff: SimStaffMember[];
+  sessionStaff?: SimStaffMember | null;
   children: React.ReactNode;
 }) {
   const staffList = initialStaff.length > 0 ? initialStaff : FALLBACK_STAFF;
@@ -68,9 +74,13 @@ export function StaffSimProvider({
     }
   };
 
-  const currentStaff =
+  const simulatedStaff =
     loginableStaff.find((s) => s.id === selectedStaffId) ||
     loginableStaff[0] || { id: "2", name: "Ana", position: "Receptionist" };
+
+  // A real logged-in session takes precedence over Simulate Staff. Simulate
+  // Staff stays fully functional as the fallback for anyone not logged in.
+  const currentStaff = sessionStaff ?? simulatedStaff;
 
   const currentRole =
     currentStaff.position === "Receptionist"
@@ -82,10 +92,11 @@ export function StaffSimProvider({
       value={{
         staffList,
         loginableStaff,
-        selectedStaffId,
+        selectedStaffId: sessionStaff ? sessionStaff.id : selectedStaffId,
         setSelectedStaffId,
         currentStaff,
         currentRole,
+        sessionStaff,
       }}
     >
       {children}

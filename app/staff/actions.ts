@@ -14,8 +14,6 @@ async function logAction(
   detail: string
 ) {
   await supabase.from("action_logs").insert({
-    // TEMP: placeholder actor pending Staff Auth phase — selected manually
-    // from the Simulate Staff dropdown until sessions/auth.uid() exist.
     staff_id: staffId,
     action,
     detail,

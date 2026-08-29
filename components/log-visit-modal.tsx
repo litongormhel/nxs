@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { logVisitBooking } from "@/app/bookings/actions";
+import { useStaffSim } from "@/lib/staff-context";
 import type {
   Addon,
   Client,
@@ -106,7 +107,8 @@ export function LogVisitModal({
     "Cash" | "GCash" | "Card" | "Points"
   >("Cash");
   const [gcashRef, setGcashRef] = useState("");
-  const [staffId, setStaffId] = useState(staff[0]?.id ?? "");
+  const { sessionStaff } = useStaffSim();
+  const [staffId, setStaffId] = useState(sessionStaff?.id ?? staff[0]?.id ?? "");
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();

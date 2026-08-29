@@ -6,8 +6,6 @@ import { createClient } from "@/lib/supabase/server";
 export type LogVisitInput = {
   clientId: string;
   serviceId: string;
-  // TEMP: placeholder actor pending Staff Auth phase — selected manually
-  // from the staff directory until sessions/auth.uid() exist.
   staffId: string;
   isRedemption: boolean;
   paymentMethod: "Cash" | "GCash" | "Card" | "Points";

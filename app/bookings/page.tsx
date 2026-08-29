@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { BookingBrowser } from "@/components/booking-browser";
+import { sortSlotTimes } from "@/lib/bookings/slots";
 
 export default async function BookingsPage() {
   const supabase = await createClient();
@@ -13,6 +14,7 @@ export default async function BookingsPage() {
     { data: promos },
     { data: addons },
     { data: lockers },
+    { data: weekendSlots },
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -53,7 +55,10 @@ export default async function BookingsPage() {
       .select("number")
       .eq("active", true)
       .order("number", { ascending: true }),
+    supabase.from("weekend_slots").select("slot_time"),
   ]);
+
+  const timeSlots = sortSlotTimes((weekendSlots ?? []).map((s) => s.slot_time.slice(0, 5)));
 
   return (
     <div className="p-8">
@@ -73,6 +78,7 @@ export default async function BookingsPage() {
           promos={promos ?? []}
           addons={addons ?? []}
           lockers={(lockers ?? []).map((l) => l.number)}
+          timeSlots={timeSlots}
         />
       )}
     </div>

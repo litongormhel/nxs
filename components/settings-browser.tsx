@@ -19,6 +19,7 @@ import {
   addLockerBatch,
   updateRoomCount,
 } from "@/app/settings/actions";
+import { compareSlotTimes } from "@/lib/bookings/slots";
 
 export type Service = {
   id: string;
@@ -74,7 +75,7 @@ export function SettingsBrowser({
   // Staff simulation state — shared across the app via StaffSimProvider
   // (lifted out of local state in ohm#3z8k1p6d so the Sidebar's Owner-only
   // nav gating can read the same "who's simulated" value).
-  const { loginableStaff, selectedStaffId, setSelectedStaffId, currentStaff, currentRole } =
+  const { loginableStaff, selectedStaffId, setSelectedStaffId, currentStaff, currentRole, sessionStaff } =
     useStaffSim();
 
   const canEditServices =
@@ -316,14 +317,8 @@ export function SettingsBrowser({
           showToast(`Failed to add slot: ${res.error}`);
           return;
         }
-        const updated = [...weekendSlots, { id: res.id!, slot_time: formatted }].sort(
-          (a, b) => {
-            const [ha, ma] = a.slot_time.split(":").map(Number);
-            const [hb, mb] = b.slot_time.split(":").map(Number);
-            const minA = ha < 10 ? ha * 60 + ma + 1440 : ha * 60 + ma;
-            const minB = hb < 10 ? hb * 60 + mb + 1440 : hb * 60 + mb;
-            return minA - minB;
-          }
+        const updated = [...weekendSlots, { id: res.id!, slot_time: formatted }].sort((a, b) =>
+          compareSlotTimes(a.slot_time, b.slot_time)
         );
         setWeekendSlots(updated);
         showToast(`${fmtTime(formatted)} added to weekend slots`);
@@ -515,7 +510,9 @@ export function SettingsBrowser({
                 {currentStaff.position} · {currentRole}
               </div>
             </div>
-            <span className="text-[10.5px] text-muted">Signed in</span>
+            <span className="text-[10.5px] text-muted">
+              {sessionStaff ? "Signed in" : "Simulated"}
+            </span>
           </div>
 
           <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-4 flex-wrap gap-2.5">
@@ -524,14 +521,16 @@ export function SettingsBrowser({
                 Simulate Staff
               </div>
               <div className="text-[11px] text-muted mt-0.5">
-                Actions get tagged to this person — changes what's editable below
-                and in Analytics/Sales/Logs
+                {sessionStaff
+                  ? "Disabled while signed in — actions are tagged to your real account"
+                  : "Actions get tagged to this person — changes what's editable below and in Analytics/Sales/Logs"}
               </div>
             </div>
             <select
               value={selectedStaffId}
               onChange={(e) => setSelectedStaffId(e.target.value)}
-              className="rounded-lg border border-border bg-[#1d1610] px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
+              disabled={!!sessionStaff}
+              className="rounded-lg border border-border bg-[#1d1610] px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold disabled:opacity-50"
             >
               {loginableStaff.map((s) => (
                 <option key={s.id} value={s.id}>

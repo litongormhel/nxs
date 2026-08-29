@@ -89,19 +89,77 @@ This file tracks only what's in flight right now.
       explicit "Simulate Staff keeps working normally" requirement. No
       server or console errors (`preview_logs` checked clean).
     - See [[staff_state]] for the updated auth-linkage detail.
-  - **6B — not started.** Planned scope (subject to confirmation when
-    that session starts): wire the real Supabase Auth session into
-    `lib/staff-context.tsx` (replace or supplement the client-side
-    Simulate Staff selection with `auth.uid()` → `staff.user_id` lookup),
-    and switch `action_logs` actor-attribution from the placeholder
-    staff-picker pattern (`// TEMP: placeholder actor pending Staff Auth
-    phase`, present in `log-visit-modal.tsx` and every `actions.ts` file
-    since Core Loop) to the real authenticated staff member. Likely needs
-    its own RLS decisions (this is where "no RLS changes" from 6A ends).
+  - **6B — Real Session Wiring into staff-context + Actor Attribution —
+    complete** (`ohm#4p7v9k3s`) as of 2026-08-29. Scope explicitly
+    excluded protected-route middleware and RLS lockdown (still 6C) and
+    kept Simulate Staff fully functional as the logged-out fallback.
+    - **Context loaded first**: `.ai/briefing.md`, `.ai/handoff.md`,
+      `docs/state/staff_state.md` (confirmed 6A's final state — 8 auth
+      users, inert login page, `staff.user_id` linkage), ADR-001's Staff
+      Auth section, `lib/staff-context.tsx`, `app/login/actions.ts`, and
+      a repo-wide grep enumerating every
+      `// TEMP: placeholder actor pending Staff Auth phase` site (7 hits)
+      before writing any code.
+    - **Two product decisions surfaced and confirmed with the user before
+      implementing, per the prompt's mandatory approval gate**: (1)
+      not-logged-in fallback — Simulate Staff keeps driving role/actor
+      exactly as before, for anyone without a session (recommended and
+      confirmed, since 6A's "pages stay accessible without login" and
+      "Simulate Staff stays functional until 6C" both depend on it); (2)
+      the three modals with their own local, staff-context-disconnected
+      "Logged by" dropdown (`log-visit-modal.tsx`, `booking-form-modal.tsx`,
+      `quick-walkin-modal.tsx`, discovered during the enumeration, not
+      called out by the prompt) — confirmed to auto-fill from the real
+      session when present while keeping the dropdown as an editable
+      override, rather than removing the override entirely.
+    - **`lib/staff-context.tsx`**: `StaffSimProvider` gained an optional
+      `sessionStaff` prop. `currentStaff`/`currentRole` prefer it over the
+      Simulate Staff selection when present; `selectedStaffId` resolves to
+      `sessionStaff.id` in that case so every existing consumer keeps
+      working unchanged. Simulate Staff's internal state/localStorage
+      persistence is untouched — it's simply not read for
+      `currentStaff`/`currentRole` while a session exists.
+    - **`app/layout.tsx`**: resolves `auth.uid()` (via
+      `supabase.auth.getUser()`) → matching `staff` row by `user_id` →
+      passed down as `sessionStaff`. No new RLS needed — `staff`'s
+      existing `public_select` policy has no `to` clause so it already
+      covers `authenticated`, confirmed by reading the migration before
+      assuming it.
+    - **Two distinct call-site patterns found during enumeration, handled
+      differently**: most `action_logs` attribution (Settings, Sales,
+      Lockers, Staff Directory) already sourced `staffId` from
+      `staff-context`'s `selectedStaffId` — fixing the context alone fixed
+      these, no per-file change beyond deleting the stale TEMP comment.
+      The 3 modals above needed an actual code change (their local
+      `staffId` `useState` now initializes from
+      `useStaffSim().sessionStaff?.id` first).
+    - **Settings UI**: the "Signed in" account card (previously always
+      mirroring Simulate Staff, mislabeled) now reflects the real session
+      when present; the Simulate Staff `<select>` is `disabled` with an
+      inline "Disabled while signed in" note in that case.
+    - **All 7 TEMP comments removed** — the actor value is now genuinely
+      session-derived when logged in, Simulate-Staff-derived when not.
+    - Verified live in the browser (`npx tsc --noEmit` passes clean, not
+      relied on alone): logged out — Settings showed "Simulated" state
+      and an enabled Simulate Staff dropdown, byte-for-byte the same as
+      pre-6B; logged in as Ana (Receptionist) — Settings showed
+      "Ana / Receptionist · Front Desk / Signed in", Simulate Staff
+      disabled, Front-Desk-correct read-only Settings sections, sidebar
+      correctly hiding Staff/Logs (Owner-only nav, driven by the same
+      `currentRole`); Log Visit modal's "Logged by" `<select>` correctly
+      auto-selected Ana instead of the prior first-staff-member default;
+      signed out again and confirmed the app reverted cleanly to
+      Simulate Staff mode. No server or console errors.
+    - See [[staff_state]] for the updated attribution detail.
   - **6C — not started.** Planned scope: protected routes (redirect
     unauthenticated visitors away from the app, e.g. proxy/middleware or
-    per-page session checks), replacing the current "wide open, gated
-    only by client-side Simulate Staff" posture with real enforcement.
+    per-page session checks) and RLS lockdown (real `auth.uid()`-keyed
+    policies replacing the current `USING(true)` app-level-only gate),
+    replacing the current "wide open, gated only by client-side Simulate
+    Staff / session-if-present" posture with real enforcement. This is
+    also when Simulate Staff's role-spoofing capability finally gets
+    neutralized at the DB level — it must keep working as a testing tool
+    until then.
 
 - **Analytics Phase: Owner-Only Reporting Dashboard (Spa-Day Bucketing)**
   (`ohm#7v2q8f5c`) — **complete** as of 2026-08-28. Plan + regression

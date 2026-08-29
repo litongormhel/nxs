@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { createBooking } from "@/app/bookings/actions";
-import { SLOT_START_TIMES, slotsOverlap } from "@/lib/bookings/slots";
+import { useStaffSim } from "@/lib/staff-context";
+import { slotsOverlap } from "@/lib/bookings/slots";
 import { SmsPreviewModal } from "@/components/sms-preview-modal";
 import type { Client, Promo, Service, Staff, Therapist } from "@/components/booking-browser";
 import type { Database } from "@/lib/types/database";
@@ -63,6 +64,7 @@ export function BookingFormModal({
   rooms,
   staff,
   promos,
+  timeSlots,
   defaultDate,
   onClose,
   onCreated,
@@ -73,6 +75,7 @@ export function BookingFormModal({
   rooms: number[];
   staff: Staff[];
   promos: Promo[];
+  timeSlots: string[];
   defaultDate: string;
   onClose: () => void;
   onCreated: () => void;
@@ -88,7 +91,8 @@ export function BookingFormModal({
   const [customTime, setCustomTime] = useState(roundedNowTime());
   const [roomMode, setRoomMode] = useState<"auto" | "manual">("auto");
   const [manualRoomNumber, setManualRoomNumber] = useState<number | null>(null);
-  const [staffId, setStaffId] = useState(staff[0]?.id ?? "");
+  const { sessionStaff } = useStaffSim();
+  const [staffId, setStaffId] = useState(sessionStaff?.id ?? staff[0]?.id ?? "");
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [smsBooking, setSmsBooking] = useState<{
@@ -124,7 +128,7 @@ export function BookingFormModal({
   // Taken slots in the slot grid (therapist busy or no rooms available)
   const takenSlots = useMemo(() => {
     const taken = new Set<string>();
-    for (const slot of SLOT_START_TIMES) {
+    for (const slot of timeSlots) {
       const therapistBusy =
         !!therapistId &&
         conflicts.some(
@@ -147,7 +151,7 @@ export function BookingFormModal({
       }
     }
     return taken;
-  }, [conflicts, therapistId, duration, rooms]);
+  }, [conflicts, therapistId, duration, rooms, timeSlots]);
 
   // Conflicting therapists at current time
   const conflictingTherapists = useMemo(() => {
@@ -427,8 +431,13 @@ export function BookingFormModal({
           {isMassageService && (
             <div id="bSlotField">
               <label className="text-xs text-muted">Time Slot</label>
+              {timeSlots.length === 0 && (
+                <p className="mt-1.5 text-xs text-muted">
+                  No time slots configured yet. Add some in Settings.
+                </p>
+              )}
               <div className="mt-1.5 grid grid-cols-3 sm:grid-cols-4 gap-2" id="slotGrid">
-                {SLOT_START_TIMES.map((s) => {
+                {timeSlots.map((s) => {
                   const taken = takenSlots.has(s);
                   const selected = slotTime === s && !useCustomTime;
                   return (

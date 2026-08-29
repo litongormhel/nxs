@@ -68,6 +68,7 @@ export function BookingBrowser({
   promos,
   addons,
   lockers,
+  timeSlots,
 }: {
   clients: Client[];
   services: Service[];
@@ -77,6 +78,7 @@ export function BookingBrowser({
   promos: Promo[];
   addons: Addon[];
   lockers: number[];
+  timeSlots: string[];
 }) {
   const router = useRouter();
   const [date, setDate] = useState(todayIso());
@@ -280,6 +282,7 @@ export function BookingBrowser({
           rooms={rooms}
           staff={staff}
           promos={promos}
+          timeSlots={timeSlots}
           defaultDate={date}
           onClose={() => setShowNewBooking(false)}
           onCreated={() => {
@@ -300,6 +303,7 @@ export function BookingBrowser({
           promos={promos}
           addons={addons}
           lockers={lockers}
+          timeSlots={timeSlots}
           onClose={() => setShowWalkin(false)}
           onCreated={() => {
             setShowWalkin(false);

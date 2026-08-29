@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { quickWalkin } from "@/app/bookings/actions";
-import { SLOT_START_TIMES, slotsOverlap } from "@/lib/bookings/slots";
+import { useStaffSim } from "@/lib/staff-context";
+import { slotsOverlap } from "@/lib/bookings/slots";
 import type {
   Addon,
   Client,
@@ -42,6 +43,13 @@ function roundedNowTime(): string {
   return `${String(h % 24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+function fmtTime(t: string): string {
+  if (!t || !t.includes(":")) return t;
+  const [h, m] = t.split(":");
+  const hr = ((+h + 11) % 12) + 1;
+  return `${hr}:${m} ${+h < 12 ? "AM" : "PM"}`;
+}
+
 export function QuickWalkinModal({
   clients,
   services,
@@ -51,6 +59,7 @@ export function QuickWalkinModal({
   promos,
   addons,
   lockers,
+  timeSlots,
   onClose,
   onCreated,
 }: {
@@ -62,6 +71,7 @@ export function QuickWalkinModal({
   promos: Promo[];
   addons: Addon[];
   lockers: number[];
+  timeSlots: string[];
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -84,7 +94,8 @@ export function QuickWalkinModal({
   const [addonIds, setAddonIds] = useState<string[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<"Cash" | "GCash">("Cash");
   const [gcashRef, setGcashRef] = useState("");
-  const [staffId, setStaffId] = useState(staff[0]?.id ?? "");
+  const { sessionStaff } = useStaffSim();
+  const [staffId, setStaffId] = useState(sessionStaff?.id ?? staff[0]?.id ?? "");
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -353,8 +364,13 @@ export function QuickWalkinModal({
             <>
               <div>
                 <label className="text-xs text-muted">Time Slot</label>
+                {timeSlots.length === 0 && (
+                  <p className="mt-1 text-xs text-muted">
+                    No time slots configured yet. Add some in Settings.
+                  </p>
+                )}
                 <div className="mt-1 grid grid-cols-4 gap-2">
-                  {SLOT_START_TIMES.map((s) => (
+                  {timeSlots.map((s) => (
                     <button
                       key={s}
                       type="button"
@@ -369,7 +385,7 @@ export function QuickWalkinModal({
                           : "border-border text-foreground"
                       }`}
                     >
-                      {s}
+                      {fmtTime(s)}
                     </button>
                   ))}
                 </div>

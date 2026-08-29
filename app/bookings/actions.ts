@@ -17,8 +17,6 @@ export type CreateBookingInput = {
   status: BookingStatus;
   paxCount: number | null;
   promoId: string | null;
-  // TEMP: placeholder actor pending Staff Auth phase — selected manually
-  // from the staff directory until sessions/auth.uid() exist.
   createdBy: string;
 };
 
@@ -94,8 +92,6 @@ export type QuickWalkinInput = {
   amount: number;
   paymentMethod: "Cash" | "GCash";
   paymentRef: string | null;
-  // TEMP: placeholder actor pending Staff Auth phase — selected manually
-  // from the staff directory until sessions/auth.uid() exist.
   staffId: string;
 };
 
