@@ -26,11 +26,6 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createClient();
-  const { data: staff } = await supabase
-    .from("staff")
-    .select("id, name, position")
-    .eq("active", true)
-    .order("name", { ascending: true });
 
   const {
     data: { user },
@@ -53,7 +48,7 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex bg-background text-foreground">
-        <StaffSimProvider initialStaff={staff ?? []} sessionStaff={sessionStaff}>
+        <StaffSimProvider sessionStaff={sessionStaff}>
           <Sidebar />
           <main className="flex-1 min-h-full overflow-y-auto">{children}</main>
         </StaffSimProvider>

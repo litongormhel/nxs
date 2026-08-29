@@ -38,13 +38,15 @@ migrations `01`–`12`) on 2026-08-27, not assumed from convention.
    concern not yet built (no session table exists yet); don't assume it's
    already enforced.
 
-6. **Staff auth deferred; RLS is enabled but not identity-keyed.** Every
-   `public` table has `ENABLE ROW LEVEL SECURITY`. Only `lockers`, `rooms`,
-   `services`, `therapists` have `USING (true)` public SELECT policies.
-   `clients` has its own locked-down policy (see
-   `docs/state/clients_state.md`). Everything else — `bookings`, `sales`,
-   `point_transactions`, `staff`, `action_logs` — has no policy and is
-   default-deny for `anon`/`authenticated`. Do not treat "RLS is open" as
-   true; it isn't. `action_logs.staff_id` is populated via a placeholder
-   staff-picker in the UI (once built), not a real session, until staff auth
-   lands.
+6. **Staff auth is complete; RLS is identity-keyed on every table.** As of
+   Staff Auth 6A–6C-6 (final step `ohm#...` Staff Auth 6C-6, 2026-08-29),
+   every route requires a real Supabase Auth session (`proxy.ts`), every
+   `public` table's RLS is keyed off `auth.uid() → staff.user_id →
+   staff.position` via the shared role helpers (`is_staff()`,
+   `is_supervisor_or_above()`, `is_owner()`, `current_staff_position()`),
+   and there is no "Simulate Staff" role-spoofing mechanism anywhere in the
+   app — it was removed entirely once real RLS made it redundant.
+   `action_logs.staff_id` (and every other actor-attribution column) is
+   populated from the real authenticated session, never a placeholder
+   picker. See `docs/state/staff_state.md` for the full policy matrix
+   per table.

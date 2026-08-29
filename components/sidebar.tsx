@@ -8,7 +8,7 @@ import { logout } from "@/app/login/actions";
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { currentRole, currentStaff, sessionStaff } = useStaffSim();
+  const { currentRole, sessionStaff } = useStaffSim();
 
   return (
     <aside className="w-60 shrink-0 border-r border-border bg-surface flex flex-col">
@@ -43,7 +43,7 @@ export function Sidebar() {
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="text-xs font-medium text-foreground truncate">
-                {currentStaff.name}
+                {sessionStaff.name}
               </div>
               <div className="text-[11px] text-muted truncate">{currentRole}</div>
             </div>

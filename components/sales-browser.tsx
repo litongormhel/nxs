@@ -44,7 +44,7 @@ export function SalesBrowser({
   therapists: Therapist[];
 }) {
   const router = useRouter();
-  const { currentRole, selectedStaffId } = useStaffSim();
+  const { currentRole, sessionStaff } = useStaffSim();
 
   const [sales, setSales] = useState<Sale[]>(initialSales);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -100,7 +100,7 @@ export function SalesBrowser({
         paymentRef: editPayment === "GCash" ? editRef.trim() || null : null,
         therapistId: editTherapistId || null,
       },
-      selectedStaffId
+      sessionStaff?.id ?? ""
     );
     setBusy(false);
     if (!res.ok) {
@@ -132,7 +132,7 @@ export function SalesBrowser({
     if (!window.confirm("Void this sale? It stays on record but is excluded from totals.")) {
       return;
     }
-    const res = await voidSale(sale.id, selectedStaffId);
+    const res = await voidSale(sale.id, sessionStaff?.id ?? "");
     if (!res.ok) {
       showToast(res.error);
       return;

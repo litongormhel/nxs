@@ -164,8 +164,8 @@ export function AnalyticsBrowser({
   if (currentRole !== "Owner") {
     return (
       <div className="rounded-xl border border-border bg-surface p-6 text-sm text-muted max-w-md">
-        Analytics is Owner-only. Switch to Owner in Settings &rarr; Simulate
-        Staff to view this page.
+        Analytics is Owner-only. Sign in with an Owner account to view this
+        page.
       </div>
     );
   }

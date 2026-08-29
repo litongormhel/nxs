@@ -41,10 +41,10 @@ the prior `public_select` (`USING (true)`) policy is gone. `clients` now
 has `staff_select` (`SELECT`, `USING (is_staff())`) and `staff_insert`
 (`INSERT`, `WITH CHECK (is_staff())`) — both keyed off the new
 `is_staff()` helper (`auth.uid() → staff.user_id → staff.position`, true
-for any of the 8 loginable staff, false/no-error with no session). A
-Simulate-Staff-only session (no real `auth.uid()`) now gets **no** DB
-access to this table regardless of the simulated role — Simulate Staff no
-longer grants real data access, only UI affordances. **No UPDATE policy
+for any of the 8 loginable staff, false/no-error with no session). Only a
+real authenticated session grants access — there is no client-side role
+selector left in the app to spoof (Simulate Staff was removed in 6C-6).
+**No UPDATE policy
 exists on `clients` and none was added** — confirmed no client field has
 an editable path anywhere in the app; `points_balance` only ever changes
 via the `SECURITY DEFINER` trigger described in [[points_ledger_state]],

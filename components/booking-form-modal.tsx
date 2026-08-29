@@ -92,7 +92,7 @@ export function BookingFormModal({
   const [roomMode, setRoomMode] = useState<"auto" | "manual">("auto");
   const [manualRoomNumber, setManualRoomNumber] = useState<number | null>(null);
   const { sessionStaff } = useStaffSim();
-  const actor = sessionStaff ?? staff[0];
+  const actor = sessionStaff;
   const staffId = actor?.id ?? "";
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [error, setError] = useState<string | null>(null);

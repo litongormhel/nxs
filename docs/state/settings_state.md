@@ -13,12 +13,14 @@ just local React state.
   dynamic subtitle), toggles the `.light` class on `document.body`.
   **Local/session-only by design** — no DB write, confirmed with the user
   that a theme preference doesn't need persistence.
-- **Account & Staff Simulation**: signed-in staff badge + `Simulate Staff`
-  dropdown that switches the active simulated actor and role permissions
-  (`Front Desk` vs `Supervisor` / `Owner`). **Local/session-only by
-  design** — it's a testing aid, not app state; the selected `staff.id` is
-  a real row from the `staff` table and flows into every mutation below as
-  the `action_logs` actor.
+- **Account**: signed-in staff badge showing name/position/role. As of
+  Staff Auth 6C-6 (`ohm#8r5m1v7z`, 2026-08-29), there is no role-switching
+  control here — the real authenticated session (`sessionStaff.id` from
+  `lib/staff-context.tsx`) is the sole actor for every mutation below. The
+  prior "Simulate Staff" dropdown (a testing aid that let any signed-in
+  user view/act as a different role) was removed once RLS made it
+  redundant — it granted UI affordances only, never real DB access, once
+  6C-2 landed.
 - **Services & Pricing**: editable points/price per service (locked for
   Front Desk) → `updateServicePrice`/`updateServicePoints`. `+ Add Service`
   → `addService`. Delete → `deleteService` (**soft delete**, sets
@@ -51,10 +53,8 @@ just local React state.
 - Toast feedback (bottom-center, auto-fade) on every mutation above —
   now reflects the actual server-action result (shows the real error on
   failure, not a blind "updated" message).
-- Every mutation above writes an `action_logs` row via the same
-  placeholder-actor pattern as Bookings/Core Loop
-  (`// TEMP: placeholder actor pending Staff Auth phase`) — the actor is
-  whichever `staff.id` is selected in Simulate Staff.
+- Every mutation above writes an `action_logs` row attributed to the real
+  authenticated session (`sessionStaff.id`).
 
 ## RLS — real, identity-keyed role enforcement (Staff Auth 6C-4)
 
@@ -92,7 +92,7 @@ queries already filter `.eq("active", true)`.
 
 ## Not persisted — deliberately, not an oversight
 
-Only **Display/Appearance** (theme) and **Account & Staff Simulation**
-remain local/session-only. Both were confirmed with the user as correct to
-leave unpersisted: a theme preference and a testing aid, not app state
-that needs to survive a refresh or be shared across sessions.
+**Display/Appearance** (theme) remains local/session-only — confirmed with
+the user as correct to leave unpersisted, since it's a per-device
+preference, not app state that needs to survive a refresh or be shared
+across sessions.

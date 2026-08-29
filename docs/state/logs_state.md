@@ -5,10 +5,17 @@
 `public.action_logs`: `id`, `staff_id` (FK → `staff`/`loginable_staff`, not
 null), `action` (not null), `detail` (nullable), `created_at`.
 
-RLS: `anon` has both `INSERT` (`public_insert`, `WITH CHECK (true)`, added
-by Core Loop) and `SELECT` (`public_select`, `USING (true)`, added by
-`ohm#3z8k1p6d`) policies. No UPDATE/DELETE policy — this table has no
-mutation UI, by design (append-only action trail).
+**RLS lockdown (`ohm#4t8w2j6q`, Staff Auth 6C-5, 2026-08-29)**:
+`action_logs` now has role-keyed policies replacing the old
+`public_select`/`public_insert` (`USING`/`WITH CHECK (true)`) pair.
+`action_logs_select` — `is_owner()` (matches the Owner-gated Activity
+Logs page). `action_logs_insert` — `is_staff()` (written from nearly
+every mutating flow across the app — Log Visit, Bookings, Sales
+edit/void, Settings, Staff add — by any logged-in staff member, so this
+must stay broad). No UPDATE/DELETE policy — this table has no mutation
+UI, by design (append-only action trail), and this is now DB-enforced,
+not just a UI convention — verified even Owner gets a silent 0-row no-op
+on UPDATE/DELETE attempts, not a real permission.
 
 ## Implemented (app level)
 
@@ -21,10 +28,10 @@ mutation UI, by design (append-only action trail).
   `settings_add_addon`, `settings_update_addon_price`,
   `settings_delete_addon`, `settings_add_lockers`,
   `settings_update_room_count`, and — new in `ohm#3z8k1p6d` —
-  `staff_add`. `staff_id` on every row is the staff picked in whichever
-  placeholder-actor dropdown was active for that action (Log Visit modal's
-  own picker, or the shared Simulate Staff selection from
-  `lib/staff-context.tsx`), never a real session.
+  `staff_add`. As of Staff Auth 6B/6C-6, `staff_id` on every row is the
+  real authenticated staff member (`sessionStaff.id` from
+  `lib/staff-context.tsx`) — no placeholder picker or Simulate Staff
+  fallback remains.
 - **Activity Logs tab** (`app/logs/page.tsx`, `components/logs-browser.tsx`,
   `ohm#3z8k1p6d`) — first reader of this table. Server-fetches
   `action_logs` ordered `created_at desc` with a flat `LIMIT 500` (current
@@ -49,6 +56,8 @@ mutation UI, by design (append-only action trail).
 
 - No pagination — a flat `LIMIT 500` is used; fine at current volume, not
   designed to scale past it.
-- No real access control — the Owner-only gate is app-level only (see
-  `docs/state/staff_state.md` and `.ai/handoff.md` session notes), not
-  enforced by RLS or a real session.
+- Access control is enforced at both tiers — the Owner-only nav/page
+  gate stays app-level (`lib/nav.ts`, `currentRole`), and as of 6C-5 the
+  underlying `action_logs` SELECT is also real RLS (`is_owner()`), not
+  just a UI convention. There is no role-spoofing surface left in the app
+  (Simulate Staff was removed in 6C-6).

@@ -95,7 +95,7 @@ export function QuickWalkinModal({
   const [paymentMethod, setPaymentMethod] = useState<"Cash" | "GCash">("Cash");
   const [gcashRef, setGcashRef] = useState("");
   const { sessionStaff } = useStaffSim();
-  const actor = sessionStaff ?? staff[0];
+  const actor = sessionStaff;
   const staffId = actor?.id ?? "";
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());

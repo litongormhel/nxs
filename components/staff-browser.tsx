@@ -19,7 +19,7 @@ const CAN_LOGIN = new Set(["Receptionist", "Supervisor", "Owner"]);
 
 export function StaffBrowser({ initialStaff }: { initialStaff: Staff[] }) {
   const router = useRouter();
-  const { currentRole, selectedStaffId } = useStaffSim();
+  const { currentRole, sessionStaff } = useStaffSim();
 
   const [staffList, setStaffList] = useState<Staff[]>(initialStaff);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -41,8 +41,8 @@ export function StaffBrowser({ initialStaff }: { initialStaff: Staff[] }) {
   if (currentRole !== "Owner") {
     return (
       <div className="rounded-xl border border-border bg-surface p-6 text-sm text-muted max-w-md">
-        Staff Directory is Owner-only. Switch to Owner in Settings &rarr;
-        Simulate Staff to view this page.
+        Staff Directory is Owner-only. Sign in with an Owner account to view
+        this page.
       </div>
     );
   }
@@ -73,7 +73,7 @@ export function StaffBrowser({ initialStaff }: { initialStaff: Staff[] }) {
       trimmedName,
       position,
       trimmedComment || null,
-      selectedStaffId
+      sessionStaff?.id ?? ""
     );
     if (!res.ok) {
       setError(res.error);
@@ -108,7 +108,7 @@ export function StaffBrowser({ initialStaff }: { initialStaff: Staff[] }) {
         </button>
       </div>
       <div className="text-[11px] text-muted mb-2.5">
-        Only Receptionist, Supervisor, and Owner can log in / simulate actions.
+        Only Receptionist, Supervisor, and Owner can log in.
         Attendant and Others are record-only.
       </div>
 

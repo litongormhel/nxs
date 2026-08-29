@@ -19,7 +19,7 @@ export function LockerBoard({
   occupancy: Record<number, Occupancy>;
 }) {
   const router = useRouter();
-  const { selectedStaffId } = useStaffSim();
+  const { sessionStaff } = useStaffSim();
   const [occ, setOcc] = useState(occupancy);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [busyLocker, setBusyLocker] = useState<number | null>(null);
@@ -35,7 +35,7 @@ export function LockerBoard({
     const entry = occ[num];
     if (!entry) return;
     setBusyLocker(num);
-    const res = await checkOutLocker(entry.occupancyId, selectedStaffId);
+    const res = await checkOutLocker(entry.occupancyId, sessionStaff?.id ?? "");
     setBusyLocker(null);
     if (!res.ok) {
       showToast(res.error);

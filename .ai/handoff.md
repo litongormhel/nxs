@@ -5,8 +5,212 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
-- **Staff Auth (6A/6B complete; 6C in progress — 6C-1 through 6C-4 of six
-  planned 6C sub-steps complete, 6C-5/6C-6 pending)**
+- **Staff Auth — complete (6A through 6C-6, `ohm#8r5m1v7z`, 2026-08-29).**
+  This closes the entire Staff Auth phase and the originally-scoped
+  6-phase roadmap in full. See `docs/state/staff_state.md` for the final
+  per-table RLS policy matrix and `docs/architecture/rbac.md` for the RBAC
+  reference (rewritten from "Design Target" to "Implemented" in 6C-6).
+  - **6C-6 — Remove Simulate Staff + Full-System Regression Pass — complete**
+    as of 2026-08-29 (`ohm#8r5m1v7z`). Final sub-step. Repo-wide search for
+    every Simulate Staff reference (12 code files) presented and approved
+    before any removal, per the prompt's mandatory gate.
+    - **Context loaded first**: `.ai/briefing.md`, `.ai/handoff.md`
+      (confirmed 6C-1 through 6C-5 all complete), `docs/state/staff_state.md`,
+      ADR-001 read in full (not section-scoped, per the prompt's explicit
+      instruction for this closing step), `lib/staff-context.tsx`, and every
+      component still referencing Simulate Staff.
+    - **Removal**: `lib/staff-context.tsx` simplified —
+      `loginableStaff`/`selectedStaffId`/`setSelectedStaffId`/
+      `simulatedStaff`/`FALLBACK_STAFF`/the `nxs_sim_staff_id` localStorage
+      key are all gone; `currentStaff`/`currentRole`/`sessionStaff` derive
+      solely from the real session (nullable only pre-auth on `/login`,
+      since every other route is guaranteed one by `proxy.ts`).
+      `components/settings-browser.tsx`'s dropdown block deleted entirely;
+      its 15 `selectedStaffId` call sites now resolve from a local
+      `sessionStaff?.id ?? ""` derived const (kept the same downstream
+      variable name to avoid touching 15 call sites individually).
+      `app/layout.tsx`'s full active-staff-list fetch (only ever used to
+      feed the dropdown) removed — only the single-row `sessionStaff`
+      lookup remains. `components/{locker-board,sales-browser,
+      staff-browser}.tsx` switched from `selectedStaffId` to
+      `sessionStaff?.id ?? ""`. `{log-visit,booking-form,
+      quick-walkin}-modal.tsx` dropped the `?? staff[0]` fallback (now
+      `actor = sessionStaff`, already rendered null-safely as `"—"`) — the
+      now-unused `staff` prop on those three modals was deliberately left
+      in place rather than threading its removal through
+      `client-browser.tsx`/`booking-browser.tsx`, since that's unrelated
+      generic plumbing, not Simulate Staff machinery.
+    - **One discrepancy caught live in the browser during regression
+      testing, not by the initial repo-wide grep**:
+      `components/analytics-browser.tsx`'s Owner-only blocking message had
+      "Simulate Staff" split across two JSX lines
+      (`&rarr; Simulate\n        Staff`), which a single-line grep pattern
+      missed. Caught when visiting `/analytics` as Front Desk during the
+      regression pass, fixed immediately, then verified clean via a
+      multi-line-safe repo-wide grep (`grep -z`) confirming zero remaining
+      "simulat*" hits anywhere in `.ts`/`.tsx`. Stale copy also fixed in
+      `logs-browser.tsx`/`staff-browser.tsx` (same "Switch to Owner in
+      Settings → Simulate Staff" pattern) to plain "Sign in with an Owner
+      account" language.
+    - `npx tsc --noEmit` passes clean throughout (one real type fix along
+      the way: `components/sidebar.tsx` referenced `currentStaff.name`
+      inside a `sessionStaff`-truthy branch that TS couldn't narrow across
+      two separate context fields — switched to `sessionStaff.name`
+      directly and dropped the now-unused `currentStaff` destructure).
+    - **Full-system regression pass, exhaustive per the prompt's explicit
+      "not sampling, be exhaustive" rule** — real login/logout cycles (no
+      Simulate Staff, since it no longer exists) as all three real roles,
+      every phase exercised:
+      - **Ana (Front Desk)**: nav correctly hides Staff/Logs/Analytics; all
+        three routes correctly DB-blocked with the updated copy; Log Visit
+        (Wet Area earn case) succeeded live — 216→219 pts, correct "Ana ·
+        Receptionist" actor; New Booking succeeded ("6C-6 Regression
+        Test", 5:30 PM, Room 1); Quick Walk-in succeeded ("6C-6 Walkin
+        Test", Wet Area, ₱700, locker 5); Sales Edit/Void buttons
+        correctly disabled ("Supervisor or Owner only"/"Owner only");
+        Locker Board check-out succeeded (locker 5 freed); Call Sheet
+        loaded correctly (3 active massages); Settings correctly
+        read-only with the dropdown gone.
+      - **Diego (Supervisor)**: everything Ana can do, plus a real Sales
+        Edit succeeded live (₱700→₱725, "Edited by You", running total
+        updated to ₱7,875) and a real Settings edit succeeded live (Add
+        Weekend Slot, "2:15 PM" added) — both correctly attributed to
+        Diego at the DB level; Sales Void still correctly disabled; Staff
+        Directory/Activity Logs/Analytics still correctly Owner-only.
+      - **J. Cruz (Owner)**: everything above, plus Sales Void button
+        correctly enabled; a real Add Staff succeeded live ("6C-6
+        Regression Staff added as Receptionist"); Analytics loaded with
+        correct live figures; Activity Logs correctly showed every
+        regression action from all three roles' real sessions with
+        correct attribution (`Ana`/`quick_walkin` ×2 +
+        `locker_checkout`, `Diego`/`sale_edit` +
+        `settings_add_weekend_slot`, `J. Cruz`/`staff_add`) — direct
+        end-to-end proof the session-derived actor path works across the
+        whole app, not just per-component.
+      - Three real sign-out → sign-in cycles between roles, all clean, no
+        Simulate Staff involved. No console or server errors observed at
+        any point across the entire pass.
+    - **Harmless test artifacts intentionally left in place** (no delete
+      UI/policy for any of these, same precedent as every prior 6C
+      sub-step): booking "6C-6 Regression Test", sale "6C-6 Walkin Test"
+      (₱700), staff row "6C-6 Regression Staff", weekend slot "2:15 PM".
+    - **Final doc pass**: ADR-001 invariant #6 rewritten from "deferred,
+      RLS not identity-keyed" to reflect completion (full file was read,
+      not section-scoped, per the prompt's explicit instruction).
+      `docs/architecture/rbac.md` rewritten in full from "Design Target
+      (Not Yet Enforced)" to "Implemented". Every `docs/state/*.md` file
+      still describing Simulate Staff as present/functional, or carrying
+      "app-level-only role gate"/"known gap"/deferred-auth language,
+      updated to reflect real RLS + real session attribution:
+      `staff_state.md`, `logs_state.md`, `sales_state.md`,
+      `settings_state.md`, `clients_state.md`, `analytics_state.md`.
+    - **No RLS policy changes** — none needed, per explicit scope;
+      nothing surfaced by regression testing warranted one.
+    - See [[staff_state]] for the final state.
+  - **6C-5 — Staff Directory + Activity Logs RLS — complete** as of
+    2026-08-29 (`ohm#4t8w2j6q`). Fifth and final table-level RLS-lockdown
+    sub-step. Policy matrix, including the `staff` SELECT-scope question,
+    presented and approved before any SQL was written, per the prompt's
+    mandatory gate.
+    - **Context loaded first**: `.ai/briefing.md`, `.ai/handoff.md`
+      (confirmed 6C-2 through 6C-4 complete), `docs/state/staff_state.md`,
+      `docs/state/logs_state.md`, ADR-001, plus a live read of current RLS
+      on `staff`/`action_logs` (`pg_policies`) and the live role-helper
+      function definitions (`is_staff()`, `is_owner()`,
+      `current_staff_position()`), confirming `current_staff_position()`
+      is `SECURITY DEFINER` and reads `staff` directly — so tightening
+      `staff`'s own SELECT policy can't break the helper functions every
+      other table's RLS depends on.
+      - **One real discrepancy caught by tracing usage directly in code,
+        not assumed from the prompt's "already Owner-gated in the UI"
+        framing**: the prompt asked whether `staff` SELECT should be
+        restricted to Supervisor+ at the DB level, matching the Staff
+        Directory *page*'s Owner-only nav gate. Grepping every
+        `.from("staff")` call site showed `app/layout.tsx` queries `staff`
+        on *every* page load for *every* role — both the full active-staff
+        list (feeds the Simulate Staff dropdown) and the `sessionStaff`
+        lookup (`user_id → staff` row) that drives actor attribution
+        app-wide — before any role check runs. `staff` is also read
+        broadly in `clients`/`bookings`/`sales`/`logs` pages for name/role
+        display ("Logged by: Ana"). Restricting SELECT below `is_staff()`
+        would have broken session resolution itself for Front Desk on
+        nearly every route, not just blocked the Staff Directory page.
+      - **Decision confirmed with the user, not assumed**: `staff` SELECT
+        stays `is_staff()` (broad, any of the 8 loginable staff) — the
+        Staff Directory page's Owner-only visibility remains app-level UI
+        gating only, unchanged, separate from the base table read.
+      - **No new role helpers** — reused 6C-2's `is_staff()`, `is_owner()`
+        as-is.
+      - **Policy matrix**: `staff` — SELECT = `is_staff()`, INSERT =
+        `is_owner()` (matches Owner-gated Add Staff modal); no UPDATE (no
+        staff-editing UI exists, confirmed add-only per the earlier
+        decision in `ohm#3z8k1p6d` — also means `user_id`, the
+        auth-linkage column set only via `service_role` in 6A, can never
+        be altered through app RLS); no DELETE (no delete UI exists).
+        `action_logs` — SELECT = `is_owner()` (matches Owner-gated
+        Activity Logs page); INSERT = `is_staff()` (written from nearly
+        every mutating flow across the app — Log Visit, Bookings, Sales
+        edit/void, Settings, Staff add — by any logged-in staff member);
+        no UPDATE, no DELETE (audit trail stays append-only/immutable,
+        matching the points-ledger immutability pattern).
+      - **Migration**
+        (`supabase/migrations/20260829160000_staff_action_logs_rls.sql`),
+        smoke-tested via a rolled-back transaction simulating
+        `auth.uid()`/`request.jwt.claims` as anon, Ana (Front Desk), Diego
+        (Supervisor), and J. Cruz (Owner) — per the prompt's explicit
+        "widest blast radius" flag on this sub-step, exercised real
+        domain writes as each role rather than only synthetic
+        `action_logs` inserts: a real `log_visit()` RPC call as Ana, a
+        real booking insert + `action_logs` write as Diego, a real sales
+        `UPDATE` (edit) + `action_logs` write as Diego. Confirmed anon
+        blocked entirely on both tables (0 rows SELECT, INSERT rejected);
+        Ana and Diego can SELECT/INSERT `staff` and INSERT `action_logs`
+        but correctly see 0 rows on `action_logs` SELECT and are blocked
+        from `staff` INSERT; Owner succeeds on `staff` SELECT/INSERT and
+        `action_logs` SELECT/INSERT. **One false-positive caught by
+        checking row counts, not just absence of an exception**: an Owner
+        UPDATE/DELETE against `action_logs` raised no error, which first
+        read as a bypass — a `GET DIAGNOSTICS ... = ROW_COUNT` check
+        showed 0 rows affected in both cases, confirming it was a silent
+        no-op (no matching policy) rather than a real permission grant;
+        `action_logs` is correctly immutable even for Owner. All of the
+        above verified before applying live via `apply_migration`. Live
+        policies (`pg_policies`) read back afterward and confirmed to
+        match exactly.
+      - **Regression-tested end-to-end via real logins, not Simulate
+        Staff, per the prompt's explicit requirement**: logged in as Ana
+        (Front Desk) — Owner-only nav (Analytics/Staff/Logs) correctly
+        absent, `/staff` and `/logs` both correctly blocked by the
+        existing app-level Owner-only guard, a real Log Visit (Wet Area
+        service) succeeded end-to-end through the actual modal with
+        correct actor attribution ("Ana · Receptionist"), points balance
+        moved 213→216 live. Logged in as Diego (Supervisor) — same
+        nav/route gating as Ana, a real New Booking succeeded through the
+        actual modal (`created_by` confirmed via SQL to be Diego's staff
+        id, actor label showed "Diego · Supervisor"), a real Sales Edit
+        succeeded through the actual modal ("Edited by You" shown,
+        ₱700→₱750, Sales Log total updated live). Logged in as J. Cruz
+        (Owner) — Analytics/Staff/Logs nav correctly present, the Activity
+        Logs page correctly showed entries from all three roles' own
+        regression actions above (Diego's sale_edit, Ana's Wet Area visit,
+        etc. — proving `action_logs` SELECT genuinely returns real rows
+        for Owner, not an empty/broken query), Staff Directory page loaded
+        the full roster, and a real Add Staff succeeded end-to-end through
+        the actual modal ("RLS Test Staff added as Attendant"). `npx tsc
+        --noEmit` passes clean, no server or console errors observed at
+        any tier throughout.
+      - **One harmless test artifact intentionally left in place**,
+        matching the "no delete policy/UI for `staff`" invariant: an
+        Attendant record named "RLS Test Staff" (added 2026-08-29) from
+        the live browser regression test — inert, directory-only, not
+        removable through the app (same precedent as 6C-3's kept test
+        booking and 6C-2's kept test ledger entry).
+      - **Simulate Staff still fully functional in the UI** — same
+        6C-2/6C-3/6C-4 pattern: neutralized at the DB level, not removed
+        from the UI itself; that's now the sole remaining item, 6C-6.
+      - **6C is now complete for all five planned table-level RLS
+        sub-steps — only 6C-6 (removing Simulate Staff) remains.**
+      - See [[staff_state]], [[logs_state]] for the updated RLS detail.
   - **6C-4 — Settings/Catalog RLS (services, promos, addons, rooms, lockers,
     weekend_slots) — complete** as of 2026-08-29 (`ohm#9d2k6y4p`). Fourth of
     six planned 6C sub-steps. Policy matrix presented and approved before
@@ -553,23 +757,12 @@ This file tracks only what's in flight right now.
     - **6C-4 — Settings/Catalog RLS (services, promos, addons, rooms,
       lockers, weekend_slots) — complete** as of 2026-08-29
       (`ohm#9d2k6y4p`) — see the detailed entry above (top of this list).
-    - **6C-5 — RLS lockdown for `staff`/`action_logs` — not started.**
-      6C-2 through 6C-4 (above) closed the Core Loop domain
-      (`clients`/`point_transactions`/`sales`), the
-      `bookings`/`locker_occupancy` domain, and the Settings/Catalog domain
-      (`services`/`promos`/`addons`/`rooms`/`lockers`/`weekend_slots`), and
-      established/reused the role helpers
-      (`is_staff()`/`is_supervisor_or_above()`/`is_owner()`/
-      `current_staff_position()`). Remaining planned scope: `staff`/
-      `action_logs` attribution enforcement. Should reuse the existing
-      helper functions and get its own approval gate given the Database
-      Change Safety significance of RLS changes.
-    - **6C-6 — Remove Simulate Staff — not started.** Only after 6C-2
-      through 6C-5 have RLS actually enforcing real identity at the DB
-      level; removing Simulate Staff before then would leave no way to
-      exercise the app during RLS rollout. This is also when Simulate
-      Staff's role-spoofing capability finally gets neutralized for real
-      (RLS enforcement, not just UI hiding).
+    - **6C-5 — Staff Directory + Activity Logs RLS — complete** as of
+      2026-08-29 (`ohm#4t8w2j6q`) — see the detailed entry near the top of
+      this list.
+    - **6C-6 — Remove Simulate Staff + Full-System Regression Pass —
+      complete** as of 2026-08-29 (`ohm#8r5m1v7z`) — see the detailed
+      entry at the top of this list. Closes the entire Staff Auth phase.
 
 - **Analytics Phase: Owner-Only Reporting Dashboard (Spa-Day Bucketing)**
   (`ohm#7v2q8f5c`) — **complete** as of 2026-08-28. Plan + regression

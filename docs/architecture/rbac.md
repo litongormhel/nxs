@@ -1,14 +1,13 @@
-# RBAC — Design Target (Not Yet Enforced)
+# RBAC — Implemented
 
-Everything in this file describes the **intended** role model. None of it
-is wired up in application code or keyed into RLS policies yet — there is
-no login/session flow in the app at all as of 2026-08-27. Treat this as a
-target to build toward, not current behavior.
+Staff Auth (6A through 6C-6) is complete as of 2026-08-29. Everything
+below describes real, currently-enforced behavior — not a target. See
+`docs/state/staff_state.md` for the full per-table RLS policy matrix and
+`.ai/handoff.md` for the phase-by-phase build history.
 
 ## Roles
 
-Sourced from the live `staff_position` enum (the only role-shaped construct
-that currently exists in the schema):
+Sourced from the live `staff_position` enum:
 
 - `Receptionist`
 - `Attendant`
@@ -16,25 +15,28 @@ that currently exists in the schema):
 - `Owner`
 - `Others`
 
-The prompt's three-tier framing (Front Desk / Supervisor / Owner) maps
-loosely onto this enum as a simplification, but the schema itself already
-has five values, not three. Any RBAC design work should reconcile against
-the actual enum rather than the simplified framing.
+The app's three-tier framing (Front Desk / Supervisor / Owner) maps onto
+this enum: `Receptionist` displays as "Front Desk"; `Attendant`/`Others`
+are directory-only (no login, no role gating relevant to them — they
+can't authenticate). Only `Receptionist`/`Supervisor`/`Owner` are
+loginable.
 
-## Current reality vs. target
+## Enforcement
 
-| Aspect | Target | Current |
-|---|---|---|
-| Login | Staff authenticate individually | No auth flow exists in the app |
-| Session → actor | `action_logs.staff_id` set from session | Set via placeholder dropdown (manual staff pick) — built for Log Visit as of `ohm#7f3k9d2m`; no Logs *viewer* UI yet, see `docs/state/logs_state.md` |
-| RLS policy scoping | Policies keyed off authenticated staff role/id | RLS enabled table-wide; 7 tables have a policy (`lockers`/`rooms`/`services`/`therapists` public-read, plus `clients`/`staff`/`point_transactions` public-read and `point_transactions`/`sales`/`action_logs` public-insert added by `ohm#7f3k9d2m`, scoped to exactly what Core Loop needed); nothing is role-keyed and no table has an UPDATE/DELETE policy |
-| Route protection | Role-gated pages/actions per `staff_position` | No route protection exists — every page under `app/` is reachable without auth |
+| Aspect | Implementation |
+|---|---|
+| Login | Real Supabase Auth (`app/login`), email/password per staff account, session cookies via `@supabase/ssr` |
+| Route protection | `proxy.ts` requires a session on every route except `/login`; redirects unauthenticated requests with `next` intent preserved |
+| Session → actor | `app/layout.tsx` resolves `auth.uid() → staff.user_id` into `sessionStaff`, threaded through `lib/staff-context.tsx`'s `useStaffSim()` to every consumer — nav gating, Settings role gates, and every `action_logs`/mutation actor column |
+| RLS policy scoping | Every `public` table's RLS is keyed off `auth.uid()` via `current_staff_position()` (`SECURITY DEFINER`) and the `is_staff()`/`is_supervisor_or_above()`/`is_owner()` helpers — no table has an open `USING (true)` policy left |
+| Role-based route restriction | Not at the `proxy.ts` layer — only session presence is checked there. Role gating (Owner-only pages) is enforced at both the app level (`lib/nav.ts`'s `ownerOnly`, per-page content guards) and the DB level (RLS), so a non-Owner is blocked twice over even without proxy-level role checks |
 
-## Why deferred
+## History note
 
-Per project decision, staff auth is intentionally being built last in the
-roadmap so the core operational domains (ledger, bookings, sales) can be
-validated against real DB-level invariants first. Do not front-run this by
-adding ad hoc auth checks to individual pages — when it lands it should be
-a single coherent layer (middleware + RLS policies + `loginable_staff`
-view), not scattered per-page guards.
+Staff auth was deliberately built last in the roadmap so the core
+operational domains (ledger, bookings, sales) could be validated against
+real DB-level invariants first. During that interim, a client-side
+"Simulate Staff" role-spoofing dropdown stood in for a real session; it
+was removed in 6C-6 once RLS made it redundant (spoofing the UI could no
+longer grant any real data access, so keeping it around was actively
+misleading rather than useful for testing).

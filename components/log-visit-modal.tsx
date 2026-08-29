@@ -108,7 +108,7 @@ export function LogVisitModal({
   >("Cash");
   const [gcashRef, setGcashRef] = useState("");
   const { sessionStaff } = useStaffSim();
-  const actor = sessionStaff ?? staff[0];
+  const actor = sessionStaff;
   const staffId = actor?.id ?? "";
 
   const [error, setError] = useState<string | null>(null);

@@ -71,6 +71,10 @@ Owner-only, reusing the exact existing `lib/staff-context.tsx`
 flag — Staff/Logs picked it up first). `AnalyticsBrowser` has the same
 page-level content guard as Staff Directory/Activity Logs
 (`currentRole !== "Owner"` → blocking message), covering a direct URL visit.
+As of Staff Auth 6C-6 this is real, identity-keyed access control — `sales`/
+`bookings`/`clients`/`therapists` RLS SELECT all require `is_staff()`
+(6C-2/6C-3), so a non-authenticated caller sees no rows regardless of app-level
+gating, and Owner-only enforcement is app-level UI gating on top of that.
 
 ### Data fetch
 
@@ -85,8 +89,6 @@ flagged pattern as Activity Logs' `LIMIT 500`).
 
 ### Explicitly out of scope
 
-- Staff Auth (app-level-only role gate remains, same gap as every other
-  Owner-only page — see [[staff_state]]).
 - Export/download of reports — not built, confirmed not wanted for this
   phase.
 - No writes anywhere in this phase — pure read/aggregation.

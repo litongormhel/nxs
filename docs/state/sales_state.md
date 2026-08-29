@@ -21,10 +21,8 @@
 - One write path exists, indirectly: `public.log_visit(...)` (see
   [[points_ledger_state]]) inserts a `sales` row whenever the Log Visit
   modal's amount is `> 0` — either the full service price (plain earn
-  visit) or a cash top-up (redemption-with-upgrade). `processed_by` is set
-  to the staff member picked in the modal's placeholder-actor dropdown.
-  This is the **only** write path; nothing in the app edits, voids, or
-  lists `sales` directly yet.
+  visit) or a cash top-up (redemption-with-upgrade). `processed_by` is the
+  real authenticated staff member (`sessionStaff.id`).
 - **RLS, real role-based as of Staff Auth 6C-2 (`ohm#5m8t2x6b`,
   2026-08-29)**: the additive `public_select`/`public_insert`/
   `public_update` (`USING`/`WITH CHECK (true)`) policies from Core
@@ -41,9 +39,10 @@
   void" exactly, now at the DB layer. No DELETE policy — sales are never
   hard-deleted. **This closes the "app-level-only role gate" accepted gap
   noted below for every prior phase** — real DB access now matches the
-  UI's Edit/Void role gating, and a Simulate-Staff-only session (no real
-  `auth.uid()`) gets no real sales access regardless of the simulated
-  role. Smoke-tested via a rolled-back transaction (anon/Front
+  UI's Edit/Void role gating; only a real authenticated session grants any
+  access at all (no client-side role selector exists to spoof, since
+  Simulate Staff was removed in 6C-6). Smoke-tested via a rolled-back
+  transaction (anon/Front
   Desk/Supervisor/Owner) and regression-verified live via real logins:
   Diego (Supervisor) edited a sale successfully but is blocked from
   voiding; J. Cruz (Owner) voids successfully. See [[staff_state]] for the
@@ -78,8 +77,7 @@
   matching ADR-001 "Owner-only can void, never hard delete." Enabled for
   Owner only.
 - Both mutations end with an `action_logs` insert (`sale_edit` /
-  `sale_void`) using the same placeholder-actor pattern as every other
-  phase, and `revalidatePath("/sales")`.
+  `sale_void`), attributed to the real session, and `revalidatePath("/sales")`.
 - **Role gating reuses the existing `lib/staff-context.tsx`
   (`useStaffSim`/`currentRole`) mechanism** — the same standing pattern
   Staff Directory/Activity Logs established (`ohm#3z8k1p6d`), not a new
