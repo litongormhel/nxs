@@ -12,10 +12,11 @@ export default async function ClientsPage() {
     { data: promos },
     { data: addons },
     { data: lockers },
+    { data: occupancy },
   ] = await Promise.all([
     supabase
       .from("clients")
-      .select("id, codename, username, member_code, points_balance")
+      .select("id, codename, username, member_code, points_balance, since_date")
       .order("codename", { ascending: true }),
     supabase
       .from("services")
@@ -46,7 +47,20 @@ export default async function ClientsPage() {
       .from("lockers")
       .select("number")
       .order("number", { ascending: true }),
+    supabase
+      .from("locker_occupancy")
+      .select("client_id, locker_number")
+      .is("checked_out_at", null)
+      .not("client_id", "is", null),
   ]);
+
+  // Build map: clientId → active locker number
+  const clientLockerMap: Record<string, number> = {};
+  for (const row of occupancy ?? []) {
+    if (row.client_id) {
+      clientLockerMap[row.client_id] = row.locker_number;
+    }
+  }
 
   return (
     <div className="p-8">
@@ -69,6 +83,7 @@ export default async function ClientsPage() {
           promos={promos ?? []}
           addons={addons ?? []}
           lockers={(lockers ?? []).map((l) => l.number)}
+          clientLockerMap={clientLockerMap}
         />
       )}
     </div>
