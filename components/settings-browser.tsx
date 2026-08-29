@@ -72,6 +72,10 @@ export function SettingsBrowser({
   // Theme state
   const [isLightMode, setIsLightMode] = useState(false);
 
+  useEffect(() => {
+    setIsLightMode(localStorage.getItem("theme") === "light");
+  }, []);
+
   // Staff simulation state — shared across the app via StaffSimProvider
   // (lifted out of local state in ohm#3z8k1p6d so the Sidebar's Owner-only
   // nav gating can read the same "who's simulated" value).
@@ -463,7 +467,10 @@ export function SettingsBrowser({
                 type="checkbox"
                 className="opacity-0 w-0 h-0"
                 checked={isLightMode}
-                onChange={(e) => setIsLightMode(e.target.checked)}
+                onChange={(e) => {
+                  setIsLightMode(e.target.checked);
+                  localStorage.setItem("theme", e.target.checked ? "light" : "dark");
+                }}
               />
               <span
                 className={`absolute inset-0 rounded-full border transition-colors ${
@@ -530,7 +537,7 @@ export function SettingsBrowser({
               value={selectedStaffId}
               onChange={(e) => setSelectedStaffId(e.target.value)}
               disabled={!!sessionStaff}
-              className="rounded-lg border border-border bg-[#1d1610] px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold disabled:opacity-50"
+              className="rounded-lg border border-border bg-surface px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold disabled:opacity-50"
             >
               {loginableStaff.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -579,7 +586,7 @@ export function SettingsBrowser({
                   defaultValue={s.points_earned}
                   key={`${s.id}-pts-${s.points_earned}`}
                   onBlur={(e) => handleUpdateServicePoints(idx, e.target.value)}
-                  className="w-[70px] rounded-lg border border-border bg-[#1d1610] px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none disabled:opacity-50 disabled:cursor-not-allowed focus:border-gold"
+                  className="w-[70px] rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none disabled:opacity-50 disabled:cursor-not-allowed focus:border-gold"
                 />
               </div>
               <div className="flex items-center gap-1">
@@ -590,7 +597,7 @@ export function SettingsBrowser({
                   defaultValue={s.price}
                   key={`${s.id}-price-${s.price}`}
                   onBlur={(e) => handleUpdateServicePrice(idx, e.target.value)}
-                  className="w-[70px] rounded-lg border border-border bg-[#1d1610] px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none disabled:opacity-50 disabled:cursor-not-allowed focus:border-gold"
+                  className="w-[70px] rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none disabled:opacity-50 disabled:cursor-not-allowed focus:border-gold"
                 />
               </div>
               {canEditServices && (
@@ -643,7 +650,7 @@ export function SettingsBrowser({
                   defaultValue={p.discount}
                   key={`${p.id}-discount-${p.discount}`}
                   onBlur={(e) => handleUpdatePromoDiscount(idx, e.target.value)}
-                  className="w-[70px] rounded-lg border border-border bg-[#1d1610] px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none disabled:opacity-50 focus:border-gold"
+                  className="w-[70px] rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none disabled:opacity-50 focus:border-gold"
                 />
               </div>
               {canEditPromos && (
@@ -721,7 +728,7 @@ export function SettingsBrowser({
                   defaultValue={a.price}
                   key={`${a.id}-price-${a.price}`}
                   onBlur={(e) => handleUpdateAddonPrice(idx, e.target.value)}
-                  className="w-[70px] rounded-lg border border-border bg-[#1d1610] px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none focus:border-gold"
+                  className="w-[70px] rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none focus:border-gold"
                 />
               </div>
               <button
@@ -768,7 +775,7 @@ export function SettingsBrowser({
               value={roomCountDraft}
               onChange={(e) => setRoomCountDraft(e.target.value)}
               onBlur={(e) => handleUpdateRoomCount(e.target.value)}
-              className="w-20 rounded-lg border border-border bg-[#1d1610] px-2.5 py-2 font-mono text-xs text-foreground outline-none focus:border-gold"
+              className="w-20 rounded-lg border border-border bg-surface px-2.5 py-2 font-mono text-xs text-foreground outline-none focus:border-gold"
             />
           </div>
         </div>
@@ -805,7 +812,7 @@ export function SettingsBrowser({
                     defaultValue={f.defaultValue}
                     autoFocus={f === promptDialog.fields[0]}
                     required
-                    className="w-full rounded-lg border border-border bg-[#1d1610] px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
                   />
                 </div>
               ))}

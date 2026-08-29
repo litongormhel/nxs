@@ -27,3 +27,11 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
+
+body.light {
+  --background: #f7f4ee;
+  --surface: #ffffff;
+  --border: #e2dccc;
+  --foreground: #1a1510;
+  --muted: #6b6152;
+}
