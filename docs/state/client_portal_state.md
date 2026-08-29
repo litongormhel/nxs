@@ -43,19 +43,62 @@ No UI, no routes, no client-facing pages exist yet. This is schema-only.
   goes in the nullable `detail` text column, matching how every other
   event type already encodes extra context). See [[logs_state]].
 
+## Implemented (7A-2, `ohm#4m8x1v6q`, 2026-08-29) — Master QR & registration/login
+
+Client-facing surface, entirely separate route tree and session from the
+staff app. No points/history/promos views yet — that's later scope.
+
+- **Route isolation**: `app/portal/*` excluded from the staff session gate
+  in `proxy.ts` (early return before the staff-auth check). Its layout
+  (`app/portal/layout.tsx`) has no dependency on `lib/staff-context.tsx`
+  or the staff `Sidebar`. This required moving every existing staff route
+  into `app/(staff)/` with its own layout, since the old root
+  `app/layout.tsx` unconditionally wrapped all children in the staff
+  Sidebar — see `.ai/handoff.md` for the full rationale; staff route URLs
+  are unchanged.
+- **Registration** (`app/portal/register/page.tsx` →
+  `app/portal/api/register/route.ts`): Phone + PIN + Name. Matches
+  `clients.phone`; a match links the new `client_portal_accounts` row to
+  the existing `client_id` (points/history untouched — read-only lookup).
+  No match creates a new `clients` row (`codename` = submitted Name,
+  system-generated `username`/`member_code` since both are `NOT NULL` with
+  no default) plus the linked portal account. PIN hashed with
+  `crypto.scrypt` (`lib/portal/pin.ts`). Portal account `username` is
+  system-generated (`lib/portal/codes.ts`, format `NXS-XXXXXX`), shown on
+  the confirmation screen, never editable, never encoded in any QR.
+- **Login** (`app/portal/login/page.tsx` → `app/portal/api/login/route.ts`):
+  Phone + PIN, `scrypt`-verified against `client_portal_accounts.pin_hash`.
+- **Why service-role, not the anon-key client the rest of the app uses**:
+  `clients` INSERT requires `is_staff()` (Staff Auth 6C-2) and
+  `client_portal_accounts` is still RLS default-deny (7A-1) — an anonymous
+  portal visitor cannot write through the anon-key/RLS path at all.
+  `lib/portal/service-client.ts` uses `SUPABASE_SERVICE_ROLE_KEY`, confined
+  to the two Route Handlers above, never imported by a Client Component.
+  RLS policies on `client_portal_accounts` are still not designed —
+  reads/writes in this prompt bypass RLS entirely via the service-role
+  client, which is why no policy gap needed to be silently patched.
+- **Session**: `lib/portal/session.ts`, an HMAC-signed `nxs_portal_session`
+  cookie (`httpOnly`, `path=/portal`), completely separate from Supabase
+  Auth's staff `sb-*` cookies — no shared session/role/RBAC context.
+- **Confirmation screen** (`app/portal/confirmation/page.tsx`): server
+  component, reads the verified session cookie and re-queries fresh
+  (not URL params). Minimal — Name + system username only, nothing else.
+- **Master QR** (`app/(staff)/settings/master-qr/page.tsx`): static,
+  non-expiring, staff-gated, linked from the Settings page. Renders via
+  the new `qrcode` dependency, encoding `/portal/register` built from the
+  live request host. No token table, no expiry — a fixed URL, per ADR-001.
+
 ## Not yet implemented — see roadmap
 
-- Master QR generation (static, non-expiring registration entry point).
-- Registration UI (phone + PIN + Name submission, existing-client match
-  by phone vs. new client creation).
-- Login UI for the client portal.
 - Member QR (per-account, permanent, client-side) and its `log_visit` RPC
   lookup path — additive only, the existing RPC contract/atomicity/ledger
-  triggers are untouched by this prompt.
+  triggers are untouched so far.
 - Phone masking/reveal UI and the actual `phone_number_revealed` logging
   call site.
 - RLS policies on `client_portal_accounts` (currently default-deny for
-  everyone, including staff).
+  everyone, including staff — 7A-2's Route Handlers bypass this via the
+  service-role client rather than designing the real policy matrix).
+- Points balance / visit history / promos views for the client portal.
 - Manual points entry UI gated by `allow_receptionist_manual_points`
   (uses the existing `ADJUSTMENT` ledger entry type — no new entry type,
   no ledger schema change, per ADR-001).

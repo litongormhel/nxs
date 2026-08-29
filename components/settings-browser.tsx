@@ -18,7 +18,7 @@ import {
   deleteAddon,
   addLockerBatch,
   updateRoomCount,
-} from "@/app/settings/actions";
+} from "@/app/(staff)/settings/actions";
 import { compareSlotTimes } from "@/lib/bookings/slots";
 
 export type Service = {

@@ -74,6 +74,21 @@ export type Database = {
         }
         Relationships: []
       }
+      app_settings: {
+        Row: {
+          allow_receptionist_manual_points: boolean
+          id: boolean
+        }
+        Insert: {
+          allow_receptionist_manual_points?: boolean
+          id?: boolean
+        }
+        Update: {
+          allow_receptionist_manual_points?: boolean
+          id?: boolean
+        }
+        Relationships: []
+      }
       bookings: {
         Row: {
           booking_date: string
@@ -180,6 +195,41 @@ export type Database = {
             columns: ["therapist_id"]
             isOneToOne: false
             referencedRelation: "therapists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_portal_accounts: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          phone: string
+          pin_hash: string
+          username: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          phone: string
+          pin_hash: string
+          username: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          phone?: string
+          pin_hash?: string
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_portal_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]

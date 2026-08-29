@@ -41,9 +41,17 @@ export default async function SettingsPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-xl font-semibold text-gold animate-fade-in mb-6">
-        Settings
-      </h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold text-gold animate-fade-in">
+          Settings
+        </h1>
+        <a
+          href="/settings/master-qr"
+          className="text-sm rounded-md border border-border px-3 py-1.5 hover:bg-white/5"
+        >
+          Master QR
+        </a>
+      </div>
 
       <SettingsBrowser
         initialServices={services ?? []}

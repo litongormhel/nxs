@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStaffSim } from "@/lib/staff-context";
-import { checkOutLocker } from "@/app/lockers/actions";
+import { checkOutLocker } from "@/app/(staff)/lockers/actions";
 
 type Occupancy = {
   occupancyId: string;

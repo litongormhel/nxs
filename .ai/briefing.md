@@ -82,7 +82,68 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-29 — Client Portal 7A-1: Schema Foundation** (`ohm#7a1f9c2k`).
+1. **2026-08-29 — Client Portal 7A-2: Master QR & Registration Flow**
+   (`ohm#4m8x1v6q`). First client-facing surface of the Client Portal —
+   builds on 7A-1's schema. Plan + regression risk assessment presented and
+   approved before any code was written, per the prompt's mandatory gate;
+   a follow-up layout question (root layout unconditionally rendering the
+   staff Sidebar around all routes) was flagged and approved separately
+   before touching it.
+   **One thing verified, not trusted, before starting**: the prompt claimed
+   7A-1 (`ohm#7a1f9c2k`) was "completed and merged" — at first read this was
+   false (no migration, no commit, no `docs/state/client_portal_state.md`
+   anywhere in the repo; the ADR-001/briefing.md text describing it was an
+   uncommitted working-tree edit with a literal unfilled `[DATE]`
+   changelog placeholder). Flagged to the user before any implementation;
+   the user then applied the actual 7A-1 migration live, confirmed via
+   `list_migrations`/`list_tables` before proceeding — `client_portal_accounts`
+   and the `clients.phone` unique constraint are real and committed.
+   **Route-group refactor** (approved separately, not in the original
+   plan): `app/layout.tsx` was the literal HTML root and unconditionally
+   wrapped every route in the staff `Sidebar`/`StaffSimProvider`/staff
+   session lookup — a portal page nested under it would still show staff
+   nav and run a needless staff-session query. Moved all 13 existing route
+   folders into `app/(staff)/` with their own layout carrying the exact
+   same Sidebar/session logic (mechanical, same URLs — parenthesized route
+   groups don't affect routing); slimmed `app/layout.tsx` to bare
+   `html`/`body` + fonts. Every `@/app/<route>/actions` import across
+   `components/*.tsx` updated to the new `@/app/(staff)/<route>/actions`
+   path. **`proxy.ts`**: added an early return excluding `/portal/*` from
+   the staff-session gate — the only touch to shared staff logic; the
+   existing redirect/matcher logic for staff routes is unchanged.
+   **New `/portal/*` surface**: registration (Phone/PIN/Name → match
+   existing `clients.phone` or create new client, preserving points/history
+   on match) and login (Phone+PIN), both via server-only Route Handlers
+   using the service-role Supabase client — required because
+   `client_portal_accounts` is RLS default-deny and `clients` INSERT
+   requires `is_staff()`, so an anonymous visitor cannot register through
+   the anon-key path the rest of the app uses; this is a deliberate,
+   narrowly-scoped exception to the repo's anon-key-only convention,
+   confined to two Route Handlers. PIN hashed with Node's built-in
+   `crypto.scrypt` (no new dependency); portal session is a separate
+   HMAC-signed cookie (`nxs_portal_session`, scoped to `/portal`,
+   signed with `SUPABASE_SERVICE_ROLE_KEY`) — entirely distinct from
+   Supabase Auth's staff session cookies. System-generated portal
+   `username` (e.g. `NXS-XKUCU4`) shown on a minimal confirmation screen,
+   never editable, never encoded in the QR. **Master QR**: static
+   `qrcode`-rendered image (new dependency) on a staff-gated page at
+   `/settings/master-qr`, linked from the existing Settings page — encodes
+   `/portal/register` built from the live request host so it's correct in
+   every environment without new env config. **Verified live in the
+   browser, not just typechecked**: registration created a real client +
+   portal account end-to-end, login with the same phone/PIN round-tripped
+   to the same account, `/dashboard` and other staff routes still required
+   the existing staff session and rendered the full Sidebar/Owner nav
+   unaffected by the refactor, Master QR rendered and correctly encoded
+   the registration URL. `npx tsc --noEmit` and `eslint` both clean.
+   Explicitly out of scope per the prompt (next prompts): Member QR,
+   `log_visit` RPC lookup integration, phone masking/reveal UI, points/
+   history/promos views. One test artifact left live, matching this
+   repo's established precedent of leaving harmless test data documented
+   rather than deleting it via SQL: client "Test Client 7A2"
+   (phone `09171234567`), portal account `NXS-XKUCU4`. See
+   [[client_portal_state]] for the updated state.
+2. **2026-08-29 — Client Portal 7A-1: Schema Foundation** (`ohm#7a1f9c2k`).
    Database layer only — no UI, no routes. Added a `UNIQUE` constraint to
    the already-existing `clients.phone` column (the prompt described it as
    a new column; live schema check caught it already existed, nullable,
@@ -97,7 +158,7 @@ Full invariant list: [[nxs-architecture-locks]].
    is plain text with no enum, so the new `phone_number_revealed` event
    type is a convention, not a schema change. Both migrations applied live
    and verified via `pg_policies`/`get_advisors`. See [[client_portal_state]].
-2. **2026-08-29 — Cleanup: Remove 6C-6 Regression Test Artifacts from Live
+3. **2026-08-29 — Cleanup: Remove 6C-6 Regression Test Artifacts from Live
    DB** (`ohm#2c6h9x4d`). Data-only cleanup, no code/schema/RLS changes.
    Removed the 4 test artifacts named in `ohm#8r5m1v7z`'s "harmless test
    artifacts left in place" note: booking "6C-6 Regression Test", sale
@@ -125,7 +186,7 @@ Full invariant list: [[nxs-architecture-locks]].
    11→10, weekend_slots 8→7); the real ₱725 sale confirmed still present
    and unmodified. This closes out the Staff Auth phase (6A–6C-6) with no
    lingering test data in the live DB.
-3. **2026-08-29 — Staff Auth 6C-6: Remove Simulate Staff + Full-System
+4. **2026-08-29 — Staff Auth 6C-6: Remove Simulate Staff + Full-System
    Regression Pass (Staff Auth Complete)** (`ohm#8r5m1v7z`). Final
    sub-step of the entire Staff Auth phase (6A through 6C-6) and the
    entire originally-scoped 6-phase roadmap. Repo-wide search for every
@@ -195,7 +256,7 @@ Full invariant list: [[nxs-architecture-locks]].
    6-phase roadmap in full.** No RLS policy changes — none were needed,
    per scope; nothing surfaced by regression testing warranted one. See
    [[staff_state]] for the final state.
-4. **2026-08-29 — Staff Auth 6C-5: Staff Directory + Activity Logs RLS**
+5. **2026-08-29 — Staff Auth 6C-5: Staff Directory + Activity Logs RLS**
    (`ohm#4t8w2j6q`). Fifth and final table-level RLS-lockdown sub-step of
    six planned — reused 6C-2's role helpers as-is (`is_staff()`,
    `is_owner()`), no new helpers created. Policy matrix, including the
@@ -260,50 +321,3 @@ Full invariant list: [[nxs-architecture-locks]].
    now complete for all five table-level RLS sub-steps — only 6C-6
    (removing Simulate Staff) remains.** See [[staff_state]],
    [[logs_state]] for the updated RLS detail.
-5. **2026-08-29 — Staff Auth 6C-4: Settings/Catalog RLS (services, promos,
-   addons, rooms, lockers, weekend_slots)** (`ohm#9d2k6y4p`). Fourth of six
-   planned 6C sub-steps — reused 6C-2's role helpers as-is (`is_staff()`,
-   `is_supervisor_or_above()`), no new helpers created. Closes the
-   "app-level-only role gate" explicitly accepted when Settings persistence
-   shipped (`ohm#5x1p8m3v`). Policy matrix was presented and approved before
-   any SQL was written, per the prompt's mandatory gate.
-   **One real discrepancy caught by reading `settings-browser.tsx` directly,
-   not assumed from the prompt's "already locked in the UI" framing**: only
-   Services and Promos actually had a UI role lock (`canEditServices`/
-   `canEditPromos`) — Add-ons, Weekend Slots, Lockers, and Rooms/Beds had no
-   UI lock at all, so any role could click Add/Delete/edit those four
-   sections pre-6C-4. Flagged and confirmed with the user before
-   implementing: added matching UI locks (new shared `canEditCatalog` flag,
-   same pattern as the existing two) alongside the RLS migration, so Front
-   Desk sees disabled controls instead of hitting a DB rejection.
-   **Policy matrix, all six tables**: SELECT = `is_staff()`; INSERT/UPDATE =
-   `is_supervisor_or_above()`; no DELETE policy except `weekend_slots`
-   (`staff_delete`, `is_supervisor_or_above()`, real hard DELETE — confirmed
-   via a live FK scan that nothing references it). `lockers` has no UPDATE
-   policy (add-only, never updated); `services`/`promos`/`addons`/`rooms`
-   have no DELETE policy (all four still FK-referenced by historical rows —
-   soft-delete/deactivate via UPDATE stays correct, confirmed live).
-   **Migration**
-   (`supabase/migrations/20260829150000_settings_catalog_rls.sql`),
-   smoke-tested via a rolled-back transaction simulating `auth.uid()` as
-   anon, Ana (Front Desk), Diego (Supervisor), and J. Cruz (Owner) across
-   all six tables (18 checks total) — confirmed anon and Ana are blocked on
-   every INSERT/UPDATE/DELETE while retaining SELECT, Diego and Owner
-   succeed on every table — before applying live via `apply_migration`.
-   Live policies read back afterward and confirmed to match exactly.
-   Regression-tested end-to-end via real logins (not Simulate Staff):
-   logged in as Ana — Settings correctly showed the new read-only notice
-   and disabled controls (including numeric inputs, confirmed via DOM
-   inspection) on all four newly-gated sections, in addition to the
-   pre-existing Services/Promos lock. Logged in as Diego — all six sections
-   showed enabled controls; a live Add Weekend Slot succeeded end-to-end
-   through the real UI (`"1:37 PM added to weekend slots"`, confirmed
-   inserted via SQL), proving the DB-level policy actually permits a real
-   Supervisor session, not just the smoke test. Delete's `window.confirm()`
-   was auto-dismissed by this browser tool (same known limitation
-   documented since the Operations Phase, `ohm#9h4c7x2m`) so the test slot
-   was removed directly via SQL instead — not treated as unverified, since
-   the identical DELETE path was already proven in the rolled-back
-   transaction smoke test. No server or console errors at any tier.
-   **Next**: 6C-5 (Staff/Logs RLS) and 6C-6 (removing Simulate Staff)
-   remain, tracked in `.ai/handoff.md`.

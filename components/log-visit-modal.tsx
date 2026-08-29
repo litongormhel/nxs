@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { logVisitBooking } from "@/app/bookings/actions";
+import { logVisitBooking } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
 import type {
   Addon,

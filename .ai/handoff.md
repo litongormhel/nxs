@@ -5,6 +5,128 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Client Portal 7A-2: Master QR & Registration Flow — complete**
+  (`ohm#4m8x1v6q`, 2026-08-29). First client-facing surface of the Client
+  Portal domain, on top of 7A-1's schema. Plan + regression risk
+  assessment presented and approved before any code was written, per the
+  prompt's mandatory gate.
+  - **7A-1's "completed and merged" claim did not check out on first
+    read**, and this was flagged before any implementation instead of
+    assumed: no migration in `supabase/migrations/`, no commit in
+    `git log --all`, no `docs/state/client_portal_state.md` file, and the
+    only place describing the schema (ADR-001's "Client Portal (new)"
+    section) was an uncommitted working-tree edit with an unfilled
+    `[DATE]` changelog placeholder. Surfaced to the user via
+    `AskUserQuestion` rather than proceeding on trust; the user then
+    applied the real 7A-1 migration live during the same session — the
+    prerequisite was verified via `list_migrations`/`list_tables`
+    (`client_portal_accounts` live, `clients_phone_key` unique constraint
+    present, migration `client_portal_phone_and_accounts` in the applied
+    list) before writing any 7A-2 code.
+  - **Route-group refactor**, approved as a separate follow-up question
+    once discovered mid-plan (not in the original plan text): the true
+    HTML root `app/layout.tsx` unconditionally wrapped every route in the
+    staff `Sidebar`/`StaffSimProvider`/staff-session lookup, which a
+    nested `app/portal/*` layout can't remove — a portal visitor would
+    have inherited the staff nav and triggered a needless staff-table
+    query. Fixed by moving all 13 existing route folders (`analytics`,
+    `bookings`, `call-sheet`, `clients`, `dashboard`, `lockers`, `login`,
+    `logs`, `sales`, `settings`, `staff`, `therapists`, root `page.tsx`)
+    into `app/(staff)/` with a new `app/(staff)/layout.tsx` carrying the
+    exact same Sidebar/session logic that used to live in the root layout
+    — mechanical, URLs unchanged since parenthesized route groups don't
+    affect routing. `app/layout.tsx` slimmed to bare `html`/`body` +
+    fonts. Every `@/app/<route>/actions` import in `components/*.tsx`
+    (9 files: `log-visit-modal`, `quick-walkin-modal`,
+    `booking-form-modal`, `locker-board`, `staff-browser`,
+    `sales-browser`, `sidebar`, `booking-browser`, `settings-browser`)
+    updated to `@/app/(staff)/<route>/actions`.
+  - **`proxy.ts`**: one early-return added, excluding `/portal` and
+    `/portal/*` from the staff-session gate before the existing staff
+    logic runs. No change to the staff redirect/matcher logic itself.
+  - **New `/portal/*` surface**: `app/portal/layout.tsx` (minimal, no
+    staff imports), `app/portal/register/page.tsx` and
+    `app/portal/login/page.tsx` (client components posting JSON),
+    `app/portal/api/register/route.ts` and
+    `app/portal/api/login/route.ts` (server-only Route Handlers).
+    Registration matches on `clients.phone`: match links the new portal
+    account to the existing `client_id` (points/history untouched, only
+    read); no match inserts a new `clients` row (`codename` = submitted
+    Name) plus a linked `client_portal_accounts` row. **Why service-role,
+    not the anon-key client the rest of the app uses**: `clients` INSERT
+    already requires `is_staff()` (from Staff Auth 6C-2) and
+    `client_portal_accounts` is RLS default-deny (from 7A-1, deliberately
+    — no consumer existed yet) — an anonymous portal visitor cannot
+    write through the anon-key/RLS path at all, so `lib/portal/
+    service-client.ts` uses `SUPABASE_SERVICE_ROLE_KEY` (present in
+    `.env.local`, unused elsewhere in the repo until now), confined to
+    exactly two Route Handlers, never imported by a Client Component.
+    This is a deliberate, narrow exception to the "anon key only" pattern
+    documented in `.ai/briefing.md`, not a general precedent.
+  - **PIN hashing**: `lib/portal/pin.ts`, Node's built-in `crypto.scrypt`
+    with a random salt + `timingSafeEqual` compare — no new dependency.
+  - **Portal session**: `lib/portal/session.ts`, an HMAC-SHA256-signed
+    cookie (`nxs_portal_session`, `httpOnly`, `path=/portal`, signed with
+    `SUPABASE_SERVICE_ROLE_KEY` as HMAC key since no dedicated session
+    secret exists in the env yet) — entirely separate cookie and
+    verification path from Supabase Auth's `sb-*` staff session cookies,
+    satisfying the prompt's "no shared session" requirement.
+  - **System-generated username**: `lib/portal/codes.ts` generates the
+    portal account's `NXS-XXXXXX` username (shown on confirmation, never
+    editable, never encoded in the QR, distinct from the pre-existing
+    `clients.username` column which this flow also has to populate since
+    it's `NOT NULL` with no default — filled with an unrelated opaque
+    `client_xxxxxxxxxx` value, since that column predates the portal and
+    isn't used by anything in this flow) and the new client's
+    `member_code` (also `NOT NULL`, no default, no existing generation
+    convention anywhere in the app to reuse — this is the first code path
+    that ever inserts a `clients` row from application code). Both retry
+    up to 5 times on a `23505` unique-violation.
+  - **Confirmation screen** (`app/portal/confirmation/page.tsx`): a server
+    component reading the verified session cookie server-side and
+    re-querying the account/client fresh, rather than trusting URL query
+    params from the register/login pages — avoids a spoofable confirmation
+    screen for near-zero extra cost.
+  - **Master QR**: `app/(staff)/settings/master-qr/page.tsx`, staff-gated
+    (inherits the existing `is_staff()`-equivalent route protection via
+    `proxy.ts` + the `(staff)` layout), linked from a new small header
+    link on the existing Settings page. Renders via the new `qrcode`
+    dependency (`npm install qrcode` + `@types/qrcode`), encoding
+    `${protocol}://${host}/portal/register` built from the live request's
+    `host` header rather than a new env var — correct in every deploy
+    target without extra config.
+  - **Verified live in the browser, not just typechecked**: registration
+    end-to-end created a real `clients` + `client_portal_accounts` row
+    (`Test Client 7A2`, phone `09171234567`, username `NXS-XKUCU4`,
+    confirmed via SQL) and landed on the confirmation screen; logging out
+    and back in with the same phone/PIN round-tripped to the same account
+    and same confirmation screen; `/dashboard` and other staff routes
+    still required the pre-existing staff session and rendered the full
+    Sidebar with correct Owner-only nav, unaffected by the route-group
+    move; Master QR page rendered a real QR correctly encoding the
+    registration URL. `npx tsc --noEmit` and `eslint` both clean
+    throughout (one nullability regression surfaced while regenerating
+    Supabase types wholesale — `quick_walkin`'s RPC `Args` lost their
+    original `| null` annotations in the fresh generation, unrelated to
+    this prompt's schema — caught by the resulting type errors and fixed
+    by reverting to the committed `lib/types/database.ts` and adding only
+    the two new tables (`client_portal_accounts`, `app_settings`)
+    surgically, leaving every other type, including `quick_walkin`'s,
+    exactly as committed).
+  - **Test artifact left in place**, matching this repo's established
+    precedent (documented repeatedly in prior 6C entries) of leaving
+    harmless test data rather than deleting it via SQL mid-task: client
+    "Test Client 7A2" (phone `09171234567`), linked portal account
+    `NXS-XKUCU4`.
+  - **Explicitly out of scope, per the prompt** (tracked for follow-up
+    prompts): Member QR generation/display, `log_visit` RPC lookup
+    integration for reception check-in, phone masking/reveal UI, points
+    balance/visit history/promos views, RLS policy design for
+    `client_portal_accounts` (still default-deny — every read in this
+    prompt's Route Handlers goes through the service-role client, not
+    RLS).
+  - See [[client_portal_state]] for the updated state.
+
 - **Client Portal 7A-1: Schema Foundation — complete** (`ohm#7a1f9c2k`,
   2026-08-29). Database layer only, first prompt of the new Client Portal
   domain — no UI, no routes, no client-facing pages. Plan + regression risk

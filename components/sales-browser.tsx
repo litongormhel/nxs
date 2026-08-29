@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStaffSim } from "@/lib/staff-context";
-import { editSale, voidSale } from "@/app/sales/actions";
+import { editSale, voidSale } from "@/app/(staff)/sales/actions";
 
 export type Sale = {
   id: string;

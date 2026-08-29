@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useStaffSim } from "@/lib/staff-context";
-import { addStaff } from "@/app/staff/actions";
+import { addStaff } from "@/app/(staff)/staff/actions";
 
 export type Staff = {
   id: string;

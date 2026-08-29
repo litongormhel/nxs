@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { quickWalkin } from "@/app/bookings/actions";
+import { quickWalkin } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
 import { slotsOverlap } from "@/lib/bookings/slots";
 import type {

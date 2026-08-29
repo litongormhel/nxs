@@ -5,6 +5,15 @@ import { createServerClient } from "@supabase/ssr";
 const PUBLIC_PATHS = ["/login"];
 
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // The client portal is a separate auth/session context from staff RBAC.
+  // It manages its own session cookie and access checks in its own layout
+  // and route handlers, so it's excluded entirely from the staff gate below.
+  if (pathname === "/portal" || pathname.startsWith("/portal/")) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -33,7 +42,6 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
   const isPublicPath = PUBLIC_PATHS.includes(pathname);
 
   if (!user && !isPublicPath) {
