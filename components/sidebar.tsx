@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/nav";
 import { useStaffSim } from "@/lib/staff-context";
-import { logout } from "@/app/(staff)/login/actions";
+import { logout } from "@/app/(auth)/login/actions";
 
 export function Sidebar() {
   const pathname = usePathname();
