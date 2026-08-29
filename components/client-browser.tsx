@@ -12,6 +12,8 @@ type Client = {
   member_code: string;
   points_balance: number;
   since_date: string;
+  phone?: string | null;
+  qr_token?: string | null;
 };
 
 type Service = {
@@ -71,6 +73,15 @@ function abbrevName(name: string | null | undefined) {
   return `${parts[0].charAt(0)}. ${parts.slice(1).join(" ")}`;
 }
 
+// Simple QR-code renderer using a free API (no JS library needed)
+function QRImage({ value, size = 160 }: { value: string; size?: number }) {
+  const url = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(value)}&size=${size}x${size}&margin=8&bgcolor=1a1a1a&color=c89b3c`;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={url} alt="QR Code" width={size} height={size} className="rounded-lg" />
+  );
+}
+
 export function ClientBrowser({
   clients,
   services,
@@ -79,7 +90,7 @@ export function ClientBrowser({
   promos = [],
   addons = [],
   lockers = [],
-  clientLockerMap = {},
+  clientLockerMap: initialLockerMap = {},
 }: {
   clients: Client[];
   services: Service[];
@@ -97,8 +108,15 @@ export function ClientBrowser({
 
   const [history, setHistory] = useState<LedgerEntry[]>([]);
   const [historyClientId, setHistoryClientId] = useState<string | null>(null);
-  const [showLogVisit, setShowLogVisit] = useState(false);
   const historyLoading = historyClientId !== selected.id;
+
+  // Modal states
+  const [showLogVisit, setShowLogVisit] = useState(false);
+  const [logVisitServiceId, setLogVisitServiceId] = useState<string | null>(null);
+  const [showClientCard, setShowClientCard] = useState(false);
+
+  // Live locker map (updated by realtime)
+  const [lockerMap, setLockerMap] = useState<Record<string, number>>(initialLockerMap);
 
   // Filter clients for search
   const filteredClients = search.trim()
@@ -112,6 +130,7 @@ export function ClientBrowser({
       })
     : clients;
 
+  // Load transaction history on selected client change
   useEffect(() => {
     let cancelled = false;
 
@@ -140,6 +159,39 @@ export function ClientBrowser({
     };
   }, [selected.id]);
 
+  // Realtime: subscribe to locker_occupancy changes so locker badge updates live
+  useEffect(() => {
+    const supabase = createClient();
+
+    function rebuildMap() {
+      supabase
+        .from("locker_occupancy")
+        .select("client_id, locker_number")
+        .is("checked_out_at", null)
+        .not("client_id", "is", null)
+        .then(({ data }) => {
+          const map: Record<string, number> = {};
+          for (const row of data ?? []) {
+            if (row.client_id) map[row.client_id] = row.locker_number;
+          }
+          setLockerMap(map);
+        });
+    }
+
+    const channel = supabase
+      .channel("locker_occupancy_live")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "locker_occupancy" },
+        () => rebuildMap()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   function refreshHistory() {
     setHistoryClientId(null);
     const supabase = createClient();
@@ -162,7 +214,13 @@ export function ClientBrowser({
       });
   }
 
-  const lockerNumber = clientLockerMap[selected.id];
+  function openLogVisit(serviceId?: string) {
+    setLogVisitServiceId(serviceId ?? null);
+    setShowLogVisit(true);
+  }
+
+  const lockerNumber = lockerMap[selected.id];
+  const isCheckedIn = lockerNumber !== undefined;
   const isEligible = selected.points_balance >= REWARD_THRESHOLD;
 
   // Find lowest-cost redeemable service
@@ -201,7 +259,7 @@ export function ClientBrowser({
       <div className="flex gap-2 overflow-x-auto pb-1">
         {filteredClients.map((client) => {
           const active = client.id === selected.id;
-          const locker = clientLockerMap[client.id];
+          const locker = lockerMap[client.id];
           return (
             <button
               key={client.id}
@@ -258,7 +316,8 @@ export function ClientBrowser({
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-xl font-semibold text-foreground">{selected.codename}</h2>
-                  {lockerNumber !== undefined && (
+                  {/* Locker badge — only shown when checked in, live */}
+                  {isCheckedIn && (
                     <span className="rounded border border-gold/50 bg-gold/10 px-2 py-0.5 text-[11px] font-semibold text-gold">
                       Locker {lockerNumber}
                     </span>
@@ -270,9 +329,14 @@ export function ClientBrowser({
                 <p className="text-xs text-muted">
                   Member since {formatSinceDate(selected.since_date)}
                 </p>
-                <p className="text-xs text-muted/70">
-                  Tap card for verification (mobile number, QR) →
-                </p>
+                {/* Tappable profile card link */}
+                <button
+                  type="button"
+                  onClick={() => setShowClientCard(true)}
+                  className="mt-0.5 flex items-center gap-1 text-xs text-gold/70 hover:text-gold transition-colors underline underline-offset-2 cursor-pointer"
+                >
+                  View client profile (mobile number, QR) →
+                </button>
               </div>
             </div>
 
@@ -296,7 +360,7 @@ export function ClientBrowser({
               </p>
               <button
                 type="button"
-                onClick={() => setShowLogVisit(true)}
+                onClick={() => openLogVisit()}
                 disabled={services.length === 0 || staff.length === 0}
                 className="flex items-center gap-1.5 rounded-md border border-gold bg-gold/10 px-3 py-1.5 text-xs font-medium text-gold hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
               >
@@ -304,20 +368,25 @@ export function ClientBrowser({
               </button>
             </div>
 
-            {/* Service cards grid */}
+            {/* Service cards grid — each card is clickable */}
             {services.length > 0 ? (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {services.map((svc) => (
-                  <div
+                  <button
                     key={svc.id}
-                    className="rounded-lg border border-border bg-surface-2 p-3"
+                    type="button"
+                    onClick={() => openLogVisit(svc.id)}
+                    disabled={staff.length === 0}
+                    className="group rounded-lg border border-border bg-surface-2 p-3 text-left transition-colors hover:border-gold/50 hover:bg-gold/5 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
                   >
-                    <p className="text-sm font-medium text-foreground leading-tight">{svc.name}</p>
+                    <p className="text-sm font-medium text-foreground leading-tight group-hover:text-gold transition-colors">
+                      {svc.name}
+                    </p>
                     <p className="mt-1 text-xs text-muted">
                       <span className="text-gold font-semibold">+{svc.points_earned}</span>{" "}
                       <span className="text-[10px]">pts</span>
                     </p>
-                  </div>
+                  </button>
                 ))}
               </div>
             ) : (
@@ -325,8 +394,8 @@ export function ClientBrowser({
             )}
           </div>
 
-          {/* Redemption card */}
-          {redeemableService && (
+          {/* Redemption card — only shown when ≥ 100 pts */}
+          {redeemableService && selected.points_balance >= REWARD_THRESHOLD && (
             <div className="rounded-lg border border-border bg-surface-2 p-4 flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-foreground">Redeem {redeemableService.name}</p>
@@ -413,6 +482,7 @@ export function ClientBrowser({
         </div>
       </div>
 
+      {/* Log Visit Modal */}
       {showLogVisit && (
         <LogVisitModal
           clients={clients}
@@ -423,6 +493,7 @@ export function ClientBrowser({
           addons={addons}
           lockers={lockers}
           initialClientId={selected.id}
+          initialServiceId={logVisitServiceId}
           onClose={() => setShowLogVisit(false)}
           onLogged={() => {
             setShowLogVisit(false);
@@ -431,7 +502,83 @@ export function ClientBrowser({
           }}
         />
       )}
+
+      {/* Client Profile Card Modal */}
+      {showClientCard && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShowClientCard(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-border bg-surface p-6 space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">{selected.codename}</h2>
+                <p className="text-xs text-muted">@{selected.username} · #{selected.member_code}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowClientCard(false)}
+                className="rounded-md p-1 text-muted hover:text-foreground transition-colors"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Mobile number */}
+            <div className="rounded-lg border border-border bg-surface-2 px-4 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted mb-1">
+                Mobile Number
+              </p>
+              <p className="text-sm font-mono text-foreground">
+                {selected.phone ?? (
+                  <span className="text-muted italic">Not on file</span>
+                )}
+              </p>
+            </div>
+
+            {/* QR Code */}
+            <div className="rounded-lg border border-border bg-surface-2 p-4 flex flex-col items-center gap-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted self-start">
+                Member QR
+              </p>
+              {selected.qr_token ? (
+                <QRImage value={selected.qr_token} size={160} />
+              ) : (
+                <p className="text-xs text-muted italic">No QR token assigned</p>
+              )}
+              {selected.qr_token && (
+                <p className="text-[10px] font-mono text-muted text-center break-all">
+                  {selected.qr_token}
+                </p>
+              )}
+            </div>
+
+            {/* Locker status */}
+            {isCheckedIn && (
+              <div className="rounded-lg border border-gold/30 bg-gold/5 px-4 py-3 flex items-center justify-between">
+                <p className="text-xs text-muted">Currently checked in</p>
+                <span className="rounded border border-gold/50 bg-gold/10 px-2 py-0.5 text-[11px] font-semibold text-gold">
+                  Locker {lockerNumber}
+                </span>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowClientCard(false)}
+              className="w-full rounded-md border border-border px-4 py-2.5 text-sm text-foreground hover:border-gold/30 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

@@ -16,7 +16,7 @@ export default async function ClientsPage() {
   ] = await Promise.all([
     supabase
       .from("clients")
-      .select("id, codename, username, member_code, points_balance, since_date")
+      .select("id, codename, username, member_code, points_balance, since_date, phone, qr_token")
       .order("codename", { ascending: true }),
     supabase
       .from("services")

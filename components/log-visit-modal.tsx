@@ -53,6 +53,7 @@ export function LogVisitModal({
   lockers = [],
   initialBooking = null,
   initialClientId = null,
+  initialServiceId = null,
   onClose,
   onLogged,
 }: {
@@ -65,6 +66,7 @@ export function LogVisitModal({
   lockers?: number[];
   initialBooking?: BookingOption | null;
   initialClientId?: string | null;
+  initialServiceId?: string | null;
   onClose: () => void;
   onLogged: () => void;
 }) {
@@ -84,7 +86,7 @@ export function LogVisitModal({
 
   const [date, setDate] = useState(initialBooking?.booking_date ?? todayIso());
   const [serviceId, setServiceId] = useState<string>(
-    initialBooking?.service_id ?? services[0]?.id ?? ""
+    initialBooking?.service_id ?? initialServiceId ?? services[0]?.id ?? ""
   );
   const [therapistId, setTherapistId] = useState<string>(
     initialBooking?.therapist_id ?? ""
