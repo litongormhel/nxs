@@ -5,6 +5,66 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Bookings: Change Therapist action — complete** (`ohm#7k2m9xq4`,
+  2026-08-29). Adds a "Change Therapist" action on an existing booking,
+  reassigning `therapist_id` only — room/locker untouched. Plan +
+  regression risk assessment presented and approved before any code was
+  written, per the prompt's mandatory gate; a follow-up scoping question
+  (whether `No-show` bookings should be included, since the day-view
+  fetch excluded them entirely before this change) was also asked and
+  approved before implementing.
+  - **No schema change** — confirmed before writing any code, not assumed:
+    `no_double_book_therapist`/`no_double_book_room` are standard Postgres
+    `EXCLUDE USING gist` constraints (`supabase/migrations/20260827130641_baseline_snapshot.sql`),
+    which Postgres enforces on both INSERT and UPDATE inherently (same
+    mechanism as a unique constraint) — unlike the Points Ledger's
+    trigger-based immutability. No migration needed or written.
+  - **Scope**: action available whenever `status` is `Booked`,
+    `No-show`, or `Needs Reassignment` (i.e. not `Completed`/`Cancelled`).
+    `components/booking-browser.tsx`'s `ACTIVE_STATUSES` day-view fetch
+    filter — which previously excluded `No-show` (and `Cancelled`)
+    entirely from the list — now also includes `No-show`, per the user's
+    explicit choice when asked; this is a small additive UI-behavior
+    change (No-show bookings now visibly appear in the day list, which
+    they did not before).
+  - **`app/(staff)/bookings/actions.ts`**: new `changeBookingTherapist(bookingId, newTherapistId, staffId)`
+    server action. Re-fetches the booking, rejects `Completed`/`Cancelled`
+    (defense-in-depth — the UI already won't offer the action there) and
+    a no-op reassignment to the same therapist, then does a plain
+    `UPDATE bookings SET therapist_id = ...` (room/locker columns not
+    touched). Parses Postgres `23P01` (exclusion violation) into the same
+    "that therapist is already booked" message used elsewhere in this
+    file. On success, writes one `action_logs` row (`action:
+    "change_therapist"`, `detail` encoding booking id/date/time and
+    old→new therapist name — matches the existing plain-text convention
+    documented in [[logs_state]], no enum to extend). Revalidates
+    `/bookings`, `/dashboard`, `/call-sheet`.
+  - **`components/booking-browser.tsx`**: new "Change Therapist" button on
+    `Booked`/`No-show` rows; the pre-existing but previously-unwired
+    `Reassign` button stub on `Needs Reassignment` rows (no `onClick`
+    before this change) is now wired to the same flow rather than adding
+    a second competing control. Confirmation is a small inline modal
+    (styled to match `components/confirm-dialog.tsx`) with a therapist
+    `<select>` pre-filled to the current therapist and an inline error
+    slot for the conflict message. Staff attribution uses the existing
+    `useStaffSim().sessionStaff` (real authenticated staff), same pattern
+    as `created_by`/`processed_by` elsewhere — no placeholder actor.
+  - **Points Ledger / Sales — confirmed untouched**: no code path in this
+    change writes to `point_transactions` or `sales`.
+  - **No-show / GiST scoping nuance flagged, not silently patched**: the
+    exclusion constraints' `WHERE` clause only covers status
+    `Booked`/`Completed`/`Needs Reassignment` — a `No-show` row falls
+    outside that predicate, so a therapist swap on a `No-show` booking is
+    not conflict-checked by the DB. This matches the constraints'
+    existing designed scope (a no-show has no real time-slot conflict to
+    guard against) — not treated as a gap, just noted so it isn't a
+    surprise later.
+  - Verified live in the browser, not just typechecked: clicked "Change
+    Therapist" on a `Booked` row, reassigned Akio → Dan, confirmed the row
+    updated immediately and an `action_logs` row appeared on `/logs`
+    (`change_therapist`, correct old/new therapist names, timestamp, and
+    real staff attribution). `npx tsc --noEmit` and `eslint` both clean.
+    See [[bookings_state]].
 - **Client Portal 7A-3: Registration/Login Revision — Password Auth —
   complete** (`ohm#9r3w7t5b`, 2026-08-29). Reworks the already-shipped
   7A-2 registration/login flow: replaces PIN-based auth with password-

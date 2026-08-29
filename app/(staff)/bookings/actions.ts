@@ -192,6 +192,74 @@ export async function updateBookingStatus(
   return { ok: true };
 }
 
+export type ChangeTherapistResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function changeBookingTherapist(
+  bookingId: string,
+  newTherapistId: string,
+  staffId: string
+): Promise<ChangeTherapistResult> {
+  const supabase = await createClient();
+
+  const { data: booking, error: fetchErr } = await supabase
+    .from("bookings")
+    .select("status, therapist_id, booking_date, start_time")
+    .eq("id", bookingId)
+    .single();
+
+  if (fetchErr || !booking) {
+    return { ok: false, error: fetchErr?.message ?? "Booking not found." };
+  }
+
+  if (booking.status === "Completed" || booking.status === "Cancelled") {
+    return {
+      ok: false,
+      error: "Therapist cannot be changed on a Completed or Cancelled booking.",
+    };
+  }
+
+  if (booking.therapist_id === newTherapistId) {
+    return { ok: false, error: "That therapist is already assigned to this booking." };
+  }
+
+  const { error: updateErr } = await supabase
+    .from("bookings")
+    .update({ therapist_id: newTherapistId })
+    .eq("id", bookingId);
+
+  if (updateErr) {
+    if (updateErr.code === EXCLUSION_VIOLATION) {
+      return {
+        ok: false,
+        error: "That therapist is already booked for the selected time.",
+      };
+    }
+    return { ok: false, error: updateErr.message };
+  }
+
+  const { data: therapists } = await supabase
+    .from("therapists")
+    .select("id, name")
+    .in("id", [booking.therapist_id, newTherapistId].filter((id): id is string => !!id));
+
+  const oldName = therapists?.find((t) => t.id === booking.therapist_id)?.name ?? "Unassigned";
+  const newName = therapists?.find((t) => t.id === newTherapistId)?.name ?? newTherapistId;
+
+  await supabase.from("action_logs").insert({
+    staff_id: staffId,
+    action: "change_therapist",
+    detail: `booking_id=${bookingId} date=${booking.booking_date} time=${booking.start_time} old_therapist=${oldName} new_therapist=${newName}`,
+  });
+
+  revalidatePath("/bookings");
+  revalidatePath("/dashboard");
+  revalidatePath("/call-sheet");
+
+  return { ok: true };
+}
+
 export type LogVisitBookingInput = {
   bookingId: string | null;
   clientId: string | null;

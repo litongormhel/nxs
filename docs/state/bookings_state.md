@@ -147,6 +147,42 @@
   message. Any other error passes through the raw Postgres message. Both
   revalidate `/bookings` and `/dashboard` on success.
 
+**Correction, `ohm#7k2m9xq4` (2026-08-29)** — adds a Change Therapist
+action for reassigning an existing booking's therapist without touching
+room/locker.
+
+- Available whenever `status` is `Booked`, `No-show`, or
+  `Needs Reassignment` (i.e. not `Completed`/`Cancelled`).
+- `app/(staff)/bookings/actions.ts` — new `changeBookingTherapist(bookingId,
+  newTherapistId, staffId)`. Re-fetches the booking, rejects
+  `Completed`/`Cancelled` and a no-op reassignment to the same therapist,
+  then `UPDATE bookings SET therapist_id = ...` only (room/locker
+  untouched). Parses `23P01` (exclusion violation) into the same "that
+  therapist is already booked" message used by `createBooking`/
+  `quickWalkin`. On success, writes one `action_logs` row (`action:
+  "change_therapist"`, `detail` with booking id/date/time and old→new
+  therapist name). Revalidates `/bookings`, `/dashboard`, `/call-sheet`.
+- **No schema change** — the `no_double_book_therapist`/
+  `no_double_book_room` GiST exclusion constraints are plain Postgres
+  `EXCLUDE` constraints (not trigger-based like the Points Ledger), so
+  Postgres already enforces them on UPDATE as well as INSERT. Confirmed
+  directly against the migration before implementing, not assumed.
+- **Scoping nuance**: the constraints' `WHERE` clause only covers status
+  `Booked`/`Completed`/`Needs Reassignment` — a `No-show` row falls
+  outside that predicate, so a therapist swap on a `No-show` booking is
+  not conflict-checked by the DB. Matches the constraints' existing
+  designed scope; not a gap.
+- `components/booking-browser.tsx` — the day-view `ACTIVE_STATUSES` fetch
+  filter now also includes `No-show` (previously excluded from the list
+  entirely, along with `Cancelled` which remains excluded). New "Change
+  Therapist" button on `Booked`/`No-show` rows; the pre-existing but
+  previously-unwired `Reassign` button stub on `Needs Reassignment` rows
+  is now wired to the same confirm modal (therapist `<select>` pre-filled
+  to the current therapist, inline conflict-error slot). Staff
+  attribution via `useStaffSim().sessionStaff` — no placeholder actor.
+- No changes to Points Ledger or Sales — confirmed no code path in this
+  change writes to `point_transactions` or `sales`.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - Therapist options are not filtered by `therapist_services` (which

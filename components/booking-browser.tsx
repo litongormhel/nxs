@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { updateBookingStatus } from "@/app/(staff)/bookings/actions";
+import { updateBookingStatus, changeBookingTherapist } from "@/app/(staff)/bookings/actions";
+import { useStaffSim } from "@/lib/staff-context";
 import { BookingFormModal } from "@/components/booking-form-modal";
 import { QuickWalkinModal } from "@/components/quick-walkin-modal";
 import { LogVisitModal } from "@/components/log-visit-modal";
@@ -41,6 +42,7 @@ const ACTIVE_STATUSES: Database["public"]["Enums"]["booking_status"][] = [
   "Booked",
   "Completed",
   "Needs Reassignment",
+  "No-show",
 ];
 
 function todayIso(): string {
@@ -81,6 +83,7 @@ export function BookingBrowser({
   timeSlots: string[];
 }) {
   const router = useRouter();
+  const { sessionStaff } = useStaffSim();
   const [date, setDate] = useState(todayIso());
   const [dayBookings, setDayBookings] = useState<BookingRow[]>([]);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
@@ -88,6 +91,10 @@ export function BookingBrowser({
   const [showNewBooking, setShowNewBooking] = useState(false);
   const [showWalkin, setShowWalkin] = useState(false);
   const [logVisitBooking, setLogVisitBooking] = useState<BookingRow | null>(null);
+  const [reassignBooking, setReassignBooking] = useState<BookingRow | null>(null);
+  const [reassignTherapistId, setReassignTherapistId] = useState("");
+  const [reassignError, setReassignError] = useState<string | null>(null);
+  const [reassignSaving, setReassignSaving] = useState(false);
   const loading = loadedFor !== date;
 
   useEffect(() => {
@@ -128,6 +135,27 @@ export function BookingBrowser({
 
   async function handleSetStatus(id: string, status: Database["public"]["Enums"]["booking_status"]) {
     await updateBookingStatus(id, status);
+    reload();
+    router.refresh();
+  }
+
+  function openReassign(row: BookingRow) {
+    setReassignBooking(row);
+    setReassignTherapistId(row.therapist_id ?? "");
+    setReassignError(null);
+  }
+
+  async function handleConfirmReassign() {
+    if (!reassignBooking || !reassignTherapistId || !sessionStaff) return;
+    setReassignSaving(true);
+    setReassignError(null);
+    const res = await changeBookingTherapist(reassignBooking.id, reassignTherapistId, sessionStaff.id);
+    setReassignSaving(false);
+    if (!res.ok) {
+      setReassignError(res.error);
+      return;
+    }
+    setReassignBooking(null);
     reload();
     router.refresh();
   }
@@ -230,7 +258,9 @@ export function BookingBrowser({
                     {row.status}
                   </span>
 
-                  {(row.status === "Booked" || row.status === "Needs Reassignment") && (
+                  {(row.status === "Booked" ||
+                    row.status === "Needs Reassignment" ||
+                    row.status === "No-show") && (
                     <div className="flex items-center gap-1.5">
                       {row.status === "Booked" && (
                         <>
@@ -260,9 +290,19 @@ export function BookingBrowser({
                       {row.status === "Needs Reassignment" && (
                         <button
                           type="button"
+                          onClick={() => openReassign(row)}
                           className="rounded-md border border-[#6b4f1f] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-amber hover:brightness-125 transition-all"
                         >
                           Reassign
+                        </button>
+                      )}
+                      {(row.status === "Booked" || row.status === "No-show") && (
+                        <button
+                          type="button"
+                          onClick={() => openReassign(row)}
+                          className="rounded-md border border-border bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-muted hover:brightness-125 transition-all"
+                        >
+                          Change Therapist
                         </button>
                       )}
                     </div>
@@ -330,6 +370,51 @@ export function BookingBrowser({
             router.refresh();
           }}
         />
+      )}
+
+      {reassignBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-foreground">Change Therapist</h3>
+            <p className="text-xs text-muted">
+              {clientLabel(reassignBooking)} · {fmtDate(reassignBooking.booking_date)}{" "}
+              {fmtTime(reassignBooking.start_time)} · Currently:{" "}
+              {therapistName(reassignBooking.therapist_id)}
+            </p>
+            <select
+              value={reassignTherapistId}
+              onChange={(e) => setReassignTherapistId(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+            >
+              <option value="" disabled>
+                Select therapist
+              </option>
+              {therapists.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            {reassignError && <p className="text-xs text-accent-red">{reassignError}</p>}
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setReassignBooking(null)}
+                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!reassignTherapistId || reassignSaving}
+                onClick={handleConfirmReassign}
+                className="flex-1 rounded-lg border border-[#a97e2e] bg-gold/10 py-2 text-xs font-bold text-accent-gold hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {reassignSaving ? "Saving…" : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
