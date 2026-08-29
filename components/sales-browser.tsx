@@ -150,7 +150,7 @@ export function SalesBrowser({
         <div className="text-[10.5px] font-bold tracking-[0.13em] uppercase text-muted">
           Sales Log
         </div>
-        <div className="text-[13px] font-bold text-[#f3d48b]">
+        <div className="text-[13px] font-bold text-accent-gold">
           Total: ₱{total.toLocaleString()}
         </div>
       </div>
@@ -185,12 +185,12 @@ export function SalesBrowser({
               <div className="text-foreground">
                 {s.service_name}
                 {s.voided && (
-                  <span className="ml-1.5 rounded bg-[#4a1f1f] px-1.5 py-0.5 text-[9px] font-bold uppercase text-[#d18b8b]">
+                  <span className="ml-1.5 rounded bg-accent-red/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-accent-red">
                     Voided
                   </span>
                 )}
               </div>
-              <div className="font-semibold text-[#f3d48b]">₱{s.amount.toLocaleString()}</div>
+              <div className="font-semibold text-accent-gold">₱{s.amount.toLocaleString()}</div>
               <div className="text-muted">
                 {s.payment_method}
                 {s.payment_ref && (
@@ -216,7 +216,7 @@ export function SalesBrowser({
                       disabled={!voidAllowed}
                       title={voidAllowed ? undefined : "Owner only"}
                       onClick={() => voidAllowed && handleVoid(s)}
-                      className="rounded-md border border-[#6b2b2b] px-2 py-1 text-[10.5px] font-semibold text-[#d18b8b] hover:bg-[#4a1f1f]/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="rounded-md border border-[#6b2b2b] px-2 py-1 text-[10.5px] font-semibold text-accent-red hover:bg-accent-red/10 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Void
                     </button>
@@ -250,7 +250,7 @@ export function SalesBrowser({
                   min={0}
                   value={editAmount}
                   onChange={(e) => setEditAmount(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-[#1d1610] px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
                 />
               </div>
               <div>
@@ -260,7 +260,7 @@ export function SalesBrowser({
                 <select
                   value={editPayment}
                   onChange={(e) => setEditPayment(e.target.value as (typeof PAYMENT_METHODS)[number])}
-                  className="w-full rounded-lg border border-border bg-[#1d1610] px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
                 >
                   {PAYMENT_METHODS.map((m) => (
                     <option key={m} value={m}>
@@ -278,7 +278,7 @@ export function SalesBrowser({
                     type="text"
                     value={editRef}
                     onChange={(e) => setEditRef(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-[#1d1610] px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                    className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
                   />
                 </div>
               )}
@@ -289,7 +289,7 @@ export function SalesBrowser({
                 <select
                   value={editTherapistId}
                   onChange={(e) => setEditTherapistId(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-[#1d1610] px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
                 >
                   <option value="">— None —</option>
                   {therapists.map((t) => (
@@ -300,7 +300,7 @@ export function SalesBrowser({
                 </select>
               </div>
               {editError && (
-                <div className="text-[11px] font-semibold text-[#d18b8b]">{editError}</div>
+                <div className="text-[11px] font-semibold text-accent-red">{editError}</div>
               )}
             </div>
             <div className="flex gap-2 pt-2">
@@ -325,7 +325,7 @@ export function SalesBrowser({
       )}
 
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-[#a97e2e] bg-[#1d1610] px-5 py-2.5 font-mono text-xs font-semibold text-[#f3d48b] shadow-2xl animate-fade-in">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-[#a97e2e] bg-surface-2 px-5 py-2.5 font-mono text-xs font-semibold text-accent-gold shadow-2xl animate-fade-in">
           {toastMessage}
         </div>
       )}

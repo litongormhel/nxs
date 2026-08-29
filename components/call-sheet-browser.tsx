@@ -47,7 +47,7 @@ export function CallSheetBrowser({ entries }: { entries: Entry[] }) {
         <select
           value={timeFilter}
           onChange={(e) => setTimeFilter(e.target.value)}
-          className="rounded-lg border border-border bg-[#1d1610] px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
+          className="rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
         >
           <option value="all">All Times</option>
           {distinctTimes.map((t) => (
@@ -78,7 +78,7 @@ export function CallSheetBrowser({ entries }: { entries: Entry[] }) {
             >
               <div className="text-foreground">{e.locker_number}</div>
               <div className="text-muted">{e.room_number ?? "—"}</div>
-              <div className="font-semibold text-[#f3d48b]">{e.service_name}</div>
+              <div className="font-semibold text-accent-gold">{e.service_name}</div>
             </div>
           ))
         )}

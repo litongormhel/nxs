@@ -544,7 +544,7 @@ export function SettingsBrowser({
           {canEditServices && (
             <button
               onClick={handleAddService}
-              className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-[#f3d48b] transition hover:bg-[#c89b3c]/10"
+              className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold transition hover:bg-[#c89b3c]/10"
             >
               + Add Service
             </button>
@@ -589,7 +589,7 @@ export function SettingsBrowser({
               {canEditServices && (
                 <button
                   onClick={() => handleDeleteService(idx)}
-                  className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-[#d18b8b] hover:brightness-125"
+                  className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-accent-red hover:brightness-125"
                 >
                   Delete
                 </button>
@@ -608,7 +608,7 @@ export function SettingsBrowser({
           {canEditPromos && (
             <button
               onClick={handleAddPromo}
-              className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-[#f3d48b] transition hover:bg-[#c89b3c]/10"
+              className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold transition hover:bg-[#c89b3c]/10"
             >
               + Add Promo
             </button>
@@ -642,7 +642,7 @@ export function SettingsBrowser({
               {canEditPromos && (
                 <button
                   onClick={() => handleDeletePromo(idx)}
-                  className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-[#d18b8b] hover:brightness-125"
+                  className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-accent-red hover:brightness-125"
                 >
                   Delete
                 </button>
@@ -661,7 +661,7 @@ export function SettingsBrowser({
           {canEditCatalog && (
             <button
               onClick={handleAddSlot}
-              className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-[#f3d48b] transition hover:bg-[#c89b3c]/10"
+              className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold transition hover:bg-[#c89b3c]/10"
             >
               + Add Slot
             </button>
@@ -678,13 +678,13 @@ export function SettingsBrowser({
               key={slot.id}
               className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-2.5"
             >
-              <div className="flex-1 font-mono text-xs font-semibold text-[#f3d48b]">
+              <div className="flex-1 font-mono text-xs font-semibold text-accent-gold">
                 {fmtTime(slot.slot_time)}
               </div>
               {canEditCatalog && (
                 <button
                   onClick={() => handleDeleteSlot(idx)}
-                  className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-[#d18b8b] hover:brightness-125"
+                  className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-accent-red hover:brightness-125"
                 >
                   Delete
                 </button>
@@ -703,7 +703,7 @@ export function SettingsBrowser({
           {canEditCatalog && (
             <button
               onClick={handleAddAddon}
-              className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-[#f3d48b] transition hover:bg-[#c89b3c]/10"
+              className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold transition hover:bg-[#c89b3c]/10"
             >
               + Add Add-on
             </button>
@@ -737,7 +737,7 @@ export function SettingsBrowser({
               {canEditCatalog && (
                 <button
                   onClick={() => handleDeleteAddon(idx)}
-                  className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-[#d18b8b] hover:brightness-125"
+                  className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-accent-red hover:brightness-125"
                 >
                   Delete
                 </button>
@@ -766,7 +766,7 @@ export function SettingsBrowser({
             {canEditCatalog && (
               <button
                 onClick={handleAddLockers}
-                className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-[#f3d48b] transition hover:bg-[#c89b3c]/10"
+                className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold transition hover:bg-[#c89b3c]/10"
               >
                 + Add 10 Lockers
               </button>
@@ -862,7 +862,7 @@ export function SettingsBrowser({
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-[#a97e2e] bg-[#1d1610] px-5 py-2.5 font-mono text-xs font-semibold text-[#f3d48b] shadow-2xl animate-fade-in">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-[#a97e2e] bg-surface-2 px-5 py-2.5 font-mono text-xs font-semibold text-accent-gold shadow-2xl animate-fade-in">
           {toastMessage}
         </div>
       )}

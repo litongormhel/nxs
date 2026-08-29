@@ -69,20 +69,20 @@ export function LockerBoard({
               key={num}
               className={`flex flex-col items-center justify-between rounded-lg border px-1.5 py-2.5 text-center ${
                 entry
-                  ? "border-[#a97e2e] bg-[#2a1f14]"
+                  ? "border-[#a97e2e] bg-surface-accent"
                   : "border-border bg-surface"
               }`}
             >
               <div className="text-[13px] font-bold text-foreground">{num}</div>
               {entry ? (
                 <>
-                  <div className="mt-1 truncate w-full text-[9.5px] font-semibold text-[#f3d48b]">
+                  <div className="mt-1 truncate w-full text-[9.5px] font-semibold text-accent-gold">
                     {entry.label}
                   </div>
                   <button
                     disabled={busyLocker === num}
                     onClick={() => handleCheckOut(num)}
-                    className="mt-1.5 w-full rounded border border-[#a97e2e] py-1 text-[9px] font-bold text-[#f3d48b] hover:bg-[#c89b3c]/10 disabled:opacity-50"
+                    className="mt-1.5 w-full rounded border border-[#a97e2e] py-1 text-[9px] font-bold text-accent-gold hover:bg-[#c89b3c]/10 disabled:opacity-50"
                   >
                     Check Out
                   </button>
@@ -96,7 +96,7 @@ export function LockerBoard({
       </div>
 
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-[#a97e2e] bg-[#1d1610] px-5 py-2.5 font-mono text-xs font-semibold text-[#f3d48b] shadow-2xl animate-fade-in">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-[#a97e2e] bg-surface-2 px-5 py-2.5 font-mono text-xs font-semibold text-accent-gold shadow-2xl animate-fade-in">
           {toastMessage}
         </div>
       )}

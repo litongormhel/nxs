@@ -57,7 +57,7 @@ export function LogsBrowser({ initialLogs }: { initialLogs: LogEntry[] }) {
         <select
           value={actionFilter}
           onChange={(e) => setActionFilter(e.target.value)}
-          className="rounded-lg border border-border bg-[#1d1610] px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
+          className="rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
         >
           <option value="all">All Actions</option>
           {distinctActions.map((a) => (
@@ -70,12 +70,12 @@ export function LogsBrowser({ initialLogs }: { initialLogs: LogEntry[] }) {
           type="date"
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value)}
-          className="rounded-lg border border-border bg-[#1d1610] px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
+          className="rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
         />
         <select
           value={staffFilter}
           onChange={(e) => setStaffFilter(e.target.value)}
-          className="rounded-lg border border-border bg-[#1d1610] px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
+          className="rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
         >
           <option value="all">All Staff</option>
           {distinctStaff.map((s) => (
@@ -107,7 +107,7 @@ export function LogsBrowser({ initialLogs }: { initialLogs: LogEntry[] }) {
             >
               <div className="text-muted">{fmtWhen(l.created_at)}</div>
               <div className="text-foreground">{l.staff_name}</div>
-              <div className="font-semibold text-[#f3d48b]">{l.action}</div>
+              <div className="font-semibold text-accent-gold">{l.action}</div>
               <div className="text-muted">{l.detail}</div>
             </div>
           ))

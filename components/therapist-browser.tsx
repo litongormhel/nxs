@@ -555,7 +555,7 @@ export function TherapistBrowser({
             setAddError(null);
             setShowAddModal(true);
           }}
-          className="flex items-center gap-1.5 rounded-lg border border-[#a97e2e] bg-surface px-3.5 py-2 text-[11px] font-bold text-[#f3d48b] transition hover:bg-[#c89b3c]/10"
+          className="flex items-center gap-1.5 rounded-lg border border-[#a97e2e] bg-surface px-3.5 py-2 text-[11px] font-bold text-accent-gold transition hover:bg-[#c89b3c]/10"
         >
           <svg
             width="13"
@@ -638,7 +638,7 @@ export function TherapistBrowser({
               >
                 {/* Most Requested Badge */}
                 {isTop && (
-                  <span className="absolute top-3.5 right-11 text-[7.5px] font-extrabold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#c89b3c]/15 text-[#f3d48b] border border-[#a97e2e]">
+                  <span className="absolute top-3.5 right-11 text-[7.5px] font-extrabold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#c89b3c]/15 text-accent-gold border border-[#a97e2e]">
                     ✦ Most Requested
                   </span>
                 )}
@@ -677,7 +677,7 @@ export function TherapistBrowser({
                       onClick={() =>
                         setOpenKebab(openKebab === t ? null : t)
                       }
-                      className="p-1 rounded-md text-muted hover:text-foreground hover:bg-[#1d1610] transition-colors"
+                      className="p-1 rounded-md text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
                       title="More actions"
                     >
                       <svg
@@ -694,7 +694,7 @@ export function TherapistBrowser({
                       </svg>
                     </button>
                     {openKebab === t && (
-                      <div className="absolute right-0 top-7 z-30 min-w-[170px] rounded-xl border border-border bg-[#1d1610] py-1 shadow-2xl overflow-hidden animate-fade-in">
+                      <div className="absolute right-0 top-7 z-30 min-w-[170px] rounded-xl border border-border bg-surface-2 py-1 shadow-2xl overflow-hidden animate-fade-in">
                         {!meta.archived ? (
                           <>
                             <div
@@ -774,10 +774,10 @@ export function TherapistBrowser({
                 <div
                   className={`mt-3 text-[10px] font-bold flex items-center gap-1.5 ${
                     slotStatus === "available"
-                      ? "text-[#8a9a76]"
+                      ? "text-accent-green"
                       : slotStatus === "booked"
-                      ? "text-[#d9a441]"
-                      : "text-[#d18b8b]"
+                      ? "text-accent-amber"
+                      : "text-accent-red"
                   }`}
                 >
                   <span
@@ -800,14 +800,14 @@ export function TherapistBrowser({
                     `Reason: ${meta.archivedReason || "—"}`
                   ) : (
                     <>
-                      <b className="text-[#f3d48b]">{booked} / {WEEKEND_SLOTS.length}</b>{" "}
+                      <b className="text-accent-gold">{booked} / {WEEKEND_SLOTS.length}</b>{" "}
                       slots booked today
                     </>
                   )}
                 </div>
 
                 {onLeave && meta.leave?.reason && (
-                  <div className="mt-2 text-[10px] font-bold text-[#d9a441] bg-[#d9a441]/10 border border-[#6b4f1f] rounded-lg px-2.5 py-1.5">
+                  <div className="mt-2 text-[10px] font-bold text-accent-amber bg-[#d9a441]/10 border border-[#6b4f1f] rounded-lg px-2.5 py-1.5">
                     Reason: {meta.leave.reason}
                   </div>
                 )}
@@ -827,7 +827,7 @@ export function TherapistBrowser({
                         className={`px-2 py-1 rounded-lg border text-[9.5px] font-bold transition-all ${
                           isOffered
                             ? "bg-gradient-to-br from-[#8a9a76] to-[#4e5941] text-white border-[#4e5941]"
-                            : "bg-[#1d1610] text-muted border-border hover:border-gold/40"
+                            : "bg-surface-2 text-muted border-border hover:border-gold/40"
                         }`}
                       >
                         {s}
@@ -851,7 +851,7 @@ export function TherapistBrowser({
                         className={`flex-1 py-1 rounded-md border text-[9.5px] font-bold transition-all text-center ${
                           isDayOff
                             ? "bg-gradient-to-br from-[#5e3c3c] to-[#7a4646] text-white border-[#5e3c3c]"
-                            : "bg-[#1d1610] text-muted border-border hover:border-gold/40"
+                            : "bg-surface-2 text-muted border-border hover:border-gold/40"
                         }`}
                       >
                         {d}
@@ -916,9 +916,9 @@ export function TherapistBrowser({
                   .map((b) => (
                     <div
                       key={b.id}
-                      className="flex items-center justify-between rounded-lg border border-border bg-[#1d1610] px-3 py-2 text-xs"
+                      className="flex items-center justify-between rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs"
                     >
-                      <span className="font-mono font-bold text-[#f3d48b]">
+                      <span className="font-mono font-bold text-accent-gold">
                         {fmtTime(b.time)}
                       </span>
                       <span className="font-semibold text-foreground">
@@ -966,7 +966,7 @@ export function TherapistBrowser({
                   placeholder="e.g. Renz"
                   value={addName}
                   onChange={(e) => setAddName(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-[#1d1610] px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
                 />
               </div>
 
@@ -991,7 +991,7 @@ export function TherapistBrowser({
                         className={`px-3 py-1.5 rounded-full border text-[10.5px] font-bold transition-all ${
                           selected
                             ? "bg-gradient-to-br from-gold to-[#a97e2e] text-black border-gold"
-                            : "bg-[#1d1610] text-muted border-border"
+                            : "bg-surface-2 text-muted border-border"
                         }`}
                       >
                         {d}
@@ -1022,7 +1022,7 @@ export function TherapistBrowser({
                         className={`px-3 py-1.5 rounded-full border text-[10.5px] font-bold transition-all ${
                           selected
                             ? "bg-gradient-to-br from-gold to-[#a97e2e] text-black border-gold"
-                            : "bg-[#1d1610] text-muted border-border"
+                            : "bg-surface-2 text-muted border-border"
                         }`}
                       >
                         {s}
@@ -1080,7 +1080,7 @@ export function TherapistBrowser({
                     type="date"
                     value={leaveStart}
                     onChange={(e) => setLeaveStart(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-[#1d1610] px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
+                    className="w-full rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
                   />
                 </div>
                 <div>
@@ -1091,7 +1091,7 @@ export function TherapistBrowser({
                     type="date"
                     value={leaveEnd}
                     onChange={(e) => setLeaveEnd(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-[#1d1610] px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
+                    className="w-full rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
                   />
                 </div>
               </div>
@@ -1105,7 +1105,7 @@ export function TherapistBrowser({
                   placeholder="e.g. sick leave"
                   value={leaveReason}
                   onChange={(e) => setLeaveReason(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-[#1d1610] px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
                 />
               </div>
             </div>
@@ -1159,7 +1159,7 @@ export function TherapistBrowser({
                 placeholder="e.g. Resigned, AWOL"
                 value={archiveReason}
                 onChange={(e) => setArchiveReason(e.target.value)}
-                className="w-full rounded-lg border border-border bg-[#1d1610] px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
               />
               {archiveError && (
                 <div className="text-[11px] text-rose-400 font-medium mt-1">
@@ -1209,7 +1209,7 @@ export function TherapistBrowser({
                 type="text"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
-                className="w-full rounded-lg border border-border bg-[#1d1610] px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
               />
               {editError && (
                 <div className="text-[11px] text-rose-400 font-medium mt-1">
@@ -1240,7 +1240,7 @@ export function TherapistBrowser({
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-[#a97e2e] bg-[#1d1610] px-5 py-2.5 font-mono text-xs font-semibold text-[#f3d48b] shadow-2xl animate-fade-in">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-[#a97e2e] bg-surface-2 px-5 py-2.5 font-mono text-xs font-semibold text-accent-gold shadow-2xl animate-fade-in">
           {toastMessage}
         </div>
       )}

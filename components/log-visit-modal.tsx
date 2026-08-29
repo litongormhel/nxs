@@ -370,7 +370,7 @@ export function LogVisitModal({
             {linkedBooking && (
               <p className="mt-1 text-xs text-muted">
                 Linked:{" "}
-                <span className="font-semibold text-[#f3d48b]">
+                <span className="font-semibold text-accent-gold">
                   {linkedBooking.client_id
                     ? (clients.find((c) => c.id === linkedBooking.client_id)?.codename ?? "Client")
                     : (linkedBooking.guest_label ?? "Walk-in")}

@@ -186,12 +186,12 @@ export function BookingBrowser({
                   key={row.id}
                   className={`flex flex-wrap items-center gap-3.5 rounded-xl border p-3.5 transition-colors ${
                     flagged
-                      ? "border-red-900/60 bg-gradient-to-r from-red-950/20 to-[#14100b]"
-                      : "border-border bg-[#14100b]"
+                      ? "border-red-900/60 bg-gradient-to-r from-red-950/20 to-surface"
+                      : "border-border bg-surface"
                   }`}
                 >
                   <div className="min-w-[128px] font-mono">
-                    <div className="text-[12.5px] font-medium text-[#f3d48b]">
+                    <div className="text-[12.5px] font-medium text-accent-gold">
                       {fmtDate(row.booking_date)}
                     </div>
                     <div className="text-[9.5px] text-muted">{fmtTime(row.start_time)}</div>
@@ -201,7 +201,7 @@ export function BookingBrowser({
                     <div className="flex flex-wrap items-center gap-2 text-[13px] font-bold text-foreground">
                       <span>{clientLabel(row)}</span>
                       {row.room_number && (
-                        <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[8.5px] font-extrabold text-[#f3d48b]">
+                        <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[8.5px] font-extrabold text-accent-gold">
                           Room {row.room_number}
                         </span>
                       )}
@@ -219,12 +219,12 @@ export function BookingBrowser({
                   <span
                     className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-wider ${
                       row.status === "Booked"
-                        ? "border border-[#a97e2e] bg-[#c89b3c]/15 text-[#f3d48b]"
+                        ? "border border-[#a97e2e] bg-[#c89b3c]/15 text-accent-gold"
                         : row.status === "Completed"
-                        ? "border border-[#4e5941] bg-[#8a9a76]/15 text-[#8a9a76]"
+                        ? "border border-[#4e5941] bg-[#8a9a76]/15 text-accent-green"
                         : row.status === "Needs Reassignment"
-                        ? "border border-[#6b4f1f] bg-[#d9a441]/15 text-[#d9a441]"
-                        : "border border-[#5e3c3c] bg-[#d18b8b]/15 text-[#d18b8b]"
+                        ? "border border-[#6b4f1f] bg-[#d9a441]/15 text-accent-amber"
+                        : "border border-[#5e3c3c] bg-[#d18b8b]/15 text-accent-red"
                     }`}
                   >
                     {row.status}
@@ -237,21 +237,21 @@ export function BookingBrowser({
                           <button
                             type="button"
                             onClick={() => setLogVisitBooking(row)}
-                            className="rounded-md border border-[#a97e2e] bg-[#1d1610] px-2.5 py-1 text-[10px] font-bold text-[#f3d48b] hover:brightness-125 transition-all"
+                            className="rounded-md border border-[#a97e2e] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-gold hover:brightness-125 transition-all"
                           >
                             Log Visit
                           </button>
                           <button
                             type="button"
                             onClick={() => handleSetStatus(row.id, "No-show")}
-                            className="rounded-md border border-[#5e3c3c] bg-[#1d1610] px-2.5 py-1 text-[10px] font-bold text-[#d18b8b] hover:brightness-125 transition-all"
+                            className="rounded-md border border-[#5e3c3c] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-red hover:brightness-125 transition-all"
                           >
                             No-show
                           </button>
                           <button
                             type="button"
                             onClick={() => handleSetStatus(row.id, "Cancelled")}
-                            className="rounded-md border border-border bg-[#1d1610] px-2.5 py-1 text-[10px] font-bold text-muted hover:brightness-125 transition-all"
+                            className="rounded-md border border-border bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-muted hover:brightness-125 transition-all"
                           >
                             Cancel
                           </button>
@@ -260,7 +260,7 @@ export function BookingBrowser({
                       {row.status === "Needs Reassignment" && (
                         <button
                           type="button"
-                          className="rounded-md border border-[#6b4f1f] bg-[#1d1610] px-2.5 py-1 text-[10px] font-bold text-[#d9a441] hover:brightness-125 transition-all"
+                          className="rounded-md border border-[#6b4f1f] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-amber hover:brightness-125 transition-all"
                         >
                           Reassign
                         </button>

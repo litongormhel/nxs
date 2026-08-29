@@ -3,21 +3,33 @@
 :root {
   --background: #0a0705;
   --surface: #14100c;
+  --surface-2: #1d1610;
+  --surface-accent: #2a1f14;
   --border: #2a2218;
   --foreground: #f2ece1;
   --muted: #a89a84;
   --gold: #c89b3c;
   --gold-hover: #e0b754;
+  --accent-gold: #f3d48b;
+  --accent-red: #d18b8b;
+  --accent-amber: #d9a441;
+  --accent-green: #8a9a76;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-accent: var(--surface-accent);
   --color-border: var(--border);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-gold: var(--gold);
   --color-gold-hover: var(--gold-hover);
+  --color-accent-gold: var(--accent-gold);
+  --color-accent-red: var(--accent-red);
+  --color-accent-amber: var(--accent-amber);
+  --color-accent-green: var(--accent-green);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -31,7 +43,13 @@ body {
 body.light {
   --background: #f7f4ee;
   --surface: #ffffff;
+  --surface-2: #efe9da;
+  --surface-accent: #f6ecd3;
   --border: #e2dccc;
   --foreground: #1a1510;
   --muted: #6b6152;
+  --accent-gold: #9c6f1e;
+  --accent-red: #a13f3f;
+  --accent-amber: #96631a;
+  --accent-green: #4f6b3a;
 }

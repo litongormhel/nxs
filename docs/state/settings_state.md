@@ -20,6 +20,30 @@ just local React state.
   away from Settings, because its `useEffect` cleanup ran on unmount and
   unconditionally stripped `.light` from `document.body`. Persistence is
   still `localStorage` only, read/written by the provider.
+  **Follow-up (2026-08-29, same day)**: after the propagation fix, light
+  mode was reported readable in Settings but broken elsewhere — several
+  components across the app (`booking-browser.tsx`, `call-sheet-browser.tsx`,
+  `locker-board.tsx`, `logs-browser.tsx`, `sales-browser.tsx`,
+  `staff-browser.tsx`, `therapist-browser.tsx`, `confirm-dialog.tsx`, plus
+  `settings-browser.tsx` itself) used hardcoded hex backgrounds
+  (`bg-[#1d1610]`, `bg-[#14100b]`, `bg-[#2a1f14]`, `bg-[#4a1f1f]`,
+  `bg-[#2a1414]`) for input fields, dropdown/filter controls, booking rows,
+  and the occupied-locker card, paired with theme-variable text
+  (`text-foreground`/`text-muted`) or pale accent text
+  (`text-[#f3d48b]`/`text-[#d18b8b]`/`text-[#d9a441]`/`text-[#8a9a76]`) —
+  those backgrounds never flipped in light mode, so the text became
+  low/no-contrast against a background that stayed dark. Fixed by adding
+  theme-aware CSS custom properties to `app/globals.css`
+  (`--surface-2`, `--surface-accent`, `--accent-gold`, `--accent-red`,
+  `--accent-amber`, `--accent-green` — dark-mode values identical to the
+  original hardcoded hex, so dark mode is visually unchanged) and swapping
+  every affected class for the new `bg-surface-2`/`bg-surface-accent`/
+  `text-accent-*` utilities. The Settings theme-toggle switch's own
+  "off" track color intentionally stayed hardcoded `bg-[#1d1610]` — it's a
+  fixed component-intrinsic style (the dark side of the switch itself), not
+  page chrome. Verified all 10 tabs plus the Add Staff/Add Therapist/Edit
+  Sale modals in light mode; dark mode re-checked pixel-identical to
+  before via side-by-side screenshots.
 - **Account**: signed-in staff badge showing name/position/role. As of
   Staff Auth 6C-6 (`ohm#8r5m1v7z`, 2026-08-29), there is no role-switching
   control here — the real authenticated session (`sessionStaff.id` from

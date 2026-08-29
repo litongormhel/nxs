@@ -102,7 +102,7 @@ export function StaffBrowser({ initialStaff }: { initialStaff: Staff[] }) {
         </div>
         <button
           onClick={openModal}
-          className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-[#f3d48b] transition hover:bg-[#c89b3c]/10"
+          className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold transition hover:bg-[#c89b3c]/10"
         >
           + Add Staff
         </button>
@@ -156,7 +156,7 @@ export function StaffBrowser({ initialStaff }: { initialStaff: Staff[] }) {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Renz"
                   autoFocus
-                  className="w-full rounded-lg border border-border bg-[#1d1610] px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
                 />
               </div>
               <div>
@@ -168,7 +168,7 @@ export function StaffBrowser({ initialStaff }: { initialStaff: Staff[] }) {
                   onChange={(e) =>
                     onPositionChange(e.target.value as (typeof ADDABLE_POSITIONS)[number])
                   }
-                  className="w-full rounded-lg border border-border bg-[#1d1610] px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
                 >
                   {ADDABLE_POSITIONS.map((p) => (
                     <option key={p} value={p}>
@@ -187,12 +187,12 @@ export function StaffBrowser({ initialStaff }: { initialStaff: Staff[] }) {
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
                     placeholder="e.g. Maintenance"
-                    className="w-full rounded-lg border border-border bg-[#1d1610] px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                    className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
                   />
                 </div>
               )}
               {error && (
-                <div className="text-[11px] font-semibold text-[#d18b8b]">{error}</div>
+                <div className="text-[11px] font-semibold text-accent-red">{error}</div>
               )}
             </div>
             <div className="flex gap-2 pt-2">
@@ -216,7 +216,7 @@ export function StaffBrowser({ initialStaff }: { initialStaff: Staff[] }) {
       )}
 
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-[#a97e2e] bg-[#1d1610] px-5 py-2.5 font-mono text-xs font-semibold text-[#f3d48b] shadow-2xl animate-fade-in">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-[#a97e2e] bg-surface-2 px-5 py-2.5 font-mono text-xs font-semibold text-accent-gold shadow-2xl animate-fade-in">
           {toastMessage}
         </div>
       )}
