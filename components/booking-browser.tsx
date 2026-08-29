@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { updateBookingStatus, changeBookingTherapist } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
-import { slotsOverlap } from "@/lib/bookings/slots";
+import { slotsOverlap, compareSlotTimes } from "@/lib/bookings/slots";
 import { BookingFormModal } from "@/components/booking-form-modal";
 import { QuickWalkinModal } from "@/components/quick-walkin-modal";
 import { LogVisitModal } from "@/components/log-visit-modal";
@@ -24,6 +24,12 @@ export type Staff = { id: string; name: string; position: string };
 export type Promo = { id: string; label: string; discount: number };
 export type Addon = { id: string; name: string; price: number };
 
+type LockerOccupancyRow = {
+  checked_in_at: string;
+  checked_out_at: string | null;
+  locker_number: number;
+};
+
 type BookingRow = {
   id: string;
   client_id: string | null;
@@ -37,6 +43,7 @@ type BookingRow = {
   promo_id: string | null;
   status: Database["public"]["Enums"]["booking_status"];
   pax_count: number | null;
+  locker_occupancy: LockerOccupancyRow[] | null;
 };
 
 const ACTIVE_STATUSES: Database["public"]["Enums"]["booking_status"][] = [
@@ -46,13 +53,16 @@ const ACTIVE_STATUSES: Database["public"]["Enums"]["booking_status"][] = [
   "No-show",
 ];
 
+type TabKey = "upcoming" | "checkin" | "checkout";
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "upcoming", label: "Upcoming" },
+  { key: "checkin", label: "Check-in" },
+  { key: "checkout", label: "Check-out" },
+];
+
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-function fmtDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function fmtTime(t: string): string {
@@ -60,6 +70,19 @@ function fmtTime(t: string): string {
   const [h, m] = t.split(":");
   const hr = ((+h + 11) % 12) + 1;
   return `${hr}:${m} ${+h < 12 ? "AM" : "PM"}`;
+}
+
+function fmtTimestamp(ts: string | null | undefined): string {
+  if (!ts) return "—";
+  return new Date(ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+function occupancyOf(row: BookingRow): LockerOccupancyRow | null {
+  return row.locker_occupancy?.[0] ?? null;
+}
+
+function sortBySpaDay(rows: BookingRow[]): BookingRow[] {
+  return [...rows].sort((a, b) => compareSlotTimes(a.start_time, b.start_time));
 }
 
 export function BookingBrowser({
@@ -86,6 +109,7 @@ export function BookingBrowser({
   const router = useRouter();
   const { sessionStaff } = useStaffSim();
   const [date, setDate] = useState(todayIso());
+  const [tab, setTab] = useState<TabKey>("upcoming");
   const [dayBookings, setDayBookings] = useState<BookingRow[]>([]);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -106,13 +130,13 @@ export function BookingBrowser({
     supabase
       .from("bookings")
       .select(
-        "id, client_id, guest_label, service_id, therapist_id, room_number, booking_date, start_time, duration_minutes, promo_id, status, pax_count"
+        "id, client_id, guest_label, service_id, therapist_id, room_number, booking_date, start_time, duration_minutes, promo_id, status, pax_count, locker_occupancy(checked_in_at, checked_out_at, locker_number)"
       )
       .eq("booking_date", date)
       .in("status", ACTIVE_STATUSES)
       .order("start_time", { ascending: true })
       .then(({ data }) => {
-        setDayBookings((data as BookingRow[]) ?? []);
+        setDayBookings((data as unknown as BookingRow[]) ?? []);
         setLoadedFor(date);
       });
   }, [date, reloadToken]);
@@ -136,6 +160,30 @@ export function BookingBrowser({
     }
     return row.guest_label ?? "Walk-in";
   }
+
+  const upcomingRows = useMemo(
+    () =>
+      sortBySpaDay(
+        dayBookings.filter(
+          (r) => r.status === "Booked" || r.status === "Needs Reassignment" || r.status === "No-show"
+        )
+      ),
+    [dayBookings]
+  );
+  const checkinRows = useMemo(
+    () =>
+      sortBySpaDay(
+        dayBookings.filter((r) => r.status === "Completed" && !occupancyOf(r)?.checked_out_at)
+      ),
+    [dayBookings]
+  );
+  const checkoutRows = useMemo(
+    () =>
+      sortBySpaDay(
+        dayBookings.filter((r) => r.status === "Completed" && !!occupancyOf(r)?.checked_out_at)
+      ),
+    [dayBookings]
+  );
 
   async function handleSetStatus(id: string, status: Database["public"]["Enums"]["booking_status"]) {
     await updateBookingStatus(id, status);
@@ -215,6 +263,67 @@ export function BookingBrowser({
     router.refresh();
   }
 
+  function renderActions(row: BookingRow) {
+    return (
+      <div className="flex items-center gap-1.5">
+        {row.status === "Booked" && (
+          <>
+            <button
+              type="button"
+              onClick={() => setLogVisitBooking(row)}
+              className="rounded-md border border-[#a97e2e] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-gold hover:brightness-125 transition-all"
+            >
+              Log Visit
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetStatus(row.id, "No-show")}
+              className="rounded-md border border-[#5e3c3c] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-red hover:brightness-125 transition-all"
+            >
+              No-show
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetStatus(row.id, "Cancelled")}
+              className="rounded-md border border-border bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-muted hover:brightness-125 transition-all"
+            >
+              Cancel
+            </button>
+          </>
+        )}
+        {row.status === "Needs Reassignment" && (
+          <button
+            type="button"
+            onClick={() => openReassign(row)}
+            className="rounded-md border border-[#6b4f1f] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-amber hover:brightness-125 transition-all"
+          >
+            Reassign
+          </button>
+        )}
+        {(row.status === "Booked" || row.status === "No-show") && (
+          <button
+            type="button"
+            onClick={() => openReassign(row)}
+            className="rounded-md border border-border bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-muted hover:brightness-125 transition-all"
+          >
+            Change
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  function renderRoomPill(row: BookingRow) {
+    return row.room_number ? (
+      <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[8.5px] font-extrabold text-accent-gold">
+        Room {row.room_number}
+      </span>
+    ) : (
+      <span className="text-muted">—</span>
+    );
+  }
+
+  const rowsForTab = tab === "upcoming" ? upcomingRows : tab === "checkin" ? checkinRows : checkoutRows;
 
   return (
     <div className="mt-6 space-y-6">
@@ -251,121 +360,97 @@ export function BookingBrowser({
         </div>
       </div>
 
+      <div className="flex gap-2 border-b border-border">
+        {TABS.map((t) => {
+          const count =
+            t.key === "upcoming" ? upcomingRows.length : t.key === "checkin" ? checkinRows.length : checkoutRows.length;
+          const active = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 -mb-px ${
+                active
+                  ? "border-gold text-accent-gold"
+                  : "border-transparent text-muted hover:text-foreground"
+              }`}
+            >
+              {t.label} ({count})
+            </button>
+          );
+        })}
+      </div>
+
       <div className="space-y-3">
-        <h2 className="text-xs font-semibold text-muted uppercase tracking-wider">
-          Upcoming & Recent Bookings
-        </h2>
         {loading ? (
           <p className="py-6 text-center text-xs text-muted">Loading…</p>
-        ) : dayBookings.length === 0 ? (
+        ) : rowsForTab.length === 0 ? (
           <div className="rounded-xl border border-border bg-surface p-6 text-center text-xs text-muted">
             No bookings for this date.
           </div>
         ) : (
-          <div className="flex flex-col gap-2.5">
-            {dayBookings.map((row) => {
-              const flagged = row.status === "Needs Reassignment";
-              return (
-                <div
-                  key={row.id}
-                  className={`flex flex-wrap items-center gap-3.5 rounded-xl border p-3.5 transition-colors ${
-                    flagged
-                      ? "border-red-900/60 bg-gradient-to-r from-red-950/20 to-surface"
-                      : "border-border bg-surface"
-                  }`}
-                >
-                  <div className="min-w-[128px] font-mono">
-                    <div className="text-[12.5px] font-medium text-accent-gold">
-                      {fmtDate(row.booking_date)}
-                    </div>
-                    <div className="text-[9.5px] text-muted">{fmtTime(row.start_time)}</div>
-                  </div>
-
-                  <div className="min-w-[170px] flex-1">
-                    <div className="flex flex-wrap items-center gap-2 text-[13px] font-bold text-foreground">
-                      <span>{clientLabel(row)}</span>
-                      {row.room_number && (
-                        <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[8.5px] font-extrabold text-accent-gold">
-                          Room {row.room_number}
-                        </span>
+          <div className="overflow-x-auto rounded-xl border border-border bg-surface">
+            <table className="w-full text-left text-[11px]">
+              <thead>
+                <tr className="border-b border-border text-[9.5px] font-semibold uppercase tracking-wider text-muted">
+                  <th className="px-3.5 py-2.5">Massage Time</th>
+                  <th className="px-3.5 py-2.5">Client</th>
+                  <th className="px-3.5 py-2.5">Service</th>
+                  <th className="px-3.5 py-2.5">Room</th>
+                  <th className="px-3.5 py-2.5">Therapist</th>
+                  {tab !== "upcoming" && <th className="px-3.5 py-2.5">Check-in Time</th>}
+                  {tab !== "upcoming" && <th className="px-3.5 py-2.5">Locker #</th>}
+                  {tab === "checkout" && <th className="px-3.5 py-2.5">Check-out Time</th>}
+                  {tab === "upcoming" && <th className="px-3.5 py-2.5">Action</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {rowsForTab.map((row) => {
+                  const flagged = row.status === "Needs Reassignment";
+                  const occ = occupancyOf(row);
+                  return (
+                    <tr
+                      key={row.id}
+                      className={`border-b border-border last:border-0 ${
+                        flagged ? "bg-gradient-to-r from-red-950/20 to-surface" : ""
+                      }`}
+                    >
+                      <td className="whitespace-nowrap px-3.5 py-3 font-mono text-[10.5px] text-muted">
+                        {fmtTime(row.start_time)}
+                      </td>
+                      <td className="px-3.5 py-3">
+                        <div className="flex flex-wrap items-center gap-2 text-[12.5px] font-bold text-foreground">
+                          <span>{clientLabel(row)}</span>
+                          {row.pax_count && (
+                            <span className="rounded-full border border-amber-800 bg-amber-950/40 px-2 py-0.5 text-[8px] font-extrabold tracking-wider text-amber-400 uppercase">
+                              SQUAD ×{row.pax_count}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3.5 py-3 text-muted">{serviceName(row.service_id)}</td>
+                      <td className="px-3.5 py-3">{renderRoomPill(row)}</td>
+                      <td className="px-3.5 py-3 text-muted">{therapistName(row.therapist_id)}</td>
+                      {tab !== "upcoming" && (
+                        <td className="px-3.5 py-3 font-mono text-[10.5px] text-muted">
+                          {fmtTimestamp(occ?.checked_in_at)}
+                        </td>
                       )}
-                      {row.pax_count && (
-                        <span className="rounded-full border border-amber-800 bg-amber-950/40 px-2 py-0.5 text-[8px] font-extrabold tracking-wider text-amber-400 uppercase">
-                          SQUAD ×{row.pax_count}
-                        </span>
+                      {tab !== "upcoming" && (
+                        <td className="px-3.5 py-3 text-muted">{occ?.locker_number ?? "—"}</td>
                       )}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-muted">
-                      {serviceName(row.service_id)} · Therapist: {therapistName(row.therapist_id)}
-                    </div>
-                  </div>
-
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-wider ${
-                      row.status === "Booked"
-                        ? "border border-[#a97e2e] bg-[#c89b3c]/15 text-accent-gold"
-                        : row.status === "Completed"
-                        ? "border border-[#4e5941] bg-[#8a9a76]/15 text-accent-green"
-                        : row.status === "Needs Reassignment"
-                        ? "border border-[#6b4f1f] bg-[#d9a441]/15 text-accent-amber"
-                        : "border border-[#5e3c3c] bg-[#d18b8b]/15 text-accent-red"
-                    }`}
-                  >
-                    {row.status}
-                  </span>
-
-                  {(row.status === "Booked" ||
-                    row.status === "Needs Reassignment" ||
-                    row.status === "No-show") && (
-                    <div className="flex items-center gap-1.5">
-                      {row.status === "Booked" && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => setLogVisitBooking(row)}
-                            className="rounded-md border border-[#a97e2e] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-gold hover:brightness-125 transition-all"
-                          >
-                            Log Visit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSetStatus(row.id, "No-show")}
-                            className="rounded-md border border-[#5e3c3c] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-red hover:brightness-125 transition-all"
-                          >
-                            No-show
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSetStatus(row.id, "Cancelled")}
-                            className="rounded-md border border-border bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-muted hover:brightness-125 transition-all"
-                          >
-                            Cancel
-                          </button>
-                        </>
+                      {tab === "checkout" && (
+                        <td className="px-3.5 py-3 font-mono text-[10.5px] text-muted">
+                          {fmtTimestamp(occ?.checked_out_at)}
+                        </td>
                       )}
-                      {row.status === "Needs Reassignment" && (
-                        <button
-                          type="button"
-                          onClick={() => openReassign(row)}
-                          className="rounded-md border border-[#6b4f1f] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-amber hover:brightness-125 transition-all"
-                        >
-                          Reassign
-                        </button>
-                      )}
-                      {(row.status === "Booked" || row.status === "No-show") && (
-                        <button
-                          type="button"
-                          onClick={() => openReassign(row)}
-                          className="rounded-md border border-border bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-muted hover:brightness-125 transition-all"
-                        >
-                          Change
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                      {tab === "upcoming" && <td className="px-3.5 py-3">{renderActions(row)}</td>}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -433,8 +518,8 @@ export function BookingBrowser({
           <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4">
             <h3 className="text-base font-bold text-foreground">Change</h3>
             <p className="text-xs text-muted">
-              {clientLabel(reassignBooking)} · {fmtDate(reassignBooking.booking_date)} · Currently:{" "}
-              {fmtTime(reassignBooking.start_time)} · {therapistName(reassignBooking.therapist_id)}
+              {clientLabel(reassignBooking)} · Currently: {fmtTime(reassignBooking.start_time)} ·{" "}
+              {therapistName(reassignBooking.therapist_id)}
             </p>
 
             {/* Step 1 — Therapist */}
@@ -518,8 +603,6 @@ export function BookingBrowser({
           </div>
         </div>
       )}
-
-
     </div>
   );
 }

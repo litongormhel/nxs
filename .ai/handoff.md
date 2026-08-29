@@ -5,6 +5,88 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Bookings Tab — 3-Tab Restructure — complete** (`ohm#7q2x9m4k`,
+  2026-08-29). Restructures the Bookings tab from a single flat list +
+  status pill into 3 tabs (Upcoming / Check-in / Check-out); tab
+  membership is derived from existing `bookings.status` joined with
+  `locker_occupancy` checkout state — no new booking status enum value.
+  Plan + regression risk assessment presented and approved before any
+  migration/code was written, per the prompt's mandatory gate.
+  - **Migration** `supabase/migrations/20260829180000_locker_occupancy_booking_id.sql`:
+    adds `locker_occupancy.booking_id uuid references bookings(id)` —
+    nullable, no default, no backfill, no NOT NULL. GiST exclusion
+    constraints (`no_double_book_room`/`no_double_book_therapist`) and
+    `trg_bookings_set_computed_fields` confirmed untouched, both before
+    and after applying (checked live). Also `create or replace function
+    public.quick_walkin(...)` — signature unchanged, its
+    `locker_occupancy` INSERT now also writes `booking_id` (from the
+    already-in-scope `v_booking_id` local). Verified in a rolled-back
+    transaction before applying live, per the `pax_count` precedent
+    ([[bookings_state]]); applied live after verification passed.
+  - **RLS**: no new policy. `locker_occupancy`'s existing
+    `staff_select`/`staff_insert`/`staff_update` policies
+    (`ohm#3f7n9c1k`) are unconditional `is_staff()` gates, not scoped to
+    specific columns, so they already cover the new column — confirmed
+    by reading the policy definitions before skipping the "add RLS"
+    step the prompt called out as conditional.
+  - **`app/(staff)/bookings/actions.ts`**: `logVisitBooking()`'s
+    `locker_occupancy` insert (the linked-booking branch) now also
+    writes `booking_id: input.bookingId` — that field is guaranteed
+    non-null in that branch (the no-linked-booking case delegates to
+    `quickWalkin()` earlier in the function and returns before reaching
+    this insert). No other behavior change to either write path.
+  - **`components/booking-browser.tsx`**: rewritten around 3 tabs
+    (`upcoming` / `checkin` / `checkout` state) with per-tab counts in
+    the tab bar. Day-view query now embeds
+    `locker_occupancy(checked_in_at, checked_out_at, locker_number)` via
+    the new FK. Tab membership: Upcoming = status in
+    (Booked, Needs Reassignment, No-show); Check-in = status Completed
+    AND `checked_out_at IS NULL`; Check-out = status Completed AND
+    `checked_out_at IS NOT NULL` — computed client-side per render, not
+    stored. Rows rendered as a table with per-tab columns per the spec
+    (Upcoming: Massage Time/Client/Service/Room/Therapist/Action;
+    Check-in adds Check-in Time/Locker #; Check-out adds Check-out
+    Time). Date column and per-row status pill removed (redundant with
+    the existing date picker and tab membership respectively). Action
+    buttons (Log Visit/No-show/Cancel/Change/Reassign) unchanged in
+    behavior, now render only in the Upcoming tab. Wet Area rows
+    continue to render "—" for Room/Therapist via the pre-existing
+    `renderRoomPill`/`therapistName` null-coalescing — no change needed
+    there since `locker_occupancy` rows are confirmed to still exist for
+    Wet Area check-ins/outs.
+  - **Sort**: spa-day-aware (4 PM open through 1 AM last call), reusing
+    `compareSlotTimes()` from `lib/bookings/slots.ts` rather than
+    reimplementing — that function's `toMinutesSinceOpen()` already
+    treats times before 16:00 as the tail end of the same operating day,
+    which is exactly the ordering rule asked for.
+    `lib/analytics/spa-day.ts` was evaluated first per the prompt's
+    instruction to reuse a shared helper if extractable, but it only
+    provides day-*bucketing* (which calendar date a timestamp belongs
+    to), not an intra-day sort key — not a fit, so it was left
+    untouched and `compareSlotTimes()` used instead.
+  - **Regression check — done, not assumed**: `app/(staff)/lockers/page.tsx`
+    and `app/(staff)/call-sheet/page.tsx` (Locker Board, Call Sheet) both
+    read `locker_occupancy` via explicit column selects and their own
+    independent `checked_out_at IS NULL` filter — neither references
+    `booking_id`, so both are unaffected by the additive column. No test
+    suite exists in this repo to check against (grepped for
+    `*.test.*`/`*.spec.*`, none found).
+  - **Types**: `lib/types/database.ts` regenerated from the live schema
+    after the migration. In the process, restored nullable annotations
+    on `quick_walkin`'s RPC `Args` (`p_client_id`, `p_guest_label`,
+    `p_manual_discount_type`, `p_manual_discount_value`, `p_payment_ref`,
+    `p_promo_id`, `p_room_number`, `p_therapist_id`) that a fresh
+    codegen pass emits as non-nullable even though the function body
+    accepts (and call sites pass) `null` for guest/Wet-Area/no-promo
+    cases — a pre-existing generator quirk, not something this change
+    introduced; caught via `tsc --noEmit` before it could ship broken.
+  - **Verified**: `npx tsc --noEmit` and `eslint` both clean. Live
+    browser verification of the tabbed UI was **not completed** — Staff
+    Auth (6C) gates every route behind a real Supabase Auth session and
+    no test staff credentials were available in this session; flagged
+    rather than bypassed. Recommend a manual pass in the browser before
+    relying on this in production.
+
 - **Bookings: Change modal extension — complete** (`ohm#8p4t2vk6`,
   2026-08-29). Extends the existing Change Therapist feature into a
   general "Change" action: renames button and modal title to "Change",

@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -290,6 +290,7 @@ export type Database = {
       }
       locker_occupancy: {
         Row: {
+          booking_id: string | null
           checked_in_at: string
           checked_in_by: string | null
           checked_out_at: string | null
@@ -302,6 +303,7 @@ export type Database = {
           service_id: string | null
         }
         Insert: {
+          booking_id?: string | null
           checked_in_at?: string
           checked_in_by?: string | null
           checked_out_at?: string | null
@@ -314,6 +316,7 @@ export type Database = {
           service_id?: string | null
         }
         Update: {
+          booking_id?: string | null
           checked_in_at?: string
           checked_in_by?: string | null
           checked_out_at?: string | null
@@ -326,6 +329,13 @@ export type Database = {
           service_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "locker_occupancy_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "locker_occupancy_checked_in_by_fkey"
             columns: ["checked_in_by"]
@@ -633,13 +643,6 @@ export type Database = {
             columns: ["edited_by"]
             isOneToOne: false
             referencedRelation: "loginable_staff"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sales_edited_by_fkey"
-            columns: ["edited_by"]
-            isOneToOne: false
-            referencedRelation: "staff"
             referencedColumns: ["id"]
           },
           {
@@ -998,6 +1001,13 @@ export type Database = {
       }
     }
     Functions: {
+      current_staff_position: {
+        Args: never
+        Returns: Database["public"]["Enums"]["staff_position"]
+      }
+      is_owner: { Args: never; Returns: boolean }
+      is_staff: { Args: never; Returns: boolean }
+      is_supervisor_or_above: { Args: never; Returns: boolean }
       log_visit: {
         Args: {
           p_amount: number

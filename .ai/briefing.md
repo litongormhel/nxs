@@ -82,7 +82,37 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-29 — Bookings: Change modal extension** (`ohm#8p4t2vk6`).
+1. **2026-08-29 — Bookings Tab — 3-Tab Restructure** (`ohm#7q2x9m4k`).
+   Restructures the flat Bookings list + status pill into 3 tabs
+   (Upcoming / Check-in / Check-out); tab membership is derived from
+   existing `bookings.status` joined with `locker_occupancy` checkout
+   state — no new status enum value. Plan + regression risk assessment
+   presented and approved before any migration/code was written, per the
+   prompt's mandatory gate. Migration
+   `20260829180000_locker_occupancy_booking_id.sql` adds nullable,
+   additive `locker_occupancy.booking_id uuid references bookings(id)`
+   (no backfill, no NOT NULL, GiST exclusion constraints and
+   `trg_bookings_set_computed_fields` untouched) and updates the
+   `quick_walkin()` RPC to populate it (`v_booking_id` already in scope);
+   verified in a rolled-back transaction before applying live, per the
+   `pax_count` precedent. `logVisitBooking()`'s `locker_occupancy` insert
+   now also writes `booking_id: input.bookingId`. `components/booking-browser.tsx`
+   rewritten: tab bar with per-tab counts, table-based columns per tab
+   (Upcoming: Massage Time/Client/Service/Room/Therapist/Action;
+   Check-in: + Check-in Time/Locker #; Check-out: + Check-out Time),
+   Date column and per-row status pill removed (redundant with the date
+   picker and tab membership), sort reuses `compareSlotTimes()` from
+   `lib/bookings/slots.ts` (spa-day-aware, minutes-since-4PM ordering —
+   already extractable, not reimplemented). Locker Board and Call Sheet
+   confirmed unaffected (both use explicit column selects and their own
+   `checked_out_at IS NULL` filter, no `booking_id` reference).
+   `lib/types/database.ts` regenerated from live schema (also restored
+   pre-existing nullable annotations on `quick_walkin`'s RPC Args that a
+   fresh codegen pass drops but call sites rely on). `npx tsc --noEmit`
+   and `eslint` both clean; browser verification blocked by Staff Auth
+   login (no test credentials available in this session) — flagged, not
+   bypassed. See [[bookings_state]] and [[operations_state]].
+2. **2026-08-29 — Bookings: Change modal extension** (`ohm#8p4t2vk6`).
    Extends the Change Therapist feature: renames "Change Therapist"
    button/modal title to "Change" on `Booked`/`No-show` rows ("Reassign"
    on `Needs Reassignment` unchanged); adds a `Start Time` input to the
@@ -98,7 +128,7 @@ Full invariant list: [[nxs-architecture-locks]].
    changed (`old_therapist → new_therapist`, `old_time → new_time`, or
    both). No migration required. `npx tsc --noEmit` and `eslint` both
    clean. See [[bookings_state]].
-2. **2026-08-29 — Bookings: Change Therapist action** (`ohm#7k2m9xq4`).
+3. **2026-08-29 — Bookings: Change Therapist action** (`ohm#7k2m9xq4`).
    Adds a "Change Therapist" action on any booking not `Completed`/
    `Cancelled` (`Booked`, `No-show`, `Needs Reassignment`) — reassigns
    `therapist_id` only, room/locker untouched. Plan + regression risk
@@ -119,7 +149,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Verified live: reassignment round-tripped in the browser and the
    Activity Log entry appeared correctly. `npx tsc --noEmit` and `eslint`
    both clean. See [[bookings_state]].
-3. **2026-08-29 — Client Portal 7A-3: Registration/Login Revision —
+4. **2026-08-29 — Client Portal 7A-3: Registration/Login Revision —
    Password Auth** (`ohm#9r3w7t5b`). Rework of the already-shipped 7A-2
    registration/login flow: replaces PIN-based auth with password-based
    auth and makes `username` user-chosen at registration (was
@@ -153,7 +183,7 @@ Full invariant list: [[nxs-architecture-locks]].
    login by both username and phone, staff `/dashboard` unaffected.
    `npx tsc --noEmit` and `eslint` both clean. See [[client_portal_state]].
 
-4. **2026-08-29 — Settings 7B-3: Service/Promo Soft-Delete — Verified
+5. **2026-08-29 — Settings 7B-3: Service/Promo Soft-Delete — Verified
    Already Complete** (`ohm#1d5r6nz4`). Read-only investigation (plan
    presented and approved before touching anything, per the prompt's
    mandatory gate) found soft delete, active-only dropdown filtering,
@@ -161,17 +191,3 @@ Full invariant list: [[nxs-architecture-locks]].
    `services`/`promos` were all already in place from `ohm#5x1p8m3v`/6C-4.
    No migration or code change made. See [[settings_state]] and
    `.ai/handoff.md` for the full verification trail.
-5. **2026-08-29 — Settings 7B-2: Confirm Dialogs + Global Theme Fix**
-   (`ohm#4k9p2xq7` + `ohm#7t3m8vw1`). New reusable
-   `components/confirm-dialog.tsx` replaces `window.confirm()` on
-   Settings' 4 delete flows (Service/Promo/Weekend Slot/Add-on) — Add
-   flows and Staff/Therapist Roster (add-only, no delete UI) needed no
-   change. Separately, fixed light mode reverting when leaving the
-   Settings tab: root cause was theme state living inside
-   `SettingsBrowser`, whose unmount cleanup stripped the `.light` class
-   from `document.body` on every navigation away from Settings. Moved
-   theme state to a new root-level `lib/theme-context.tsx`
-   (`ThemeProvider`/`useTheme()`), wrapped in `app/layout.tsx`.
-   Localstorage-only persistence unchanged. Verified live: theme now
-   holds across Dashboard/Sales/reload; confirm dialog tested end-to-end.
-   See [[settings_state]] and `.ai/handoff.md` for detail.

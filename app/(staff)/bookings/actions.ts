@@ -438,6 +438,7 @@ export async function logVisitBooking(
     room_number: input.roomNumber,
     service_id: input.serviceId,
     checked_in_by: input.staffId,
+    booking_id: input.bookingId,
   });
 
   if (lockerErr) {

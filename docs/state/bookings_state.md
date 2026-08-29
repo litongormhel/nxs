@@ -224,6 +224,39 @@ therapist availability greying.
   availability query is a best-effort hint regardless; the constraint's
   existing designed scope is unchanged.
 
+**Correction, `ohm#7q2x9m4k` (2026-08-29)** — restructures the Bookings tab
+into 3 tabs (Upcoming / Check-in / Check-out), replacing the single flat
+list + status pill.
+
+- `locker_occupancy` gained `booking_id uuid references bookings(id)`
+  (nullable, no backfill — `supabase/migrations/20260829180000_locker_occupancy_booking_id.sql`).
+  Populated by both write paths into `locker_occupancy`: the
+  `quick_walkin()` RPC (updated in the same migration) and
+  `logVisitBooking()`'s linked-booking branch
+  (`app/(staff)/bookings/actions.ts`).
+- Tab membership is **derived, not stored** — no new value on the
+  `booking_status` enum:
+  - Upcoming: `status IN (Booked, Needs Reassignment, No-show)`.
+  - Check-in: `status = Completed AND locker_occupancy.checked_out_at IS NULL`
+    (joined via `booking_id`).
+  - Check-out: `status = Completed AND locker_occupancy.checked_out_at IS NOT NULL`.
+- `components/booking-browser.tsx`'s day-view query now embeds
+  `locker_occupancy(checked_in_at, checked_out_at, locker_number)` on the
+  `bookings` select. Sort within each tab is spa-day-aware, reusing
+  `compareSlotTimes()` from `lib/bookings/slots.ts` (minutes-since-4PM
+  open, not raw timestamp) rather than a new helper.
+- Per-tab columns: Upcoming (Massage Time/Client/Service/Room/Therapist/
+  Action), Check-in (+ Check-in Time/Locker #), Check-out (+ Check-out
+  Time). The Date column and per-row status pill were removed (redundant
+  with the date picker and tab membership). Wet Area rows still render
+  "—" for Room/Therapist across all 3 tabs — unchanged behavior, since
+  Wet Area bookings do get a `locker_occupancy` row.
+- No RLS change — `locker_occupancy`'s existing `staff_select`/
+  `staff_insert`/`staff_update` policies are unconditional `is_staff()`
+  gates, already covering the new column.
+- No change to the GiST exclusion constraints or
+  `trg_bookings_set_computed_fields`.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - Therapist options are not filtered by `therapist_services` (which
