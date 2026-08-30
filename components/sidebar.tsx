@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/nav";
@@ -12,9 +13,10 @@ export function Sidebar() {
 
   return (
     <aside className="w-60 shrink-0 border-r border-border bg-surface flex flex-col">
-      <div className="px-5 py-6 border-b border-border">
+      <div className="px-5 py-6 border-b border-border flex items-center gap-2">
+        <Image src="/logo.jpeg" alt="NXS Spa" width={28} height={28} className="rounded-sm" />
         <span className="text-lg font-semibold tracking-wide text-gold">
-          NXS
+          NXS Spa
         </span>
       </div>
       <nav className="flex-1 overflow-y-auto py-3">
