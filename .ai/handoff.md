@@ -5,6 +5,54 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Sidebar Nav — Collapsible Hamburger Menu for Mobile/Tablet — complete**
+  (`ohm#757d5b08`, 2026-08-30). Plan + regression risk assessment
+  presented and approved before any code was written, per the prompt's
+  mandatory gate. UI/layout only, no backend/DB/auth changes.
+  - **Bug fixed**: `components/sidebar.tsx`'s `<aside>` was a
+    `w-60 shrink-0` flex sibling of `<main>` under `app/layout.tsx`'s
+    `<body className="flex">` at every viewport width, squeezing page
+    content on mobile (confirmed via screenshot on nxsspa.vercel.app).
+  - **Fix**: `<aside>` is now `fixed inset-y-0 left-0` (out of flex flow)
+    and `-translate-x-full` by default below `sm:`, with
+    `sm:static sm:translate-x-0` restoring exactly today's in-flow,
+    always-visible desktop layout. No changes needed to
+    `app/layout.tsx` or `app/(staff)/layout.tsx` — the fixed positioning
+    alone stops the squeeze on mobile.
+  - **New `useState<boolean>` (`isOpen`, default `false`)** drives: a
+    `sm:hidden` 44×44px fixed hamburger button (top-left) that opens the
+    drawer; while open, a close ("×") button inside the sidebar's own
+    header (next to the logo, `sm:hidden`) replaces it; a `sm:hidden`
+    full-screen backdrop (`bg-black/60`) that closes the drawer on tap;
+    and an `onClick={() => setIsOpen(false)}` on every nav `<Link>`
+    (including the footer Sign-out form's link/button path) so tapping a
+    destination closes the drawer. All of this state has zero visual
+    effect at `sm:` and up (`sm:translate-x-0`/`sm:hidden` override it),
+    matching the "regression not allowed" requirement.
+  - **Touch targets**: nav item `<Link>` padding `py-2.5` → `py-3
+    sm:py-2.5`; footer Sign-out/Log-in `py-1.5` → `py-2.5 sm:py-1.5` —
+    mobile-only bump, resets to the exact prior desktop size at `sm:`.
+  - **Role-gating untouched**: the
+    `navItems.filter((item) => !("ownerOnly" in item && item.ownerOnly)
+    || currentRole === "Owner")` line is unchanged — same items
+    (Analytics/Staff/Logs stay Owner-only), same conditional, only the
+    container it renders into changed.
+  - **No other file touched**: `lib/nav.ts`, `app/layout.tsx`,
+    `app/(staff)/layout.tsx`, and every other component (including the
+    `ohm#68b329da` booking modals) untouched.
+  - `npx tsc --noEmit` and `eslint` on `components/sidebar.tsx` both
+    clean.
+  - **Not verified live in-browser this session** — same recurring
+    blocker as `ohm#68b329da`: another chat's dev server already running
+    on `:3000`, Staff Login requires real credentials this session
+    doesn't have. Verified via code review, `tsc`/`eslint`, and manual
+    trace of the `fixed`-vs-`sm:static`/`translate-x`/`sm:translate-x-0`
+    logic against both breakpoints. Requesting a live ~375px check per
+    the prompt's own note once credentials or the port are available.
+  - No dedicated `docs/state/*.md` file exists for sidebar/nav (absent
+    from `.ai/current_state.md`'s routing index) — no state-file update
+    made for this task, per the prompt's own fallback instruction.
+
 - **Booking Flow — Mobile/Tablet Responsive Pass — complete** (`ohm#68b329da`,
   2026-08-30). Plan + regression risk assessment presented and approved
   before any code was written, per the prompt's mandatory gate. UI/layout

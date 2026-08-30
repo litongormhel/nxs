@@ -82,7 +82,39 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-30 — Booking Flow — Mobile/Tablet Responsive Pass**
+1. **2026-08-30 — Sidebar Nav — Collapsible Hamburger Menu for
+   Mobile/Tablet** (`ohm#757d5b08`). Plan + regression risk assessment
+   presented and approved before any code was written, per the prompt's
+   mandatory gate. UI/layout only. Fixes the reported bug (sidebar
+   squeezing page content on mobile, confirmed via screenshot on
+   nxsspa.vercel.app): `components/sidebar.tsx`'s `<aside>` is now `fixed`
+   off-canvas (`-translate-x-full`) below the `sm:` breakpoint and
+   `sm:static sm:translate-x-0` at `sm:` and up — taking it out of the
+   root `flex` layout on mobile (no changes needed to
+   `app/layout.tsx`/`app/(staff)/layout.tsx`, since `fixed` positioning
+   alone stops it from being a flex sibling competing for width). New
+   `useState<boolean>` (`isOpen`, default `false`) drives a `sm:hidden`
+   44×44px hamburger toggle button (top-left, fixed) that opens the
+   drawer; while open, a close ("×") button in the sidebar's own header
+   replaces it, plus a `sm:hidden` full-screen backdrop closes on tap;
+   every nav `<Link>` also closes the drawer on click. Nav item and
+   sign-out/log-in button padding got a mobile-only touch-target bump
+   (`py-3 sm:py-2.5`, `py-2.5 sm:py-1.5`), resetting to today's exact
+   desktop size at `sm:`. **Role-gating logic untouched** — the
+   `navItems.filter((item) => !("ownerOnly" in item && item.ownerOnly) ||
+   currentRole === "Owner")` line is unchanged, same conditional
+   rendering, only the container around it changed. No other component,
+   `lib/nav.ts`, layout file, or Supabase/auth logic touched. `npx tsc
+   --noEmit` and `eslint` both clean. **Not verified live in-browser**
+   this session — same recurring blocker as `ohm#68b329da`: another
+   chat's dev server already on :3000, Staff Login requires real
+   credentials this session doesn't have; verified via code review,
+   `tsc`/`eslint`, and manual trace of the Tailwind breakpoint/flex-vs-
+   fixed positioning logic. No dedicated `docs/state/*.md` file exists
+   for sidebar/nav (not in `current_state.md`'s routing index), so no
+   state-file update was made for this task.
+
+2. **2026-08-30 — Booking Flow — Mobile/Tablet Responsive Pass**
    (`ohm#68b329da`). Plan + regression risk assessment presented and
    approved before any code was written, per the prompt's mandatory gate.
    UI/layout only, no backend/DB/business-logic changes. Made **New
@@ -112,7 +144,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `eslint`, and manual trace of Tailwind breakpoint semantics. See
    [[bookings_state]].
 
-2. **2026-08-30 — Therapist Absent/Leave status → Dashboard reassignment
+3. **2026-08-30 — Therapist Absent/Leave status → Dashboard reassignment
    trigger** (`ohm#3f8q1w6z`). Plan + regression risk assessment presented
    and approved before any code/migration was written, per the prompt's
    mandatory gate. `Mark Absent Today`/`Mark On Leave` (menu wired
@@ -151,7 +183,7 @@ Full invariant list: [[nxs-architecture-locks]].
    new RLS closed the flagged gap with no new issues introduced. See
    [[therapists_state]], [[bookings_state]], [[dashboard_state]].
 
-3. **2026-08-30 — Therapist Roster — Copy Available-List to Clipboard**
+4. **2026-08-30 — Therapist Roster — Copy Available-List to Clipboard**
    (`ohm#9d4r7t2h`). Plan + regression risk assessment presented and
    approved before any code was written, per the prompt's mandatory
    gate. Purely additive: one copy-icon button next to "Show Archived"
@@ -167,7 +199,7 @@ Full invariant list: [[nxs-architecture-locks]].
    login credentials available); verified via code review + `tsc
    --noEmit` (no type errors). See [[therapists_state]].
 
-4. **2026-08-30 — Therapist Roster — Kebab Menu / Day-Off Persistence /
+5. **2026-08-30 — Therapist Roster — Kebab Menu / Day-Off Persistence /
    Date Default** (`ohm#7k2m9x4p`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. Kebab "does nothing" turned out to be React's own
@@ -193,33 +225,3 @@ Full invariant list: [[nxs-architecture-locks]].
    survives a hard reload, correct local date at a real UTC/local-day
    skew moment). No changes to Locker Board, Call Sheet, or Sales. See
    [[therapists_state]].
-5. **2026-08-29 — Bookings Tab — 3-Tab Restructure** (`ohm#7q2x9m4k`).
-   Restructures the flat Bookings list + status pill into 3 tabs
-   (Upcoming / Check-in / Check-out); tab membership is derived from
-   existing `bookings.status` joined with `locker_occupancy` checkout
-   state — no new status enum value. Plan + regression risk assessment
-   presented and approved before any migration/code was written, per the
-   prompt's mandatory gate. Migration
-   `20260829180000_locker_occupancy_booking_id.sql` adds nullable,
-   additive `locker_occupancy.booking_id uuid references bookings(id)`
-   (no backfill, no NOT NULL, GiST exclusion constraints and
-   `trg_bookings_set_computed_fields` untouched) and updates the
-   `quick_walkin()` RPC to populate it (`v_booking_id` already in scope);
-   verified in a rolled-back transaction before applying live, per the
-   `pax_count` precedent. `logVisitBooking()`'s `locker_occupancy` insert
-   now also writes `booking_id: input.bookingId`. `components/booking-browser.tsx`
-   rewritten: tab bar with per-tab counts, table-based columns per tab
-   (Upcoming: Massage Time/Client/Service/Room/Therapist/Action;
-   Check-in: + Check-in Time/Locker #; Check-out: + Check-out Time),
-   Date column and per-row status pill removed (redundant with the date
-   picker and tab membership), sort reuses `compareSlotTimes()` from
-   `lib/bookings/slots.ts` (spa-day-aware, minutes-since-4PM ordering —
-   already extractable, not reimplemented). Locker Board and Call Sheet
-   confirmed unaffected (both use explicit column selects and their own
-   `checked_out_at IS NULL` filter, no `booking_id` reference).
-   `lib/types/database.ts` regenerated from live schema (also restored
-   pre-existing nullable annotations on `quick_walkin`'s RPC Args that a
-   fresh codegen pass drops but call sites rely on). `npx tsc --noEmit`
-   and `eslint` both clean; browser verification blocked by Staff Auth
-   login (no test credentials available in this session) — flagged, not
-   bypassed. See [[bookings_state]] and [[operations_state]].
