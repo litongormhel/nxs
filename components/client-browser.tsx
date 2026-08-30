@@ -225,7 +225,7 @@ export function ClientBrowser({
 
   // Find lowest-cost redeemable service
   const redeemableService = services.find(
-    (s) => selected.points_balance >= s.points_earned * 10
+    (s) => selected.points_balance >= REWARD_THRESHOLD
   );
 
   return (
@@ -400,14 +400,14 @@ export function ClientBrowser({
               <div>
                 <p className="text-sm font-semibold text-foreground">Redeem {redeemableService.name}</p>
                 <p className="text-xs text-muted mt-0.5">
-                  Costs {redeemableService.points_earned * 10} points · 0 pts earned on redemption
+                  Costs {REWARD_THRESHOLD} points · 0 pts earned on redemption
                 </p>
               </div>
               <button
                 type="button"
                 className="shrink-0 rounded-md border border-gold/50 bg-surface px-4 py-1.5 text-xs font-medium text-gold hover:bg-gold/10 transition-colors"
               >
-                Redeem — {redeemableService.points_earned * 10} pts
+                Redeem — {REWARD_THRESHOLD} pts
               </button>
             </div>
           )}
