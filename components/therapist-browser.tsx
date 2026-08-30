@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useStaffSim } from "@/lib/staff-context";
-import { toggleDayOff as toggleDayOffAction } from "@/app/(staff)/therapists/actions";
+import {
+  toggleDayOff as toggleDayOffAction,
+  createTherapist as createTherapistAction,
+} from "@/app/(staff)/therapists/actions";
 
 const DEFAULT_THERAPISTS = [
   "Ron",
@@ -112,6 +116,7 @@ export function TherapistBrowser({
   initialBookings?: BookingInfo[];
 }) {
   const { sessionStaff } = useStaffSim();
+  const router = useRouter();
 
   const initialRecords: TherapistRecord[] =
     initialTherapists && initialTherapists.length > 0
@@ -529,14 +534,26 @@ export function TherapistBrowser({
   };
 
   // Confirm add therapist
-  const handleConfirmAdd = () => {
+  const handleConfirmAdd = async () => {
     const name = addName.trim();
     if (!name || addServices.length === 0 || therapists.includes(name)) {
       setAddError("Please enter a unique name and select at least one service.");
       return;
     }
+    if (!sessionStaff) {
+      setAddError("No staff session found.");
+      return;
+    }
+
+    const dayOffWeekdays = addDayOff.map((d) => WEEKDAYS.indexOf(d));
+    const res = await createTherapistAction(name, dayOffWeekdays, sessionStaff.id);
+    if (!res.ok) {
+      setAddError(`Couldn't add therapist — ${res.error}`);
+      return;
+    }
+
     setTherapists((prev) => [...prev, name]);
-    setTherapistIds((prev) => ({ ...prev, [name]: name }));
+    setTherapistIds((prev) => ({ ...prev, [name]: res.id }));
     setTherapistMeta((prev) => ({
       ...prev,
       [name]: {
@@ -550,6 +567,7 @@ export function TherapistBrowser({
     }));
     showToast(`${name} added to the roster`);
     setShowAddModal(false);
+    router.refresh();
   };
 
   // Calculate card stats and sorting

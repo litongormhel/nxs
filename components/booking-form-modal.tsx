@@ -6,17 +6,8 @@ import { createBooking } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
 import { slotsOverlap } from "@/lib/bookings/slots";
 import { SmsPreviewModal } from "@/components/sms-preview-modal";
-import type { Client, Promo, Service, Staff, Therapist } from "@/components/booking-browser";
+import type { Client, Service, Staff, Therapist } from "@/components/booking-browser";
 import type { Database } from "@/lib/types/database";
-
-const SQUAD_PAX_PATTERN = /^Squad Goals (\d)pax$/i;
-
-function squadPaxFromPromo(promo: Promo | undefined): 3 | 4 | null {
-  const match = promo?.label.match(SQUAD_PAX_PATTERN);
-  if (!match) return null;
-  const pax = Number(match[1]);
-  return pax === 3 || pax === 4 ? pax : null;
-}
 
 type ConflictRow = {
   therapist_id: string | null;
@@ -33,10 +24,6 @@ const ACTIVE_STATUSES: Database["public"]["Enums"]["booking_status"][] = [
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-function weekday(dateIso: string): number {
-  return new Date(`${dateIso}T00:00:00`).getDay(); // 0=Sun..6=Sat
 }
 
 function roundedNowTime(): string {
@@ -63,7 +50,6 @@ export function BookingFormModal({
   therapists,
   rooms,
   staff,
-  promos,
   timeSlots,
   defaultDate,
   onClose,
@@ -74,7 +60,6 @@ export function BookingFormModal({
   therapists: Therapist[];
   rooms: number[];
   staff: Staff[];
-  promos: Promo[];
   timeSlots: string[];
   defaultDate: string;
   onClose: () => void;
@@ -84,12 +69,10 @@ export function BookingFormModal({
   const [walkinName, setWalkinName] = useState("");
   const [serviceId, setServiceId] = useState(services[0]?.id ?? "");
   const [therapistId, setTherapistId] = useState(therapists[0]?.id ?? "");
-  const [promoId, setPromoId] = useState<string>("none");
   const [date, setDate] = useState(defaultDate || todayIso());
   const [slotTime, setSlotTime] = useState<string>("");
   const [useCustomTime, setUseCustomTime] = useState(false);
   const [customTime, setCustomTime] = useState(roundedNowTime());
-  const [roomMode, setRoomMode] = useState<"auto" | "manual">("auto");
   const [manualRoomNumber, setManualRoomNumber] = useState<number | null>(null);
   const { sessionStaff } = useStaffSim();
   const actor = sessionStaff;
@@ -120,9 +103,6 @@ export function BookingFormModal({
   const selectedService = services.find((s) => s.id === serviceId);
   const duration = selectedService?.duration_minutes ?? 0;
   const isMassageService = selectedService?.name !== "Wet Area";
-  const selectedPromo = promos.find((p) => p.id === promoId);
-  const squadPax = isMassageService ? squadPaxFromPromo(selectedPromo) : null;
-  const isWeekday = weekday(date) >= 1 && weekday(date) <= 5;
   const isPastDate = date < todayIso();
   const time = useCustomTime ? customTime : slotTime;
 
@@ -180,22 +160,35 @@ export function BookingFormModal({
     return rooms.filter((r) => !taken.has(r));
   }, [conflicts, time, duration, rooms]);
 
-  // Effective room number derived from assignment mode and free rooms
+  // Therapists with zero free slots anywhere in the day's slot grid
+  const fullyBookedTherapists = useMemo(() => {
+    const fullyBooked = new Set<string>();
+    if (timeSlots.length === 0) return fullyBooked;
+    for (const t of therapists) {
+      const hasFreeSlot = timeSlots.some(
+        (slot) =>
+          !conflicts.some(
+            (c) =>
+              c.therapist_id === t.id &&
+              slotsOverlap(slot, duration, c.start_time, c.duration_minutes ?? 0)
+          )
+      );
+      if (!hasFreeSlot) fullyBooked.add(t.id);
+    }
+    return fullyBooked;
+  }, [therapists, timeSlots, conflicts, duration]);
+
+  // Effective room number: manual override if still free, otherwise first free room
   const roomNumber = useMemo(() => {
     if (!isMassageService) return null;
-    if (roomMode === "auto") return freeRooms[0] ?? null;
     if (manualRoomNumber != null && freeRooms.includes(manualRoomNumber)) {
       return manualRoomNumber;
     }
     return freeRooms[0] ?? null;
-  }, [isMassageService, roomMode, freeRooms, manualRoomNumber]);
+  }, [isMassageService, freeRooms, manualRoomNumber]);
 
   function onServiceChange(nextServiceId: string) {
     setServiceId(nextServiceId);
-    const nextService = services.find((s) => s.id === nextServiceId);
-    if (nextService?.name === "Wet Area") {
-      setPromoId("none");
-    }
   }
 
   function onCustomTimeToggle(checked: boolean) {
@@ -251,8 +244,8 @@ export function BookingFormModal({
         bookingDate: date,
         startTime: isMassageService ? time : roundedNowTime(),
         status: "Booked",
-        paxCount: squadPax,
-        promoId: promoId === "none" ? null : promoId,
+        paxCount: null,
+        promoId: null,
         createdBy: staffId,
       });
 
@@ -368,43 +361,20 @@ export function BookingFormModal({
                   className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
                 >
                   <option value="">— select —</option>
-                  {therapists.map((t) => (
-                    <option key={t.id} value={t.id} disabled={conflictingTherapists.has(t.id)}>
-                      {t.name} {conflictingTherapists.has(t.id) ? "(booked)" : ""}
-                    </option>
-                  ))}
+                  {therapists.map((t) => {
+                    const fullyBooked = fullyBookedTherapists.has(t.id);
+                    const conflictNow = conflictingTherapists.has(t.id);
+                    return (
+                      <option key={t.id} value={t.id} disabled={fullyBooked || conflictNow}>
+                        {t.name}
+                        {fullyBooked ? " — Fully Booked" : conflictNow ? " (booked)" : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             )}
           </div>
-
-          {/* Promo */}
-          {isMassageService && (
-            <div id="bPromoField">
-              <label className="text-xs text-muted" htmlFor="bPromo">
-                Promo <span className="opacity-70">(optional — massage services only)</span>
-              </label>
-              <select
-                id="bPromo"
-                value={promoId}
-                onChange={(e) => setPromoId(e.target.value)}
-                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
-              >
-                <option value="none">No Promo</option>
-                {promos.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label} (−₱{p.discount})
-                  </option>
-                ))}
-              </select>
-              {squadPax != null && isWeekday && (
-                <p className="mt-2 rounded-md border border-amber-800 bg-amber-950/30 px-3 py-2 text-xs text-amber-300">
-                  Squad Goals is normally weekend-only. This booking will still save — just
-                  confirm the discount with the client before applying it.
-                </p>
-              )}
-            </div>
-          )}
 
           {/* Date */}
           <div>
@@ -510,64 +480,38 @@ export function BookingFormModal({
             </div>
           )}
 
-          {/* Room & Assignment Mode */}
+          {/* Room */}
           {isMassageService && (
-            <div className="grid grid-cols-2 gap-3" id="roomField">
-              <div>
-                <label className="text-xs text-muted" htmlFor="bRoom">
-                  Room
-                </label>
-                <select
-                  id="bRoom"
-                  value={roomNumber ?? ""}
-                  onChange={(e) => {
-                    setManualRoomNumber(e.target.value ? Number(e.target.value) : null);
-                    setRoomMode("manual");
-                    setError(null);
-                  }}
-                  disabled={!time || freeRooms.length === 0}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none disabled:opacity-50"
-                >
-                  {!time ? (
-                    <option value="">— pick a time first —</option>
-                  ) : freeRooms.length === 0 ? (
-                    <option value="">No rooms free at this time</option>
-                  ) : (
-                    freeRooms.map((r) => (
-                      <option key={r} value={r}>
+            <div id="roomField">
+              <label className="text-xs text-muted" htmlFor="bRoom">
+                Room
+              </label>
+              <select
+                id="bRoom"
+                value={roomNumber ?? ""}
+                onChange={(e) => {
+                  setManualRoomNumber(e.target.value ? Number(e.target.value) : null);
+                  setError(null);
+                }}
+                disabled={!time}
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none disabled:opacity-50"
+              >
+                {!time ? (
+                  <option value="">— pick a time first —</option>
+                ) : (
+                  rooms.map((r) => {
+                    const isFree = freeRooms.includes(r);
+                    return (
+                      <option key={r} value={r} disabled={!isFree}>
                         Room {r}
+                        {!isFree ? " — Unavailable" : ""}
                       </option>
-                    ))
-                  )}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-muted" htmlFor="bRoomMode">
-                  Assignment
-                </label>
-                <select
-                  id="bRoomMode"
-                  value={roomMode}
-                  onChange={(e) => {
-                    const nextMode = e.target.value as "auto" | "manual";
-                    setRoomMode(nextMode);
-                  }}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
-                >
-                  <option value="auto">Auto (recommended)</option>
-                  <option value="manual">Manual</option>
-                </select>
-              </div>
+                    );
+                  })
+                )}
+              </select>
             </div>
           )}
-
-          {/* Booked by (staff) */}
-          <div>
-            <div className="text-xs text-muted">Booked by (staff)</div>
-            <div className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
-              {actor ? `${actor.name} · ${actor.position}` : "—"}
-            </div>
-          </div>
 
           {/* Error Message */}
           {error && (

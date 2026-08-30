@@ -1,13 +1,19 @@
 import { createClient } from "@/lib/supabase/server";
 import { CallSheetBrowser } from "@/components/call-sheet-browser";
+import { sortSlotTimes } from "@/lib/bookings/slots";
 
 export default async function CallSheetPage() {
   const supabase = await createClient();
 
-  const { data: occupancy } = await supabase
-    .from("locker_occupancy")
-    .select("id, locker_number, room_number, checked_in_at, services(name)")
-    .is("checked_out_at", null);
+  const [{ data: occupancy }, { data: weekendSlots }] = await Promise.all([
+    supabase
+      .from("locker_occupancy")
+      .select(
+        "id, locker_number, room_number, checked_in_at, services(name), bookings(start_time)"
+      )
+      .is("checked_out_at", null),
+    supabase.from("weekend_slots").select("slot_time"),
+  ]);
 
   const entries = (occupancy ?? [])
     .filter((o) => o.services?.name && o.services.name !== "Wet Area")
@@ -16,15 +22,19 @@ export default async function CallSheetPage() {
       locker_number: o.locker_number,
       room_number: o.room_number,
       service_name: o.services!.name,
-      checked_in_at: o.checked_in_at,
+      slot_time: o.bookings?.start_time ? o.bookings.start_time.slice(0, 5) : null,
     }));
+
+  const availableSlots = sortSlotTimes(
+    (weekendSlots ?? []).map((s) => s.slot_time.slice(0, 5))
+  );
 
   return (
     <div className="p-8">
       <h1 className="text-xl font-semibold text-gold animate-fade-in mb-6">
         Call Sheet
       </h1>
-      <CallSheetBrowser entries={entries} />
+      <CallSheetBrowser entries={entries} availableSlots={availableSlots} />
     </div>
   );
 }

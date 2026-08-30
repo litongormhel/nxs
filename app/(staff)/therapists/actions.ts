@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
+type CreateTherapistResult = { ok: true; id: string } | { ok: false; error: string };
 
 async function logAction(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -18,8 +19,34 @@ async function logAction(
   });
 }
 
-function fail(error: unknown): ActionResult {
+function fail(error: unknown): { ok: false; error: string } {
   return { ok: false, error: error instanceof Error ? error.message : String(error) };
+}
+
+export async function createTherapist(
+  name: string,
+  dayOffWeekdays: number[],
+  staffId: string
+): Promise<CreateTherapistResult> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("therapists")
+    .insert({ name })
+    .select("id")
+    .single();
+  if (error || !data) return fail(error ?? "Could not create therapist");
+
+  if (dayOffWeekdays.length > 0) {
+    const { error: dayOffError } = await supabase
+      .from("therapist_day_off")
+      .insert(dayOffWeekdays.map((weekday) => ({ therapist_id: data.id, weekday })));
+    if (dayOffError) return fail(dayOffError);
+  }
+
+  await logAction(supabase, staffId, "therapist_create", `therapist=${data.id} name=${name}`);
+  revalidatePath("/therapists");
+  revalidatePath("/bookings");
+  return { ok: true, id: data.id };
 }
 
 export async function toggleDayOff(

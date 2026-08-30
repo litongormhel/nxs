@@ -462,7 +462,6 @@ export function BookingBrowser({
           therapists={therapists}
           rooms={rooms}
           staff={staff}
-          promos={promos}
           timeSlots={timeSlots}
           defaultDate={date}
           onClose={() => setShowNewBooking(false)}
