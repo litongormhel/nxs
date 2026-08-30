@@ -82,7 +82,23 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-30 — Therapist Roster — Kebab Menu / Day-Off Persistence /
+1. **2026-08-30 — Therapist Roster — Copy Available-List to Clipboard**
+   (`ohm#9d4r7t2h`). Plan + regression risk assessment presented and
+   approved before any code was written, per the prompt's mandatory
+   gate. Purely additive: one copy-icon button next to "Show Archived"
+   in `components/therapist-browser.tsx`, one new `handleCopyAvailable`
+   handler. Filters the already-computed `cardRows` for
+   `slotStatus === "available"` (same status logic the cards already
+   render from — no new filter/render logic), formats as
+   `"{TIME} Available\n\n{Name}\n..."` using the existing `fmtTime()`
+   helper (already produces `8:00PM`-style output), writes via
+   `navigator.clipboard.writeText`, confirms via the existing toast
+   system. No changes to filter dropdown, `cardRows` computation, or any
+   other handler. Not verified live in-browser this session (no staff
+   login credentials available); verified via code review + `tsc
+   --noEmit` (no type errors). See [[therapists_state]].
+
+2. **2026-08-30 — Therapist Roster — Kebab Menu / Day-Off Persistence /
    Date Default** (`ohm#7k2m9x4p`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. Kebab "does nothing" turned out to be React's own
@@ -108,7 +124,7 @@ Full invariant list: [[nxs-architecture-locks]].
    survives a hard reload, correct local date at a real UTC/local-day
    skew moment). No changes to Locker Board, Call Sheet, or Sales. See
    [[therapists_state]].
-2. **2026-08-29 — Bookings Tab — 3-Tab Restructure** (`ohm#7q2x9m4k`).
+3. **2026-08-29 — Bookings Tab — 3-Tab Restructure** (`ohm#7q2x9m4k`).
    Restructures the flat Bookings list + status pill into 3 tabs
    (Upcoming / Check-in / Check-out); tab membership is derived from
    existing `bookings.status` joined with `locker_occupancy` checkout
@@ -138,7 +154,7 @@ Full invariant list: [[nxs-architecture-locks]].
    and `eslint` both clean; browser verification blocked by Staff Auth
    login (no test credentials available in this session) — flagged, not
    bypassed. See [[bookings_state]] and [[operations_state]].
-3. **2026-08-29 — Bookings: Change modal extension** (`ohm#8p4t2vk6`).
+4. **2026-08-29 — Bookings: Change modal extension** (`ohm#8p4t2vk6`).
    Extends the Change Therapist feature: renames "Change Therapist"
    button/modal title to "Change" on `Booked`/`No-show` rows ("Reassign"
    on `Needs Reassignment` unchanged); adds a `Start Time` input to the
@@ -154,7 +170,7 @@ Full invariant list: [[nxs-architecture-locks]].
    changed (`old_therapist → new_therapist`, `old_time → new_time`, or
    both). No migration required. `npx tsc --noEmit` and `eslint` both
    clean. See [[bookings_state]].
-4. **2026-08-29 — Bookings: Change Therapist action** (`ohm#7k2m9xq4`).
+5. **2026-08-29 — Bookings: Change Therapist action** (`ohm#7k2m9xq4`).
    Adds a "Change Therapist" action on any booking not `Completed`/
    `Cancelled` (`Booked`, `No-show`, `Needs Reassignment`) — reassigns
    `therapist_id` only, room/locker untouched. Plan + regression risk
@@ -175,36 +191,3 @@ Full invariant list: [[nxs-architecture-locks]].
    Verified live: reassignment round-tripped in the browser and the
    Activity Log entry appeared correctly. `npx tsc --noEmit` and `eslint`
    both clean. See [[bookings_state]].
-5. **2026-08-29 — Client Portal 7A-3: Registration/Login Revision —
-   Password Auth** (`ohm#9r3w7t5b`). Rework of the already-shipped 7A-2
-   registration/login flow: replaces PIN-based auth with password-based
-   auth and makes `username` user-chosen at registration (was
-   system-generated). Plan + regression risk assessment presented and
-   approved before any migration/code was written, per the prompt's
-   mandatory gate. **Discrepancy caught before planning**: `clients.username`
-   and `clients.password_hash` already exist live but pre-date the entire
-   Client Portal feature (baseline snapshot) and are unrelated — flagged,
-   left untouched. Migration
-   `20260829123017_client_portal_password_auth.sql`: deleted the single
-   7A-2 test row (`Test Client 7A2` / `NXS-XKUCU4`, confirmed with the
-   user first), dropped `pin_hash` and the plain unique constraint on
-   `username`, added `password_hash text not null` and a case-insensitive
-   `unique index ... (lower(username))` (citext confirmed unused
-   elsewhere, so a functional index was used instead). `lib/portal/pin.ts`
-   renamed to `lib/portal/password.ts` (`hashPassword`/`verifyPassword`,
-   same scrypt implementation, `MIN_PASSWORD_LENGTH = 6`). New
-   `lib/portal/username.ts` for format validation + LIKE-safe
-   case-insensitive uniqueness checks, backing a new
-   `app/portal/api/check-username` route used by both a debounced
-   client-side check and the authoritative server-side check. Registration
-   fields are now Name/Username/Phone/Password; the `clients.phone`
-   match-vs-create linking logic is unchanged, but the
-   `client_portal_accounts.phone`-collision response was deliberately
-   changed from a leaking message ("this phone is already registered") to
-   a generic one, per the prompt's own leak-prevention requirement. Login
-   is now a single "Username or Phone Number" + Password, backend
-   regex-detects which. `lib/portal/session.ts` confirmed unaffected, not
-   touched. SMS OTP / Forgot Password explicitly out of scope, no
-   scaffolding added. Verified live: register → confirmation → logout →
-   login by both username and phone, staff `/dashboard` unaffected.
-   `npx tsc --noEmit` and `eslint` both clean. See [[client_portal_state]].

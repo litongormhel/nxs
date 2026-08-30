@@ -281,6 +281,24 @@ export function TherapistBrowser({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const showToast = (msg: string) => setToastMessage(msg);
 
+  // Copy available-therapist list to clipboard
+  const handleCopyAvailable = async () => {
+    const names = cardRows
+      .filter((r) => r.slotStatus === "available")
+      .map((r) => r.t);
+    const text = `${fmtTime(viewTime)} Available\n\n${names.join("\n")}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(
+        names.length > 0
+          ? `Copied ${names.length} available therapist${names.length === 1 ? "" : "s"} to clipboard`
+          : "No available therapists to copy"
+      );
+    } catch {
+      showToast("Couldn't copy to clipboard");
+    }
+  };
+
   useEffect(() => {
     if (!toastMessage) return;
     const timer = setTimeout(() => setToastMessage(null), 2400);
@@ -688,6 +706,24 @@ export function TherapistBrowser({
           />
           Show Archived
         </label>
+        <button
+          type="button"
+          onClick={handleCopyAvailable}
+          title="Copy available therapists to clipboard"
+          className="flex items-center justify-center rounded-lg border border-border bg-surface p-2 text-muted transition hover:text-gold hover:border-gold/40"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <rect x="9" y="9" width="11" height="11" rx="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+        </button>
       </div>
 
       {/* THERAPIST GRID */}

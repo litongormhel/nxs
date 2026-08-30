@@ -5,6 +5,26 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Therapist Roster — Copy Available-List to Clipboard — complete**
+  (`ohm#9d4r7t2h`, 2026-08-30). Plan + regression risk assessment
+  presented and approved before any code was written, per the prompt's
+  mandatory gate. Added a copy-icon button next to "Show Archived" in
+  `components/therapist-browser.tsx` and a `handleCopyAvailable`
+  handler: filters the already-computed `cardRows` array for
+  `slotStatus === "available"` (the same status the cards already
+  render from, so no changes to filter/render logic), formats as
+  `"{TIME} Available\n\n{Name}\n..."` via `navigator.clipboard.writeText`
+  (time via the existing `fmtTime()` helper, already `8:00PM`-style, no
+  space before AM/PM), confirms via the existing toast state/effect —
+  no new toast component. Purely additive: no changes to `cardRows`
+  computation, the filter dropdown, or any existing handler. **Not
+  verified live in-browser** this session — no staff login credentials
+  were available (another chat's dev server was already running on
+  :3000, and the login page requires real staff credentials this
+  session doesn't have); verified instead via code review and
+  `npx tsc --noEmit` (clean, no errors in the changed file). See
+  [[therapists_state]].
+
 - **Therapist Roster — 3 bug fixes — complete** (`ohm#7k2m9x4p`,
   2026-08-30). Root cause + fix approach + regression risk presented and
   approved before any code was written, per the prompt's mandatory gate.
