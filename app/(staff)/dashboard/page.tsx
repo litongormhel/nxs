@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { ReassignmentPanel, FlaggedBooking } from "@/components/reassignment-panel";
 
 async function getCount(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -19,13 +20,57 @@ async function getCount(
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const [availableTherapists, totalServices, totalRooms, totalLockers] =
-    await Promise.all([
-      getCount(supabase, "therapists", { column: "archived", value: false }),
-      getCount(supabase, "services", { column: "active", value: true }),
-      getCount(supabase, "rooms", { column: "active", value: true }),
-      getCount(supabase, "lockers", { column: "active", value: true }),
-    ]);
+  const [
+    availableTherapists,
+    totalServices,
+    totalRooms,
+    totalLockers,
+    { data: dbFlagged },
+    { data: dbTherapists },
+  ] = await Promise.all([
+    getCount(supabase, "therapists", { column: "archived", value: false }),
+    getCount(supabase, "services", { column: "active", value: true }),
+    getCount(supabase, "rooms", { column: "active", value: true }),
+    getCount(supabase, "lockers", { column: "active", value: true }),
+    supabase
+      .from("bookings")
+      .select(
+        "id, booking_date, start_time, room_number, therapist_id, therapists(name), services(name), clients(codename), guest_label"
+      )
+      .eq("status", "Needs Reassignment")
+      .order("booking_date", { ascending: true })
+      .order("start_time", { ascending: true }),
+    supabase
+      .from("therapists")
+      .select("id, name")
+      .eq("archived", false)
+      .order("name", { ascending: true }),
+  ]);
+
+  type FlaggedRow = {
+    id: string;
+    booking_date: string;
+    start_time: string;
+    room_number: number | null;
+    therapist_id: string | null;
+    therapists: { name: string } | null;
+    services: { name: string } | null;
+    clients: { codename: string } | null;
+    guest_label: string | null;
+  };
+
+  const flaggedBookings: FlaggedBooking[] = ((dbFlagged ?? []) as FlaggedRow[]).map((b) => ({
+    id: b.id,
+    bookingDate: b.booking_date,
+    startTime: b.start_time,
+    clientLabel: b.clients?.codename ?? b.guest_label ?? "Walk-in",
+    serviceName: b.services?.name ?? "Massage",
+    roomNumber: b.room_number,
+    therapistId: b.therapist_id,
+    therapistName: b.therapists?.name ?? "Unassigned",
+  }));
+
+  const therapistOptions = (dbTherapists ?? []).map((t) => ({ id: t.id, name: t.name }));
 
   const cards = [
     { label: "Available Therapists", value: availableTherapists },
@@ -53,6 +98,8 @@ export default async function DashboardPage() {
           </div>
         ))}
       </div>
+
+      <ReassignmentPanel initialFlagged={flaggedBookings} therapists={therapistOptions} />
     </div>
   );
 }

@@ -230,7 +230,11 @@ export async function changeBookingTherapist(
 
   const { error: updateErr } = await supabase
     .from("bookings")
-    .update({ therapist_id: newTherapistId, start_time: newStartTime })
+    .update({
+      therapist_id: newTherapistId,
+      start_time: newStartTime,
+      ...(booking.status === "Needs Reassignment" ? { status: "Booked" } : {}),
+    })
     .eq("id", bookingId);
 
   if (updateErr) {

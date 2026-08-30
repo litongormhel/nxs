@@ -12,6 +12,7 @@ architecture explanations live here.
 | Sales | POS, payments, discounts, voids, addons | `docs/state/sales_state.md` |
 | Therapists | therapist roster, absences, leave, day-off, service assignment | `docs/state/therapists_state.md` |
 | Operations | lockers, rooms, call sheet | `docs/state/operations_state.md` |
+| Dashboard | reception home, stat cards, Needs Reassignment / Transfer | `docs/state/dashboard_state.md` |
 | Staff | staff roster, positions, staff auth status | `docs/state/staff_state.md` |
 | Logs | `action_logs`, placeholder-actor logging | `docs/state/logs_state.md` |
 | Analytics | dashboard stats, reporting | `docs/state/analytics_state.md` |

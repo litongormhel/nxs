@@ -6,6 +6,8 @@ import { useStaffSim } from "@/lib/staff-context";
 import {
   toggleDayOff as toggleDayOffAction,
   createTherapist as createTherapistAction,
+  markAbsentToday as markAbsentTodayAction,
+  markOnLeave as markOnLeaveAction,
 } from "@/app/(staff)/therapists/actions";
 
 const DEFAULT_THERAPISTS = [
@@ -110,10 +112,14 @@ export function TherapistBrowser({
   initialTherapists,
   initialDayOff = {},
   initialBookings = [],
+  initialAbsence = {},
+  initialLeave = {},
 }: {
   initialTherapists?: TherapistRecord[];
   initialDayOff?: Record<string, string[]>;
   initialBookings?: BookingInfo[];
+  initialAbsence?: Record<string, string[]>;
+  initialLeave?: Record<string, { start: string; end: string; reason: string }>;
 }) {
   const { sessionStaff } = useStaffSim();
   const router = useRouter();
@@ -158,8 +164,8 @@ export function TherapistBrowser({
         services: restricted[r.name]
           ? restricted[r.name].slice()
           : ALL_THERAPIST_SERVICES.slice(),
-        leave: null,
-        absentDates: [],
+        leave: initialLeave[r.id] ?? null,
+        absentDates: initialAbsence[r.id] ? initialAbsence[r.id].slice() : [],
         archived: false,
         archivedReason: "",
       };
@@ -407,8 +413,18 @@ export function TherapistBrowser({
     });
   };
 
-  // Mark absent today handler
-  const handleMarkAbsent = (t: string) => {
+  // Mark absent today handler — writes through to therapist_absence and
+  // flags that day's Booked appointments as Needs Reassignment.
+  const handleMarkAbsent = async (t: string) => {
+    const therapistId = therapistIds[t];
+    if (!therapistId || !sessionStaff) return;
+
+    const res = await markAbsentTodayAction(therapistId, viewDate, sessionStaff.id);
+    if (!res.ok) {
+      showToast(`Couldn't mark ${t} absent — ${res.error}`);
+      return;
+    }
+
     setTherapistMeta((prev) => {
       const meta = prev[t];
       if (!meta) return prev;
@@ -417,7 +433,6 @@ export function TherapistBrowser({
         [t]: { ...meta, absentDates: [...meta.absentDates, viewDate] },
       };
     });
-    // Flag any booked appointments
     let flaggedCount = 0;
     setBookings((prev) =>
       prev.map((b) => {
@@ -433,11 +448,29 @@ export function TherapistBrowser({
         flaggedCount > 0 ? ` · ${flaggedCount} booking(s) flagged` : ""
       }`
     );
+    router.refresh();
   };
 
-  // Confirm leave
-  const handleConfirmLeave = () => {
+  // Confirm leave — writes through to therapist_leave and flags any
+  // Booked appointments in the leave range as Needs Reassignment.
+  const handleConfirmLeave = async () => {
     if (!leaveTherapist || !leaveStart || !leaveEnd) return;
+    const therapistId = therapistIds[leaveTherapist];
+    if (!therapistId || !sessionStaff) return;
+
+    const reason = leaveReason.trim();
+    const res = await markOnLeaveAction(
+      therapistId,
+      leaveStart,
+      leaveEnd,
+      reason,
+      sessionStaff.id
+    );
+    if (!res.ok) {
+      showToast(`Couldn't put ${leaveTherapist} on leave — ${res.error}`);
+      return;
+    }
+
     setTherapistMeta((prev) => {
       const meta = prev[leaveTherapist];
       if (!meta) return prev;
@@ -445,18 +478,28 @@ export function TherapistBrowser({
         ...prev,
         [leaveTherapist]: {
           ...meta,
-          leave: {
-            start: leaveStart,
-            end: leaveEnd,
-            reason: leaveReason.trim(),
-          },
+          leave: { start: leaveStart, end: leaveEnd, reason },
         },
       };
     });
+    setBookings((prev) =>
+      prev.map((b) => {
+        if (
+          b.therapist === leaveTherapist &&
+          b.date >= leaveStart &&
+          b.date <= leaveEnd &&
+          b.status === "Booked"
+        ) {
+          return { ...b, status: "Needs Reassignment" };
+        }
+        return b;
+      })
+    );
     showToast(
       `${leaveTherapist} on leave ${fmtDate(leaveStart)}–${fmtDate(leaveEnd)}`
     );
     setLeaveTherapist(null);
+    router.refresh();
   };
 
   // Confirm archive

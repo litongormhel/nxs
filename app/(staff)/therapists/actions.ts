@@ -49,6 +49,80 @@ export async function createTherapist(
   return { ok: true, id: data.id };
 }
 
+export async function markAbsentToday(
+  therapistId: string,
+  date: string,
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  const { error: absenceError } = await supabase
+    .from("therapist_absence")
+    .upsert(
+      { therapist_id: therapistId, absent_date: date, created_by: staffId },
+      { onConflict: "therapist_id,absent_date", ignoreDuplicates: true }
+    );
+  if (absenceError) return fail(absenceError);
+
+  const { data: flagged, error: flagError } = await supabase
+    .from("bookings")
+    .update({ status: "Needs Reassignment" })
+    .eq("therapist_id", therapistId)
+    .eq("booking_date", date)
+    .eq("status", "Booked")
+    .select("id");
+  if (flagError) return fail(flagError);
+
+  await logAction(
+    supabase,
+    staffId,
+    "therapist_mark_absent",
+    `therapist=${therapistId} date=${date} flagged=${flagged?.length ?? 0}`
+  );
+  revalidatePath("/therapists");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function markOnLeave(
+  therapistId: string,
+  startDate: string,
+  endDate: string,
+  reason: string,
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  const { error: leaveError } = await supabase.from("therapist_leave").insert({
+    therapist_id: therapistId,
+    start_date: startDate,
+    end_date: endDate,
+    reason: reason || null,
+    created_by: staffId,
+  });
+  if (leaveError) return fail(leaveError);
+
+  const { data: flagged, error: flagError } = await supabase
+    .from("bookings")
+    .update({ status: "Needs Reassignment" })
+    .eq("therapist_id", therapistId)
+    .gte("booking_date", startDate)
+    .lte("booking_date", endDate)
+    .eq("status", "Booked")
+    .select("id");
+  if (flagError) return fail(flagError);
+
+  await logAction(
+    supabase,
+    staffId,
+    "therapist_mark_on_leave",
+    `therapist=${therapistId} start=${startDate} end=${endDate} flagged=${flagged?.length ?? 0}`
+  );
+  revalidatePath("/therapists");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
 export async function toggleDayOff(
   therapistId: string,
   weekday: number,

@@ -4,20 +4,30 @@ import { TherapistBrowser, BookingInfo } from "@/components/therapist-browser";
 export default async function TherapistsPage() {
   const supabase = await createClient();
 
-  const [{ data: dbTherapists }, { data: dbBookings }, { data: dbDayOff }] =
-    await Promise.all([
-      supabase
-        .from("therapists")
-        .select("id, name")
-        .order("name", { ascending: true }),
-      supabase
-        .from("bookings")
-        .select(
-          "id, booking_date, start_time, status, therapists(name), services(name), clients(codename), guest_label"
-        )
-        .order("start_time", { ascending: true }),
-      supabase.from("therapist_day_off").select("therapist_id, weekday"),
-    ]);
+  const [
+    { data: dbTherapists },
+    { data: dbBookings },
+    { data: dbDayOff },
+    { data: dbAbsence },
+    { data: dbLeave },
+  ] = await Promise.all([
+    supabase
+      .from("therapists")
+      .select("id, name")
+      .order("name", { ascending: true }),
+    supabase
+      .from("bookings")
+      .select(
+        "id, booking_date, start_time, status, therapists(name), services(name), clients(codename), guest_label"
+      )
+      .order("start_time", { ascending: true }),
+    supabase.from("therapist_day_off").select("therapist_id, weekday"),
+    supabase.from("therapist_absence").select("therapist_id, absent_date"),
+    supabase
+      .from("therapist_leave")
+      .select("therapist_id, start_date, end_date, reason")
+      .order("created_at", { ascending: false }),
+  ]);
 
   const therapists =
     dbTherapists && dbTherapists.length > 0
@@ -43,6 +53,24 @@ export default async function TherapistsPage() {
     (dayOffByTherapist[row.therapist_id] ??= []).push(wd);
   });
 
+  const absenceByTherapist: Record<string, string[]> = {};
+  (dbAbsence ?? []).forEach((row) => {
+    (absenceByTherapist[row.therapist_id] ??= []).push(row.absent_date);
+  });
+
+  const leaveByTherapist: Record<
+    string,
+    { start: string; end: string; reason: string }
+  > = {};
+  (dbLeave ?? []).forEach((row) => {
+    if (leaveByTherapist[row.therapist_id]) return; // most recent only, per created_at desc order
+    leaveByTherapist[row.therapist_id] = {
+      start: row.start_date,
+      end: row.end_date,
+      reason: row.reason ?? "",
+    };
+  });
+
   const bookings: BookingInfo[] = (dbBookings ?? []).map((b: any) => ({
     id: b.id,
     therapist: b.therapists?.name ?? "",
@@ -63,6 +91,8 @@ export default async function TherapistsPage() {
         initialTherapists={therapists}
         initialDayOff={dayOffByTherapist}
         initialBookings={bookings.length > 0 ? bookings : undefined}
+        initialAbsence={absenceByTherapist}
+        initialLeave={leaveByTherapist}
       />
     </div>
   );

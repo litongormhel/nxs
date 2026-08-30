@@ -5,6 +5,84 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Therapist Absent/Leave status → Dashboard reassignment trigger —
+  complete** (`ohm#3f8q1w6z`, 2026-08-30). Plan + regression risk
+  assessment presented and approved before any code/migration was
+  written, per the prompt's mandatory gate.
+  - **Mark Absent Today / Mark On Leave now persist.** Both kebab actions
+    on `components/therapist-browser.tsx` (wired but local-state-only
+    since `ohm#7k2m9x4p`) now call new server actions
+    `markAbsentToday(therapistId, date, staffId)` /
+    `markOnLeave(therapistId, startDate, endDate, reason, staffId)`
+    (`app/(staff)/therapists/actions.ts`). Each upserts/inserts into
+    `therapist_absence`/`therapist_leave` (unique-constraint conflict on
+    `therapist_absence` ignored, so marking the same therapist absent
+    twice for the same date is a no-op, not an error), then updates
+    `bookings SET status = 'Needs Reassignment' WHERE therapist_id = …
+    AND status = 'Booked'` scoped to that day (absence) or date range
+    (leave). Logs one `action_logs` row each, revalidates `/therapists`
+    and `/dashboard`.
+  - **No schema/enum change for the flagging itself** — `Needs
+    Reassignment` already existed as a `bookings.status` enum value and
+    was already inside both `no_double_book_room`/
+    `no_double_book_therapist` GiST exclusion constraints' scope
+    (confirmed directly from the baseline migration before assuming, not
+    guessed).
+  - **Migration required and flagged before writing it**: `therapist_absence`/
+    `therapist_leave` had RLS enabled with **no policies at all** since the
+    baseline snapshot — same gap `therapist_day_off` had before
+    `ohm#7k2m9x4p`, confirmed via `docs/state/therapists_state.md`'s RLS
+    section before assuming. New
+    `supabase/migrations/20260830024144_therapist_absence_leave_rls.sql`:
+    `staff_select` (`is_staff()`) + `staff_insert`
+    (`is_supervisor_or_above()`) on both tables, no UPDATE/DELETE (append-
+    only for this phase — unmarking wasn't requested). Applying it via
+    the Supabase MCP tool was blocked once by the session's auto-mode
+    classifier (as expected for a live schema/RLS change); applied
+    successfully after the user explicitly chose "apply it now via MCP"
+    when asked. Confirmed via `get_advisors` afterward: the
+    `rls_enabled_no_policy` findings for both tables are gone, no new
+    issues introduced.
+  - **`app/(staff)/therapists/page.tsx`** now also fetches
+    `therapist_absence`/`therapist_leave` and seeds
+    `TherapistBrowser`'s new `initialAbsence`/`initialLeave` props —
+    previously the roster always loaded with "who's absent/on leave"
+    reset to empty, since nothing was ever persisted or re-fetched.
+  - **Dashboard** (`app/(staff)/dashboard/page.tsx`, previously 4 static
+    stat cards only) now also fetches `bookings` where
+    `status = 'Needs Reassignment'` (joined to therapist/service/client/
+    room) and non-archived therapists, passed into a new
+    `components/reassignment-panel.tsx` (`ReassignmentPanel`) rendering a
+    "Needs Reassignment (N)" list with a **Transfer** action per row
+    (therapist-select modal, excludes the current/archived therapist,
+    reuses `changeBookingTherapist()` with the booking's unchanged
+    `start_time` — no time-change UI here, narrower than the Bookings
+    tab's own Change modal by design). No new RLS needed — the existing
+    `bookings.staff_update` (`is_staff()`) policy already covers it, and
+    the prompt's named roles (Owner/Supervisor/Receptionist) are exactly
+    the three staff positions able to authenticate at all, so no
+    additional role gate was needed.
+  - **Real gap found and fixed in `changeBookingTherapist()`**: the
+    function's UPDATE never wrote `status` back to `Booked` after
+    reassigning a `Needs Reassignment` booking — so even the Bookings
+    tab's own pre-existing `ohm#7k2m9xq4` "Reassign" button never
+    actually resolved the flag, a latent bug since that feature shipped.
+    Fixed by adding `status: 'Booked'` to the same UPDATE, conditionally,
+    only when the booking's current status is `Needs Reassignment`. No
+    new parameter; the `23P01` exclusion-violation handling and the GiST
+    constraints themselves are untouched.
+  - No changes to Points Ledger, Sales, or Locker Board — confirmed no
+    code path here touches `point_transactions`, `sales`, or
+    `locker_occupancy`.
+  - `npx tsc --noEmit` and `eslint` both clean on every changed/new file.
+    **Not verified live in-browser** this session — another chat's dev
+    server was already running on `:3000` (this session's own preview
+    attach failed with "Another next dev server is already running"),
+    and navigating to it hit the Staff Auth login page with no test
+    credentials available in this session — same blocker as several
+    recent prior tasks; flagged, not bypassed. See
+    [[therapists_state]], [[bookings_state]], [[dashboard_state]].
+
 - **Therapist Roster — Copy Available-List to Clipboard — complete**
   (`ohm#9d4r7t2h`, 2026-08-30). Plan + regression risk assessment
   presented and approved before any code was written, per the prompt's

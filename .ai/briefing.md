@@ -82,7 +82,46 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-30 — Therapist Roster — Copy Available-List to Clipboard**
+1. **2026-08-30 — Therapist Absent/Leave status → Dashboard reassignment
+   trigger** (`ohm#3f8q1w6z`). Plan + regression risk assessment presented
+   and approved before any code/migration was written, per the prompt's
+   mandatory gate. `Mark Absent Today`/`Mark On Leave` (menu wired
+   `ohm#7k2m9x4p`, previously local-state-only) now persist for real:
+   new `markAbsentToday()`/`markOnLeave()` server actions
+   (`app/(staff)/therapists/actions.ts`) upsert/insert into
+   `therapist_absence`/`therapist_leave` and flag that therapist's
+   `Booked` bookings for the affected day(s) to `Needs Reassignment` —
+   already an existing `bookings.status` enum value, already inside both
+   GiST no-double-booking constraints' scope, so **no schema/enum change
+   was needed** for the flagging itself. New migration
+   `20260830024144_therapist_absence_leave_rls.sql` adds `staff_select`/
+   `staff_insert` RLS to `therapist_absence`/`therapist_leave` (both had
+   RLS enabled with zero policies since the baseline snapshot, same gap
+   `therapist_day_off` had before `ohm#7k2m9x4p`) — applied live after
+   explicit user confirmation (the auto-mode classifier blocked applying
+   it directly, as expected for a live schema change). Dashboard
+   (`app/(staff)/dashboard/page.tsx`, previously 4 static stat cards only)
+   now also fetches `Needs Reassignment` bookings and non-archived
+   therapists, rendering a new `components/reassignment-panel.tsx`
+   (`ReassignmentPanel`) with a Transfer action per flagged booking.
+   Transfer reuses the existing `changeBookingTherapist()` action
+   (`app/(staff)/bookings/actions.ts`) unchanged in its exclusion-
+   violation handling — the no-double-booking GiST constraints are
+   untouched and unweakened. **Gap found and fixed**: that function never
+   flipped a `Needs Reassignment` booking's status back to `Booked` after
+   a successful reassignment (so the Bookings tab's own pre-existing
+   `ohm#7k2m9xq4` "Reassign" button never actually resolved the flag
+   either) — now it does, as part of the same UPDATE. No changes to
+   Points Ledger, Sales, or Locker Board. `npx tsc --noEmit` and `eslint`
+   both clean on all changed/new files. **Not verified live in-browser**
+   this session — another chat's dev server was already running on
+   :3000 and the login page requires real staff credentials this session
+   doesn't have (same blocker as recent prior tasks); verified via code
+   review, `tsc`/`eslint`, and the Supabase advisors check confirming the
+   new RLS closed the flagged gap with no new issues introduced. See
+   [[therapists_state]], [[bookings_state]], [[dashboard_state]].
+
+2. **2026-08-30 — Therapist Roster — Copy Available-List to Clipboard**
    (`ohm#9d4r7t2h`). Plan + regression risk assessment presented and
    approved before any code was written, per the prompt's mandatory
    gate. Purely additive: one copy-icon button next to "Show Archived"
@@ -98,7 +137,7 @@ Full invariant list: [[nxs-architecture-locks]].
    login credentials available); verified via code review + `tsc
    --noEmit` (no type errors). See [[therapists_state]].
 
-2. **2026-08-30 — Therapist Roster — Kebab Menu / Day-Off Persistence /
+3. **2026-08-30 — Therapist Roster — Kebab Menu / Day-Off Persistence /
    Date Default** (`ohm#7k2m9x4p`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. Kebab "does nothing" turned out to be React's own
@@ -124,7 +163,7 @@ Full invariant list: [[nxs-architecture-locks]].
    survives a hard reload, correct local date at a real UTC/local-day
    skew moment). No changes to Locker Board, Call Sheet, or Sales. See
    [[therapists_state]].
-3. **2026-08-29 — Bookings Tab — 3-Tab Restructure** (`ohm#7q2x9m4k`).
+4. **2026-08-29 — Bookings Tab — 3-Tab Restructure** (`ohm#7q2x9m4k`).
    Restructures the flat Bookings list + status pill into 3 tabs
    (Upcoming / Check-in / Check-out); tab membership is derived from
    existing `bookings.status` joined with `locker_occupancy` checkout
@@ -154,7 +193,7 @@ Full invariant list: [[nxs-architecture-locks]].
    and `eslint` both clean; browser verification blocked by Staff Auth
    login (no test credentials available in this session) — flagged, not
    bypassed. See [[bookings_state]] and [[operations_state]].
-4. **2026-08-29 — Bookings: Change modal extension** (`ohm#8p4t2vk6`).
+5. **2026-08-29 — Bookings: Change modal extension** (`ohm#8p4t2vk6`).
    Extends the Change Therapist feature: renames "Change Therapist"
    button/modal title to "Change" on `Booked`/`No-show` rows ("Reassign"
    on `Needs Reassignment` unchanged); adds a `Start Time` input to the
@@ -170,24 +209,3 @@ Full invariant list: [[nxs-architecture-locks]].
    changed (`old_therapist → new_therapist`, `old_time → new_time`, or
    both). No migration required. `npx tsc --noEmit` and `eslint` both
    clean. See [[bookings_state]].
-5. **2026-08-29 — Bookings: Change Therapist action** (`ohm#7k2m9xq4`).
-   Adds a "Change Therapist" action on any booking not `Completed`/
-   `Cancelled` (`Booked`, `No-show`, `Needs Reassignment`) — reassigns
-   `therapist_id` only, room/locker untouched. Plan + regression risk
-   assessment presented and approved before any code was written, per the
-   prompt's mandatory gate. **Confirmed, not assumed, before implementing**:
-   the `no_double_book_therapist`/`no_double_book_room` GiST exclusion
-   constraints are standard Postgres `EXCLUDE` constraints, which enforce
-   on both INSERT and UPDATE inherently — no schema gap, no migration
-   needed. New `changeBookingTherapist()` server action in
-   `app/(staff)/bookings/actions.ts` writes one `action_logs` row
-   (old→new therapist, timestamp, real authenticated staff, booking
-   reference) on success. `components/booking-browser.tsx` wires the
-   pre-existing unwired `Reassign` button stub (on `Needs Reassignment`
-   rows) plus a new `Change Therapist` button (on `Booked`/`No-show` rows)
-   to a shared confirm modal; the day-view fetch filter now also includes
-   `No-show` (previously excluded from the list entirely), per the user's
-   explicit choice when asked. No changes to Points Ledger or Sales.
-   Verified live: reassignment round-tripped in the browser and the
-   Activity Log entry appeared correctly. `npx tsc --noEmit` and `eslint`
-   both clean. See [[bookings_state]].

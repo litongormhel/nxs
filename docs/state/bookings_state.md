@@ -257,6 +257,21 @@ list + status pill.
 - No change to the GiST exclusion constraints or
   `trg_bookings_set_computed_fields`.
 
+**Correction, `ohm#3f8q1w6z` (2026-08-30)** — Dashboard reassignment trigger
+adds a Transfer action for `Needs Reassignment` bookings from the
+Dashboard (see [[dashboard_state]]), and fixes a gap found while building it.
+
+- **Gap fixed in `changeBookingTherapist()`**: the UPDATE now also sets
+  `status: 'Booked'` when the booking's current status is
+  `Needs Reassignment`. Previously the function only wrote
+  `therapist_id`/`start_time` — a `Needs Reassignment` row never actually
+  resolved back to `Booked` on a successful reassignment, which silently
+  affected the Bookings tab's pre-existing `ohm#7k2m9xq4` "Reassign"
+  button too (same shared function). One shared fix resolves both.
+- No new parameter, no change to the `23P01` exclusion-violation handling
+  — the GiST constraints are unchanged and unweakened.
+- No changes to Points Ledger, Sales, or Locker Board.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - Therapist options are not filtered by `therapist_services` (which
