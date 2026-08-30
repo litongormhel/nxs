@@ -778,10 +778,13 @@ export function TherapistBrowser({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {cardRows.map((r) => {
             const { t, meta, isOff, onLeave, booked, isTop, slotStatus } = r;
+            const isAbsentToday = meta.absentDates.includes(viewDate);
             const statusLabel = meta.archived
               ? "Archived"
               : onLeave
               ? `On Leave until ${fmtDate(meta.leave?.end || "")}`
+              : isAbsentToday
+              ? "Absent"
               : slotStatus === "off"
               ? "Day Off"
               : slotStatus === "booked"
