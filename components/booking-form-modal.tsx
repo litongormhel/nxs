@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { createBooking } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
@@ -87,6 +87,7 @@ export function BookingFormModal({
     startTime: string;
   } | null>(null);
   const [isPending, startTransition] = useTransition();
+  const errorRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -97,6 +98,10 @@ export function BookingFormModal({
       .in("status", ACTIVE_STATUSES)
       .then(({ data }) => setConflicts(data ?? []));
   }, [date]);
+
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "nearest" });
+  }, [error]);
 
   const isWalkIn = clientSelectValue === "__walkin__";
   const selectedClient = isWalkIn ? null : clients.find((c) => c.id === clientSelectValue);
@@ -283,7 +288,7 @@ export function BookingFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-6 max-h-[90vh] overflow-y-auto">
+      <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="text-base font-semibold text-foreground">New Booking</h2>
         <p className="mt-0.5 text-xs text-muted">
           Room assigns automatically — override manually if needed.
@@ -331,7 +336,7 @@ export function BookingFormModal({
           )}
 
           {/* Service & Therapist */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted" htmlFor="bService">
                 Service
@@ -420,7 +425,7 @@ export function BookingFormModal({
                         setSlotTime(s);
                         setError(null);
                       }}
-                      className={`rounded-md border px-2 py-2 font-mono text-xs transition-all ${
+                      className={`min-h-[44px] sm:min-h-0 rounded-md border px-2 py-2 font-mono text-xs transition-all ${
                         taken
                           ? "border-dashed border-border/70 text-red-400/50 line-through opacity-50 cursor-not-allowed bg-transparent"
                           : selected
@@ -517,7 +522,8 @@ export function BookingFormModal({
           {error && (
             <p
               id="bookingError"
-              className="rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-xs text-red-300"
+              ref={errorRef}
+              className="rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm sm:text-xs text-red-300"
             >
               {error}
             </p>
@@ -525,7 +531,7 @@ export function BookingFormModal({
         </div>
 
         {/* Modal Actions */}
-        <div className="mt-6 flex gap-3">
+        <div className="sticky bottom-0 sm:static mt-6 -mx-4 sm:mx-0 -mb-4 sm:mb-0 flex gap-3 bg-surface px-4 sm:px-0 py-4 sm:py-0">
           <button
             type="button"
             onClick={onClose}

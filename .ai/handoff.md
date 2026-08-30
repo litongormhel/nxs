@@ -5,6 +5,56 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Booking Flow — Mobile/Tablet Responsive Pass — complete** (`ohm#68b329da`,
+  2026-08-30). Plan + regression risk assessment presented and approved
+  before any code was written, per the prompt's mandatory gate. UI/layout
+  only — no backend, DB, or business-logic changes.
+  - **Scope**: `components/booking-form-modal.tsx` (New Booking) and
+    `components/quick-walkin-modal.tsx` (Quick Walk-in). No dedicated
+    Room/Therapist "selector" component exists — the grid-like UI in scope
+    is the inline time-slot button grid inside each of these two files.
+  - **Changes** (Tailwind `sm:` breakpoints only, no new component tree):
+    modal card padding `p-6` → `p-4 sm:p-6`; the Service/Therapist,
+    Discount Type/Value, and Amount/Payment two-column rows changed from
+    fixed `grid-cols-2` to `grid-cols-1 sm:grid-cols-2` so fields stack on
+    narrow phones; `quick-walkin-modal.tsx`'s fixed `grid-cols-4` time-slot
+    grid changed to `grid-cols-3 sm:grid-cols-4` to match
+    `booking-form-modal.tsx`'s existing responsive grid; time-slot
+    buttons, the client-search suggestion rows, and add-on checkbox rows
+    gained `min-h-[44px] sm:min-h-0` for touch-target sizing on mobile
+    only; the bottom Cancel/Save action row became `sticky bottom-0
+    sm:static` so primary actions stay reachable without scrolling to the
+    bottom of the (especially long) Quick Walk-in form on mobile.
+  - **Conflict-error visibility**: the existing red error `<p>` (rendered
+    from the same `23P01`/`23505` parsing already done in
+    `app/(staff)/bookings/actions.ts` — untouched) gained `text-sm
+    sm:text-xs` (larger on mobile) plus a `ref` + `useEffect` that calls
+    `scrollIntoView({block: "nearest"})` when `error` is set, so a
+    double-booking conflict is immediately visible on a small viewport
+    instead of requiring a manual scroll. No change to error text or
+    parsing logic.
+  - **Desktop unaffected**: every mobile-only class is paired with an
+    `sm:` reset back to the exact pre-existing desktop classes (`sm:p-6`,
+    `sm:grid-cols-2`, `sm:grid-cols-4`, `sm:min-h-0`, `sm:static`,
+    `sm:text-xs`). No desktop class removed or altered.
+  - **No DB/schema/migration touch**: `no_double_book_room`/
+    `no_double_book_therapist` GiST exclusion constraints, `quick_walkin()`
+    RPC, and `createBooking`/`quickWalkin` server actions untouched.
+    Booking submission stays live/synchronous — no local queueing or
+    offline behavior added.
+  - **Out of scope confirmed untouched**: `components/booking-browser.tsx`
+    (day-list table), `app/(staff)/bookings/actions.ts`, all Supabase
+    files.
+  - `npx tsc --noEmit` and `eslint` on both changed files clean (two
+    pre-existing `staff` unused-prop warnings, unrelated to this change).
+  - **Not verified live in-browser this session** — same recurring
+    blocker as recent prior tasks: another chat's dev server is already
+    running on `:3000` and the Staff Login page requires real credentials
+    this session doesn't have. Verified via code review, `tsc`/`eslint`,
+    and manual trace of every changed class against the Tailwind
+    breakpoint semantics (mobile-first: unprefixed = below `sm`, `sm:` =
+    ≥640px) rather than a live resize test. See [[bookings_state]].
+
 - **Therapist Absent/Leave status → Dashboard reassignment trigger —
   complete** (`ohm#3f8q1w6z`, 2026-08-30). Plan + regression risk
   assessment presented and approved before any code/migration was

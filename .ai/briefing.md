@@ -82,7 +82,37 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-30 — Therapist Absent/Leave status → Dashboard reassignment
+1. **2026-08-30 — Booking Flow — Mobile/Tablet Responsive Pass**
+   (`ohm#68b329da`). Plan + regression risk assessment presented and
+   approved before any code was written, per the prompt's mandatory gate.
+   UI/layout only, no backend/DB/business-logic changes. Made **New
+   Booking** (`components/booking-form-modal.tsx`) and **Quick Walk-in**
+   (`components/quick-walkin-modal.tsx`) fully usable on mobile/tablet:
+   Tailwind `sm:` breakpoints stack previously-fixed 2-column field rows
+   (Service/Therapist, Discount, Amount/Payment) to 1 column below `sm:`,
+   `quick-walkin-modal.tsx`'s time-slot grid changed from fixed
+   `grid-cols-4` to `grid-cols-3 sm:grid-cols-4` to match the existing
+   pattern in `booking-form-modal.tsx`, interactive rows (time slots,
+   client-search suggestions, add-ons) gained `min-h-[44px] sm:min-h-0`
+   touch targets, and the bottom action-button row became sticky on
+   mobile only so it stays reachable on long forms. Conflict-error
+   display (same existing `23P01`/`23505` parsing, untouched) gained
+   larger mobile text and an auto-scroll-into-view on appearance so a
+   double-booking conflict is never missed off-screen on a small
+   viewport. No dedicated Room/Therapist selector component exists — the
+   grid UI in scope was the inline time-slot grid in both modal files.
+   Desktop fully preserved (every mobile class paired with an `sm:` reset
+   to the prior desktop value); no Supabase/migration/exclusion-
+   constraint touch; `createBooking`/`quickWalkin` server actions and
+   `components/booking-browser.tsx` untouched. `npx tsc --noEmit` and
+   `eslint` both clean on changed files. **Not verified live in-browser**
+   this session — another chat's dev server was already running on
+   :3000 and Staff Login requires real credentials this session doesn't
+   have (same recurring blocker); verified via code review, `tsc`/
+   `eslint`, and manual trace of Tailwind breakpoint semantics. See
+   [[bookings_state]].
+
+2. **2026-08-30 — Therapist Absent/Leave status → Dashboard reassignment
    trigger** (`ohm#3f8q1w6z`). Plan + regression risk assessment presented
    and approved before any code/migration was written, per the prompt's
    mandatory gate. `Mark Absent Today`/`Mark On Leave` (menu wired
@@ -121,7 +151,7 @@ Full invariant list: [[nxs-architecture-locks]].
    new RLS closed the flagged gap with no new issues introduced. See
    [[therapists_state]], [[bookings_state]], [[dashboard_state]].
 
-2. **2026-08-30 — Therapist Roster — Copy Available-List to Clipboard**
+3. **2026-08-30 — Therapist Roster — Copy Available-List to Clipboard**
    (`ohm#9d4r7t2h`). Plan + regression risk assessment presented and
    approved before any code was written, per the prompt's mandatory
    gate. Purely additive: one copy-icon button next to "Show Archived"
@@ -137,7 +167,7 @@ Full invariant list: [[nxs-architecture-locks]].
    login credentials available); verified via code review + `tsc
    --noEmit` (no type errors). See [[therapists_state]].
 
-3. **2026-08-30 — Therapist Roster — Kebab Menu / Day-Off Persistence /
+4. **2026-08-30 — Therapist Roster — Kebab Menu / Day-Off Persistence /
    Date Default** (`ohm#7k2m9x4p`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. Kebab "does nothing" turned out to be React's own
@@ -163,7 +193,7 @@ Full invariant list: [[nxs-architecture-locks]].
    survives a hard reload, correct local date at a real UTC/local-day
    skew moment). No changes to Locker Board, Call Sheet, or Sales. See
    [[therapists_state]].
-4. **2026-08-29 — Bookings Tab — 3-Tab Restructure** (`ohm#7q2x9m4k`).
+5. **2026-08-29 — Bookings Tab — 3-Tab Restructure** (`ohm#7q2x9m4k`).
    Restructures the flat Bookings list + status pill into 3 tabs
    (Upcoming / Check-in / Check-out); tab membership is derived from
    existing `bookings.status` joined with `locker_occupancy` checkout
@@ -193,19 +223,3 @@ Full invariant list: [[nxs-architecture-locks]].
    and `eslint` both clean; browser verification blocked by Staff Auth
    login (no test credentials available in this session) — flagged, not
    bypassed. See [[bookings_state]] and [[operations_state]].
-5. **2026-08-29 — Bookings: Change modal extension** (`ohm#8p4t2vk6`).
-   Extends the Change Therapist feature: renames "Change Therapist"
-   button/modal title to "Change" on `Booked`/`No-show` rows ("Reassign"
-   on `Needs Reassignment` unchanged); adds a `Start Time` input to the
-   modal pre-filled with the booking's current time; excludes the currently
-   assigned therapist from the dropdown entirely; adds a debounced
-   (300 ms) live availability `useEffect` that re-queries same-day
-   bookings and uses `slotsOverlap()` to grey out / disable conflicting
-   therapists with a "— Unavailable" suffix (room availability explicitly
-   excluded per task instructions); extends `changeBookingTherapist()`
-   server action with a `newStartTime` parameter — writes `start_time` to
-   the DB (trigger recomputes `start_ts`/`end_ts`, GiST constraint enforces
-   the new window), and conditionally logs only the fields that actually
-   changed (`old_therapist → new_therapist`, `old_time → new_time`, or
-   both). No migration required. `npx tsc --noEmit` and `eslint` both
-   clean. See [[bookings_state]].

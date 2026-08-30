@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { quickWalkin } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
@@ -101,6 +101,7 @@ export function QuickWalkinModal({
   const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const errorRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -116,6 +117,10 @@ export function QuickWalkinModal({
       .is("checked_out_at", null)
       .then(({ data }) => setOccupiedLockers(new Set((data ?? []).map((r) => r.locker_number))));
   }, [date]);
+
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "nearest" });
+  }, [error]);
 
   const selectedService = services.find((s) => s.id === serviceId);
   const duration = selectedService?.duration_minutes ?? 0;
@@ -248,7 +253,7 @@ export function QuickWalkinModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-6 max-h-[90vh] overflow-y-auto">
+      <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="text-sm font-medium text-muted uppercase tracking-wide">Quick Walk-in</h2>
         <p className="mt-1 text-xs text-muted">
           Service, therapist/room (if massage), locker, and payment — all in one step.
@@ -283,7 +288,7 @@ export function QuickWalkinModal({
                         setClientId(c.id);
                         setClientQuery("");
                       }}
-                      className="block w-full px-3 py-2 text-left text-sm text-foreground hover:bg-gold/10"
+                      className="block min-h-[44px] sm:min-h-0 w-full px-3 py-2 text-left text-sm text-foreground hover:bg-gold/10"
                     >
                       {c.codename} <span className="text-muted">@{c.username}</span>
                     </button>
@@ -318,7 +323,7 @@ export function QuickWalkinModal({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted" htmlFor="wk-service">
                 Service
@@ -370,7 +375,7 @@ export function QuickWalkinModal({
                     No time slots configured yet. Add some in Settings.
                   </p>
                 )}
-                <div className="mt-1 grid grid-cols-4 gap-2">
+                <div className="mt-1 grid grid-cols-3 sm:grid-cols-4 gap-2">
                   {timeSlots.map((s) => (
                     <button
                       key={s}
@@ -380,7 +385,7 @@ export function QuickWalkinModal({
                         setSlotTime(s);
                         setRoomNumber("");
                       }}
-                      className={`rounded-md border px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40 ${
+                      className={`min-h-[44px] sm:min-h-0 rounded-md border px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40 ${
                         slotTime === s && !useCustomTime
                           ? "border-gold bg-gold/10 text-gold"
                           : "border-border text-foreground"
@@ -500,7 +505,7 @@ export function QuickWalkinModal({
               Manual discount (e.g. Senior or PWD)
             </label>
             {manualDiscountOn && (
-              <div className="mt-2 grid grid-cols-2 gap-3">
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-muted" htmlFor="wk-discount-type">
                     Type
@@ -536,7 +541,7 @@ export function QuickWalkinModal({
               <label className="text-xs text-muted">Add-ons <span className="opacity-70">(optional)</span></label>
               <div className="mt-1 space-y-1">
                 {addons.map((a) => (
-                  <label key={a.id} className="flex items-center justify-between text-sm text-foreground">
+                  <label key={a.id} className="flex min-h-[44px] sm:min-h-0 items-center justify-between text-sm text-foreground">
                     <span className="flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -552,7 +557,7 @@ export function QuickWalkinModal({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted" htmlFor="wk-amount">
                 Amount Paid (₱) <span className="opacity-70">(auto)</span>
@@ -605,18 +610,21 @@ export function QuickWalkinModal({
           </div>
 
           {error && (
-            <p className="rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+            <p
+              ref={errorRef}
+              className="rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm sm:text-xs text-red-300"
+            >
               {error}
             </p>
           )}
         </div>
 
-        <div className="mt-6 flex justify-end gap-3">
+        <div className="sticky bottom-0 sm:static mt-6 -mx-4 sm:mx-0 -mb-4 sm:mb-0 flex justify-end gap-3 bg-surface px-4 sm:px-0 py-4 sm:py-0">
           <button
             type="button"
             onClick={onClose}
             disabled={isPending}
-            className="rounded-md border border-border px-4 py-2 text-sm text-foreground hover:border-gold/30"
+            className="rounded-md border border-border px-4 py-2.5 sm:py-2 text-sm text-foreground hover:border-gold/30"
           >
             Cancel
           </button>
@@ -624,7 +632,7 @@ export function QuickWalkinModal({
             type="button"
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="rounded-md border border-gold bg-gold/10 px-4 py-2 text-sm font-medium text-gold hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-gold bg-gold/10 px-4 py-2.5 sm:py-2 text-sm font-medium text-gold hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPending ? "Saving…" : "Confirm"}
           </button>

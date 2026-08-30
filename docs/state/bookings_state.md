@@ -272,6 +272,34 @@ Dashboard (see [[dashboard_state]]), and fixes a gap found while building it.
   — the GiST constraints are unchanged and unweakened.
 - No changes to Points Ledger, Sales, or Locker Board.
 
+**Correction, `ohm#68b329da` (2026-08-30)** — Mobile/Tablet Responsive Pass
+for the New Booking form and Quick Walk-in flow. UI/layout only, no
+backend/DB/business-logic change.
+
+- `components/booking-form-modal.tsx` and `components/quick-walkin-modal.tsx`:
+  modal card padding, previously-fixed 2-column field rows (Service/
+  Therapist, Discount Type/Value, Amount/Payment), and the Quick Walk-in
+  time-slot grid (`grid-cols-4` → `grid-cols-3 sm:grid-cols-4`, matching
+  the pattern `booking-form-modal.tsx` already used) now collapse to a
+  single column / smaller grid below the `sm:` breakpoint. Interactive
+  rows (time-slot buttons, client-search suggestions, add-on checkboxes)
+  gained a `min-h-[44px]` mobile-only touch target. The bottom Cancel/
+  Save action row is `sticky bottom-0` on mobile (`sm:static` on desktop)
+  so it stays reachable without scrolling to the end of the form.
+- Conflict/error display: the same `23P01`/`23505` error string already
+  produced by `createBooking`/`quickWalkin` (unchanged) is now shown at
+  `text-sm` on mobile (`sm:text-xs` on desktop, matching prior size) and
+  auto-scrolls into view via a `ref` + `useEffect` when it appears, so a
+  double-booking conflict can't silently render off-screen on a small
+  viewport.
+- No dedicated Room/Therapist selector component exists in this repo —
+  the "grid-like UI" in this task's scope was the inline time-slot button
+  grid inside both modal files, addressed above.
+- Desktop behavior/layout is unchanged — every mobile class has a
+  corresponding `sm:` reset to the prior desktop value. No changes to
+  `components/booking-browser.tsx`, `app/(staff)/bookings/actions.ts`, or
+  any Supabase/migration/exclusion-constraint state.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - Therapist options are not filtered by `therapist_services` (which
