@@ -288,6 +288,61 @@ export type Database = {
         }
         Relationships: []
       }
+      commission_rates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          effective_to: string | null
+          id: string
+          is_active: boolean
+          percent: number
+          service_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          is_active?: boolean
+          percent: number
+          service_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          is_active?: boolean
+          percent?: number
+          service_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commission_rates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "loginable_staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commission_rates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commission_rates_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locker_occupancy: {
         Row: {
           booking_id: string | null
@@ -704,6 +759,7 @@ export type Database = {
           name: string
           points_earned: number
           price: number
+          requires_therapist: boolean
         }
         Insert: {
           active?: boolean
@@ -712,6 +768,7 @@ export type Database = {
           name: string
           points_earned?: number
           price: number
+          requires_therapist?: boolean
         }
         Update: {
           active?: boolean
@@ -720,6 +777,7 @@ export type Database = {
           name?: string
           points_earned?: number
           price?: number
+          requires_therapist?: boolean
         }
         Relationships: []
       }

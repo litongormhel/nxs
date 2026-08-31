@@ -16,6 +16,7 @@ architecture explanations live here.
 | Staff | staff roster, positions, staff auth status | `docs/state/staff_state.md` |
 | Logs | `action_logs`, placeholder-actor logging | `docs/state/logs_state.md` |
 | Analytics | dashboard stats, reporting | `docs/state/analytics_state.md` |
+| Commission | therapist commission rates, Analytics > Commission tab | `docs/state/commission_state.md` |
 | Settings | app/config settings screen | `docs/state/settings_state.md` |
 
 For architecture-level questions (not module behavior), go to

@@ -5,6 +5,93 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Commission Module — Schema + Rates Settings UI — complete**
+  (`ohm#4k8t2wq9`, 2026-08-31). Plan + regression risk assessment
+  presented and approved before any code/migration was written, per the
+  prompt's mandatory gate. **Schema + Rates Settings UI only** — Report UI
+  (date range picker, cutoff computation) is a separate follow-up prompt,
+  intentionally not built here.
+  - **Live-schema check (mandatory before any migration)**: `services`
+    had no field/relationship structurally distinguishing "requires a
+    therapist" vs "facility/room-only." `bookings.therapist_id` is
+    nullable, but that's a per-booking runtime fact, not a queryable
+    service-level property. Wet Area was previously identified only by a
+    hardcoded name string match — `selectedService?.name !== "Wet Area"`
+    in `components/booking-form-modal.tsx:110`, and again by name in the
+    Call Sheet exclusion (`docs/state/operations_state.md`). Nothing
+    structural existed to reuse, so per the prompt's own fallback
+    instruction the minimal addition below was proposed and approved.
+  - **Schema** (`supabase/migrations/20260831063000_commission_rates.sql`,
+    applied live to project `zqwiqrvqyinacjozubtc` after approval):
+    - `services.requires_therapist boolean not null default true`,
+      backfilled `false` for the Wet Area row only.
+    - `commission_rates` (id, service_id FK → services, percent numeric,
+      effective_from timestamptz default now(), effective_to timestamptz
+      nullable, is_active boolean, created_by FK → staff, created_at) —
+      same append-only/effective-dated philosophy as
+      `point_transactions`: no policy allows updating `percent` on an
+      existing row.
+    - RLS: `owner_select`/`owner_insert`/`owner_update` on
+      `commission_rates`, all gated on `is_owner()` — Owner-only feature
+      end to end, matching `sales.voided` toggle's owner-only pattern.
+      `owner_update` is scoped in practice (not by policy) to closing a
+      row out (`effective_to`/`is_active`) via `setCommissionRate()`.
+    - `get_advisors` (security) run after applying — no new finding tied
+      to `commission_rates` or `services.requires_therapist`; all
+      existing findings are pre-existing and unrelated.
+  - **Out of scope, confirmed untouched**: `components/booking-form-modal.tsx`
+    and the Call Sheet's Wet Area exclusion still use the old hardcoded
+    name check — `requires_therapist` exists for the commission module to
+    consume now, but wiring those two call sites to it is a future,
+    separate task, not this one. Sales, points ledger, and booking logic
+    were read-only reference, no edits.
+  - **UI**: Analytics (`app/(staff)/analytics/page.tsx`) gained its first
+    tab strip, `components/analytics-tabs.tsx` — "Overview" (unchanged
+    `AnalyticsBrowser`, now rendered as a tab instead of the page's only
+    content) and "Commission" → "Rates"
+    (`components/commission-rates-browser.tsx`). Service list fetch is
+    `services.select(...).eq("requires_therapist", true).eq("active", true)`
+    — no name hardcoding; a newly added service with the default
+    `requires_therapist = true` appears automatically, no code change
+    needed. Each row: service name, current rate % or an explicit
+    "Not set" state (no default-0 fallback — checked via
+    `currentPercent !== null`, not truthiness, so a legitimately-set `0%`
+    rate would still render correctly, though the UI doesn't yet forbid
+    entering 0 — that's a legitimate rate, not "unset"), "Effective since"
+    date, inline Edit → input + Save/Cancel. New server action
+    `setCommissionRate(serviceId, percent, staffId)` in
+    `app/(staff)/analytics/actions.ts`: closes the current active row
+    then inserts the new one, matching the append-only schema design.
+    Same Owner-only content guard pattern as the existing
+    `AnalyticsBrowser` (`currentRole !== "Owner"` → blocking message).
+  - **No mockup found**: `nxs-commission-mockup.html` referenced in the
+    prompt does not exist anywhere in the repo (checked repo-wide) — the
+    Rates UI was built using the existing app's design tokens/component
+    patterns instead (same inline-edit row classes as
+    `components/settings-browser.tsx`'s Services & Pricing section), and
+    this gap was flagged instead of guessing at a file that isn't there.
+  - **Type regen caveat**: pulling fresh types via
+    `generate_typescript_types` also silently changed the unrelated
+    `quick_walkin` RPC's arg nullability (pre-existing type-gen drift
+    between the live function signature and what was last generated,
+    unrelated to this migration) and broke `app/(staff)/bookings/actions.ts`
+    type-checking. Reverted that full overwrite and hand-patched
+    `lib/types/database.ts` with only the two new pieces
+    (`commission_rates` table, `services.requires_therapist` column) to
+    avoid an out-of-scope regression.
+  - `npx tsc --noEmit` and `eslint` (via `npx eslint`) both clean on every
+    changed/new file (`app/(staff)/analytics/page.tsx`,
+    `app/(staff)/analytics/actions.ts`, `components/analytics-tabs.tsx`,
+    `components/commission-rates-browser.tsx`, `lib/types/database.ts`).
+  - **Not verified live in-browser this session**: no `.env.local` exists
+    in this checkout (`NEXT_PUBLIC_SUPABASE_URL`/
+    `NEXT_PUBLIC_SUPABASE_ANON_KEY` missing — `next dev` starts but every
+    route 500s on proxy.ts's Supabase client init), same recurring
+    credentials/environment blocker as recent prior tasks, one step
+    further upstream this time (no env vars at all, not just no login
+    creds). Verified via code review, `tsc`/`eslint`, and the Supabase
+    advisors check. See [[commission_state]].
+
 - **Sidebar Nav — Collapsible Hamburger Menu for Mobile/Tablet — complete**
   (`ohm#757d5b08`, 2026-08-30). Plan + regression risk assessment
   presented and approved before any code was written, per the prompt's

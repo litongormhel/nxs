@@ -82,7 +82,59 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-30 — Sidebar Nav — Collapsible Hamburger Menu for
+1. **2026-08-31 — Commission Module — Schema (`commission_rates`) + Rates
+   Settings UI** (`ohm#4k8t2wq9`). Plan + regression risk assessment
+   presented and approved before any code/migration was written, per the
+   prompt's mandatory gate. Schema + Rates Settings UI only — Report UI is
+   a separate follow-up prompt, not built here.
+   - **Live-schema finding (before any migration)**: `services` had no
+     field distinguishing "requires a therapist" vs "facility/room-only."
+     Wet Area was previously identified only by a hardcoded name string
+     match (`selectedService?.name !== "Wet Area"` in
+     `components/booking-form-modal.tsx`, and again in the Call Sheet
+     exclusion) — nothing structural existed to reuse.
+   - **Minimal addition (per the prompt's own fallback)**: new
+     `services.requires_therapist boolean not null default true`,
+     backfilled `false` for Wet Area. `booking-form-modal.tsx` and the
+     Call Sheet were **not touched** — still using the old name check;
+     out of scope for this prompt.
+   - New migration `supabase/migrations/20260831063000_commission_rates.sql`,
+     applied live after approval: adds `requires_therapist`, and creates
+     `commission_rates` (id, service_id FK, percent, effective_from,
+     effective_to nullable, is_active, created_by, created_at) — same
+     append-only/effective-dated philosophy as the points ledger. RLS:
+     Owner-only SELECT/INSERT/UPDATE (`is_owner()`); no policy allows
+     changing `percent` on an existing row — editing closes the row
+     (`effective_to`/`is_active`) and inserts a new one, both done in
+     `setCommissionRate()` (`app/(staff)/analytics/actions.ts`).
+     `get_advisors` showed no new findings after applying.
+   - **UI**: Analytics gained its first tab strip
+     (`components/analytics-tabs.tsx`) — "Overview" (unchanged
+     `AnalyticsBrowser`) and "Commission" → "Rates"
+     (`components/commission-rates-browser.tsx`). Service list is
+     query-driven off `requires_therapist = true, active = true` — no
+     name hardcoding, new services appear automatically. Rate shows
+     "Not set" (never defaults to 0%) until a rate exists; inline
+     Edit → Save/Cancel. Same Owner-only content guard pattern as
+     `AnalyticsBrowser`.
+   - No `nxs-commission-mockup.html` exists in the repo — built using the
+     existing app's design tokens/components (same classes as
+     `components/settings-browser.tsx`'s inline-edit rows) instead of
+     adapting a mockup, since none was found.
+   - `lib/types/database.ts` hand-patched with just the two new pieces
+     (`commission_rates` table, `services.requires_therapist`) rather than
+     a full regen — a full `generate_typescript_types` pull also changed
+     the unrelated `quick_walkin` RPC arg nullability and broke
+     `app/(staff)/bookings/actions.ts` (pre-existing type-gen drift,
+     unrelated to this change) — reverted that and hand-patched instead.
+   - `npx tsc --noEmit` and `eslint` both clean on all changed/new files.
+   - **Not verified live in-browser this session** — no `.env.local`
+     present (`NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`
+     missing), same recurring credentials/env blocker as recent prior
+     tasks; verified via code review, `tsc`/`eslint`, and the Supabase
+     advisors check. See [[commission_state]].
+
+2. **2026-08-30 — Sidebar Nav — Collapsible Hamburger Menu for
    Mobile/Tablet** (`ohm#757d5b08`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. UI/layout only. Fixes the reported bug (sidebar
@@ -114,7 +166,7 @@ Full invariant list: [[nxs-architecture-locks]].
    for sidebar/nav (not in `current_state.md`'s routing index), so no
    state-file update was made for this task.
 
-2. **2026-08-30 — Booking Flow — Mobile/Tablet Responsive Pass**
+3. **2026-08-30 — Booking Flow — Mobile/Tablet Responsive Pass**
    (`ohm#68b329da`). Plan + regression risk assessment presented and
    approved before any code was written, per the prompt's mandatory gate.
    UI/layout only, no backend/DB/business-logic changes. Made **New
@@ -144,7 +196,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `eslint`, and manual trace of Tailwind breakpoint semantics. See
    [[bookings_state]].
 
-3. **2026-08-30 — Therapist Absent/Leave status → Dashboard reassignment
+4. **2026-08-30 — Therapist Absent/Leave status → Dashboard reassignment
    trigger** (`ohm#3f8q1w6z`). Plan + regression risk assessment presented
    and approved before any code/migration was written, per the prompt's
    mandatory gate. `Mark Absent Today`/`Mark On Leave` (menu wired
@@ -183,7 +235,7 @@ Full invariant list: [[nxs-architecture-locks]].
    new RLS closed the flagged gap with no new issues introduced. See
    [[therapists_state]], [[bookings_state]], [[dashboard_state]].
 
-4. **2026-08-30 — Therapist Roster — Copy Available-List to Clipboard**
+5. **2026-08-30 — Therapist Roster — Copy Available-List to Clipboard**
    (`ohm#9d4r7t2h`). Plan + regression risk assessment presented and
    approved before any code was written, per the prompt's mandatory
    gate. Purely additive: one copy-icon button next to "Show Archived"
@@ -198,30 +250,3 @@ Full invariant list: [[nxs-architecture-locks]].
    other handler. Not verified live in-browser this session (no staff
    login credentials available); verified via code review + `tsc
    --noEmit` (no type errors). See [[therapists_state]].
-
-5. **2026-08-30 — Therapist Roster — Kebab Menu / Day-Off Persistence /
-   Date Default** (`ohm#7k2m9x4p`). Plan + regression risk assessment
-   presented and approved before any code was written, per the prompt's
-   mandatory gate. Kebab "does nothing" turned out to be React's own
-   delegated click listener and the component's click-outside-to-close
-   `document.addEventListener` both sitting on `document` — a sibling
-   listener isn't stopped by `e.stopPropagation()`, so the menu closed
-   itself in the same tick it opened; fixed with an explicit
-   `data-kebab-root` target check instead of relying on
-   `stopPropagation()`. Day-off toggle never persisted because
-   `components/therapist-browser.tsx` had zero Supabase calls anywhere —
-   pure local mock state — and `therapist_day_off` had RLS enabled with
-   **no policies at all** since the baseline snapshot; flagged as a
-   required migration mid-task (none was expected) and approved before
-   applying. New migration
-   `20260830000000_therapist_day_off_rls.sql` (staff read, supervisor+
-   write, same pattern as Settings' catalog RLS), new
-   `app/(staff)/therapists/actions.ts` (`toggleDayOff`), `page.tsx` now
-   fetches real therapist `id`s + `therapist_day_off` rows. Date filter's
-   stale `"2026-08-26"` default was swapped for the existing-but-unused
-   `todayISO()` helper — which itself had a bug found live (used UTC via
-   `toISOString()` instead of local date), fixed to use local-time date
-   getters. Verified live end-to-end (menu open/close, DB round-trip
-   survives a hard reload, correct local date at a real UTC/local-day
-   skew moment). No changes to Locker Board, Call Sheet, or Sales. See
-   [[therapists_state]].

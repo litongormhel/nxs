@@ -1,5 +1,16 @@
 # Analytics — Current State
 
+## Implemented (`ohm#4k8t2wq9`, 2026-08-31)
+
+Analytics gained its first tab strip (`components/analytics-tabs.tsx`):
+"Overview" (everything below in this file, unchanged) and "Commission" →
+"Rates". The Commission module (schema + Rates settings UI) has its own
+state file — see [[commission_state]] — since it's a distinct owner-only
+feature (`commission_rates` table) layered on top of this page rather than
+a new stat/aggregation. `app/(staff)/analytics/page.tsx` now also fetches
+commissionable services + their active rates alongside the existing
+sales/bookings fetch.
+
 ## Implemented (`ohm#7v2q8f5c`, 2026-08-28)
 
 Owner-only reporting dashboard at `/analytics` (`app/analytics/page.tsx`,
