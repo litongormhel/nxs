@@ -1,5 +1,12 @@
 # Analytics — Current State
 
+## Implemented (`ohm#8x2m4tqz`, 2026-08-31)
+
+Commission tab gained a second sub-tab, "Report", sibling to "Rates"
+(`components/analytics-tabs.tsx`). Full behavior in [[commission_state]] —
+this page's own fetch (`app/(staff)/analytics/page.tsx`) is untouched;
+Report fetches on demand via its own server action.
+
 ## Implemented (`ohm#4k8t2wq9`, 2026-08-31)
 
 Analytics gained its first tab strip (`components/analytics-tabs.tsx`):

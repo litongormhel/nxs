@@ -5,6 +5,81 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Commission Module — Report UI (Analytics > Commission > Report) — complete**
+  (`ohm#8x2m4tqz`, 2026-08-31). Plan + regression risk assessment presented
+  and approved before any code was written, per the prompt's mandatory
+  gate. Report sub-tab only, sibling to the already-shipped Rates tab —
+  no schema/migration in this task (confirmed unnecessary during the
+  live-schema check).
+  - **Live-schema check (mandatory before any query)**: confirmed live
+    column types directly against project `zqwiqrvqyinacjozubtc` —
+    `bookings.booking_date` is `date` (staff-assigned operating day at
+    booking-creation time, per `createBooking`, not derived from a
+    timestamp), `commission_rates.effective_from`/`effective_to` are
+    `timestamptz`. No index exists on `bookings.booking_date`,
+    `bookings.service_id`/`therapist_id`, or
+    `commission_rates.service_id`/`effective_from` — confirmed via
+    `pg_indexes`, and per user decision left as-is (matches Overview's
+    existing unpaginated full-fetch pattern; revisit only if volume
+    becomes a real problem).
+  - **Two design ambiguities surfaced and decided before coding** (both
+    were judgment calls the prompt didn't fully pin down):
+    1. Status filter for report bookings — prompt's query spec only said
+       "non-null `therapist_id`," not statuses. Decided: `Booked` +
+       `Completed` only, matching Overview's existing Therapist Ranking
+       filter — `Cancelled`/`No-show` bookings never generated revenue and
+       would overstate totals if counted.
+    2. Historical-rate date comparison — `effective_from`/`effective_to`
+       are exact-moment `timestamptz`, `booking_date` is a plain `date`.
+       A raw Postgres implicit cast (date → midnight UTC) is off by 8h
+       from the actual spa-day boundary and can misattribute a rate right
+       at a rate-change edge. Decided: bucket both sides to spa-day first
+       via the existing `toSpaDay()` helper
+       (`lib/analytics/spa-day.ts`), then compare as calendar-date
+       strings — avoids the timezone landmine and reuses the shared
+       utility per the prompt's "don't reimplement spa-day logic"
+       instruction.
+  - **Spa-day utility usage note**: `bookings.booking_date` itself needed
+    **no** per-row spa-day conversion — it's already staff-assigned at
+    the operating-day granularity (confirmed in
+    `app/(staff)/bookings/actions.ts`), so date-range filtering is a
+    direct `booking_date BETWEEN start AND end`. `toSpaDay()`/`spaDayNow()`/
+    `spaMonthNow()` are used only for (a) bucketing `commission_rates`
+    timestamps as above, and (b) computing the UI's cutoff-preset default
+    ranges (1–15 / 16–EOM / Custom).
+  - **New**: `getCommissionReport(startDate, endDate)` server action in
+    `app/(staff)/analytics/actions.ts` — Owner-gated by the same RLS
+    (`commission_rates` owner-only SELECT) plus existing `is_staff()`
+    policies on `bookings`/`services`/`therapists`; no new RLS needed.
+    Returns per-therapist rows (bookings count, per-service breakdown,
+    total = Σ rack price, commission = Σ price×percent/100) and a grand
+    total. A service with no rate configured for the relevant period
+    still counts toward bookings/total; its commission contribution is 0
+    with a `rateNotSet` flag surfaced as a "(Not set)" chip in the
+    breakdown — never silently dropped, never defaulted to a guessed %.
+  - **New**: `components/commission-report-browser.tsx` — Owner-only
+    guard (same pattern as `CommissionRatesBrowser`), date-range inputs +
+    presets, "Generate" button, ledger table (Therapist | Bookings |
+    Breakdown chips | Total | Commission) with a grand-total footer row.
+    Styled with the same tokens as `commission-rates-browser.tsx` (no new
+    color system).
+  - **Wired in**: `components/analytics-tabs.tsx` gained a Rates/Report
+    sub-tab strip inside the Commission tab (previously hardcoded to show
+    only Rates). `app/(staff)/analytics/page.tsx` untouched — Report
+    fetches on demand via its own server action rather than the page's
+    initial `Promise.all`, so the initial page load stays light.
+  - **Untouched, confirmed out of scope**: Rates tab, `setCommissionRate`,
+    `commission_rates` write logic, booking form, Call Sheet, Wet Area
+    flow, CSV/PDF export.
+  - `npx tsc --noEmit` and `npx eslint` both clean on all changed/new
+    files (`app/(staff)/analytics/actions.ts`,
+    `components/commission-report-browser.tsx`,
+    `components/analytics-tabs.tsx`).
+  - **Not verified live in-browser this session**: no `.env.local` in this
+    checkout, same recurring credentials/environment blocker as the prior
+    5 tasks. Verified via code review, `tsc`/`eslint`, and the live-schema
+    check above. See [[commission_state]].
+
 - **Commission Module — Schema + Rates Settings UI — complete**
   (`ohm#4k8t2wq9`, 2026-08-31). Plan + regression risk assessment
   presented and approved before any code/migration was written, per the

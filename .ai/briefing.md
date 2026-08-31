@@ -82,7 +82,41 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-31 — Commission Module — Schema (`commission_rates`) + Rates
+1. **2026-08-31 — Commission Module — Report UI (Analytics > Commission >
+   Report)** (`ohm#8x2m4tqz`). Plan + regression risk assessment presented
+   and approved before any code was written, per the prompt's mandatory
+   gate. Report sub-tab, sibling to the already-shipped Rates tab.
+   - **Live-schema check**: confirmed live column types (`bookings.booking_date`
+     is `date`, `commission_rates.effective_from`/`effective_to` are
+     `timestamptz`) and no supporting indexes exist — no migration needed,
+     left as-is per user decision (matches Overview's existing unpaginated
+     pattern).
+   - Two design ambiguities decided before coding: (1) report counts only
+     `Booked`/`Completed` bookings, matching Overview's Therapist Ranking
+     filter; (2) historical-rate lookup buckets both
+     `commission_rates.effective_from`/`effective_to` and
+     `bookings.booking_date` to spa-day via the existing `toSpaDay()`
+     helper before comparing, avoiding an 8-hour timezone-cast landmine at
+     rate-change boundaries.
+   - New `getCommissionReport()` server action
+     (`app/(staff)/analytics/actions.ts`) aggregates per-therapist
+     bookings/breakdown/total/commission for a date range; a service with
+     no configured rate still counts toward bookings/total with commission
+     0 and a visible "(Not set)" flag, never silently dropped or defaulted.
+   - New `components/commission-report-browser.tsx`: date-range + cutoff
+     presets (1–15/16–EOM/Custom), Generate action, ledger table with
+     grand-total footer, same Owner-only gate and design tokens as the
+     Rates tab. Wired into `components/analytics-tabs.tsx` as a new
+     Rates/Report sub-tab strip.
+   - Untouched: Rates tab, `setCommissionRate`, booking form, Call Sheet,
+     Wet Area flow, CSV/PDF export.
+   - `npx tsc --noEmit` and `eslint` both clean on all changed/new files.
+   - **Not verified live in-browser this session** — no `.env.local`
+     present, same recurring credentials/env blocker as recent prior
+     tasks; verified via code review, `tsc`/`eslint`, and the live-schema
+     check. See [[commission_state]].
+
+2. **2026-08-31 — Commission Module — Schema (`commission_rates`) + Rates
    Settings UI** (`ohm#4k8t2wq9`). Plan + regression risk assessment
    presented and approved before any code/migration was written, per the
    prompt's mandatory gate. Schema + Rates Settings UI only — Report UI is
@@ -134,7 +168,7 @@ Full invariant list: [[nxs-architecture-locks]].
      tasks; verified via code review, `tsc`/`eslint`, and the Supabase
      advisors check. See [[commission_state]].
 
-2. **2026-08-30 — Sidebar Nav — Collapsible Hamburger Menu for
+3. **2026-08-30 — Sidebar Nav — Collapsible Hamburger Menu for
    Mobile/Tablet** (`ohm#757d5b08`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. UI/layout only. Fixes the reported bug (sidebar
@@ -166,7 +200,7 @@ Full invariant list: [[nxs-architecture-locks]].
    for sidebar/nav (not in `current_state.md`'s routing index), so no
    state-file update was made for this task.
 
-3. **2026-08-30 — Booking Flow — Mobile/Tablet Responsive Pass**
+4. **2026-08-30 — Booking Flow — Mobile/Tablet Responsive Pass**
    (`ohm#68b329da`). Plan + regression risk assessment presented and
    approved before any code was written, per the prompt's mandatory gate.
    UI/layout only, no backend/DB/business-logic changes. Made **New
@@ -196,7 +230,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `eslint`, and manual trace of Tailwind breakpoint semantics. See
    [[bookings_state]].
 
-4. **2026-08-30 — Therapist Absent/Leave status → Dashboard reassignment
+5. **2026-08-30 — Therapist Absent/Leave status → Dashboard reassignment
    trigger** (`ohm#3f8q1w6z`). Plan + regression risk assessment presented
    and approved before any code/migration was written, per the prompt's
    mandatory gate. `Mark Absent Today`/`Mark On Leave` (menu wired
@@ -234,19 +268,3 @@ Full invariant list: [[nxs-architecture-locks]].
    review, `tsc`/`eslint`, and the Supabase advisors check confirming the
    new RLS closed the flagged gap with no new issues introduced. See
    [[therapists_state]], [[bookings_state]], [[dashboard_state]].
-
-5. **2026-08-30 — Therapist Roster — Copy Available-List to Clipboard**
-   (`ohm#9d4r7t2h`). Plan + regression risk assessment presented and
-   approved before any code was written, per the prompt's mandatory
-   gate. Purely additive: one copy-icon button next to "Show Archived"
-   in `components/therapist-browser.tsx`, one new `handleCopyAvailable`
-   handler. Filters the already-computed `cardRows` for
-   `slotStatus === "available"` (same status logic the cards already
-   render from — no new filter/render logic), formats as
-   `"{TIME} Available\n\n{Name}\n..."` using the existing `fmtTime()`
-   helper (already produces `8:00PM`-style output), writes via
-   `navigator.clipboard.writeText`, confirms via the existing toast
-   system. No changes to filter dropdown, `cardRows` computation, or any
-   other handler. Not verified live in-browser this session (no staff
-   login credentials available); verified via code review + `tsc
-   --noEmit` (no type errors). See [[therapists_state]].

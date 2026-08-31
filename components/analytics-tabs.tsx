@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { AnalyticsBrowser, type AnalyticsSale, type AnalyticsBooking } from "@/components/analytics-browser";
 import { CommissionRatesBrowser, type CommissionService } from "@/components/commission-rates-browser";
+import { CommissionReportBrowser } from "@/components/commission-report-browser";
 
 type Tab = "overview" | "commission";
+type CommissionSubTab = "rates" | "report";
 
 function TabButton({
   active,
@@ -39,6 +41,7 @@ export function AnalyticsTabs({
   commissionServices: CommissionService[];
 }) {
   const [tab, setTab] = useState<Tab>("overview");
+  const [commissionSubTab, setCommissionSubTab] = useState<CommissionSubTab>("rates");
 
   return (
     <div>
@@ -56,11 +59,23 @@ export function AnalyticsTabs({
       {tab === "commission" && (
         <div>
           <div className="flex items-center gap-2 mb-4">
-            <span className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold">
+            <TabButton
+              active={commissionSubTab === "rates"}
+              onClick={() => setCommissionSubTab("rates")}
+            >
               Rates
-            </span>
+            </TabButton>
+            <TabButton
+              active={commissionSubTab === "report"}
+              onClick={() => setCommissionSubTab("report")}
+            >
+              Report
+            </TabButton>
           </div>
-          <CommissionRatesBrowser services={commissionServices} />
+          {commissionSubTab === "rates" && (
+            <CommissionRatesBrowser services={commissionServices} />
+          )}
+          {commissionSubTab === "report" && <CommissionReportBrowser />}
         </div>
       )}
     </div>
