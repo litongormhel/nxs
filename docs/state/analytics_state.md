@@ -1,5 +1,51 @@
 # Analytics — Current State
 
+## Implemented (`ohm#4k7n2wc9`, 2026-08-31)
+
+Restructured `components/analytics-tabs.tsx` from Overview/Commission into
+**five top-level tabs: Sales | Most Availed Services | Top Clients | Top
+Thera | Commission** (Commission keeps its existing Rates/Report sub-tabs,
+unchanged from `ohm#8x2m4tqz`). Pure tab-shell/render refactor — the shared
+`useMemo` in `components/analytics-browser.tsx` (spa-day bucketing, all
+sums/rankings) is byte-for-byte unchanged; only which section renders per
+tab changed, via a new `section` prop
+(`"sales" | "most-availed" | "top-clients" | "top-thera"`). Owner-only
+gating (`useStaffSim`/`currentRole`) moved up to `AnalyticsTabs` (one
+blocking message for the page instead of one per section) — same check,
+just relocated.
+
+- **Sales tab**: the old "Sales" + "Client Visits" stat cards, plus a Per
+  Day/Per Month toggle switching between the already-computed
+  `salesPerDay`/`salesPerMonth` tables (previously both shown stacked).
+- **Most Availed Services / Top Clients / Top Thera tabs**: each is the
+  corresponding old section (`serviceRanking`/`topClients`/
+  `therapistRanking`) rendered alone. "Top Thera" is the renamed
+  "Therapist Ranking" section — same data/ranking logic.
+- **Top Thera → Commission deep link**: each Top Thera row has a "View
+  Commission →" button (`therapistRanking` map entries gained an `id`
+  field to support this — ranking values/order unchanged). Clicking it
+  switches the top tab to Commission, the sub-tab to Report, and passes a
+  `filterTherapist: {id, name}` into `CommissionReportBrowser`, which
+  auto-generates the report for its current default range and filters the
+  already-returned rows to that therapist client-side (no new query, no
+  route change). A "Filtering: {name} ×" chip clears it back to the full
+  report.
+
+### Discrepancy found and resolved before coding
+
+The prompt (`ohm#4k7n2wc9`) described Commission as a net-new tab —
+formula `sales.amount × commission_rates.percent` joined via
+`sales.service_id`/`sales.created_at`, with "no admin UI for
+`commission_rates`" listed as out of scope. Both were stale: Commission
+(Rates + Report sub-tabs) had already shipped the same day
+(`ohm#4k8t2wq9`/`ohm#8x2m4tqz` — see [[commission_state]]), and the live
+Report's actual formula is **`bookings`** (`Booked`/`Completed` status,
+filtered by `booking_date`) × `services.price` × `percent` — not a
+`sales`-based join at all. Flagged to the user before any code was
+written; decision was to keep the shipped bookings-based formula and fold
+the existing Commission tab into the new layout unchanged rather than
+rebuilding it to match the prompt's (outdated) spec.
+
 ## Implemented (`ohm#8x2m4tqz`, 2026-08-31)
 
 Commission tab gained a second sub-tab, "Report", sibling to "Rates"
@@ -86,9 +132,11 @@ logic elsewhere — import `toSpaDay`/`toSpaMonth`/`spaDayNow`/`spaMonthNow`/
 Owner-only, reusing the exact existing `lib/staff-context.tsx`
 (`useStaffSim`/`currentRole`) mechanism — no new gating pattern. `lib/nav.ts`'s
 `analytics` entry now carries `ownerOnly: true` (the last nav item to gain the
-flag — Staff/Logs picked it up first). `AnalyticsBrowser` has the same
-page-level content guard as Staff Directory/Activity Logs
-(`currentRole !== "Owner"` → blocking message), covering a direct URL visit.
+flag — Staff/Logs picked it up first). As of `ohm#4k7n2wc9`'s tab restructure,
+the page-level content guard (`currentRole !== "Owner"` → blocking message)
+lives on `AnalyticsTabs` (was `AnalyticsBrowser`) — one blocking message for
+the whole page instead of one per tab section — still covering a direct URL
+visit the same way.
 As of Staff Auth 6C-6 this is real, identity-keyed access control — `sales`/
 `bookings`/`clients`/`therapists` RLS SELECT all require `is_staff()`
 (6C-2/6C-3), so a non-authenticated caller sees no rows regardless of app-level

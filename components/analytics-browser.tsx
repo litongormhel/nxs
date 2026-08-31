@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
-import { useStaffSim } from "@/lib/staff-context";
+import { useMemo, useState } from "react";
 import { lastSpaDays, spaDayNow, spaMonthNow, toSpaDay, toSpaMonth } from "@/lib/analytics/spa-day";
 
 export type AnalyticsSale = {
@@ -53,14 +52,20 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
   );
 }
 
+export type AnalyticsSection = "sales" | "most-availed" | "top-clients" | "top-thera";
+
 export function AnalyticsBrowser({
   sales,
   bookings,
+  section,
+  onViewCommission,
 }: {
   sales: AnalyticsSale[];
   bookings: AnalyticsBooking[];
+  section: AnalyticsSection;
+  onViewCommission?: (therapistId: string, therapistName: string) => void;
 }) {
-  const { currentRole } = useStaffSim();
+  const [salesView, setSalesView] = useState<"day" | "month">("day");
 
   const computed = useMemo(() => {
     const today = spaDayNow();
@@ -133,10 +138,14 @@ export function AnalyticsBrowser({
     const topClients = [...perClient.values()].sort((a, b) => b.amount - a.amount);
 
     // Therapist Ranking
-    const perTherapist = new Map<string, { name: string; archived: boolean; count: number }>();
+    const perTherapist = new Map<
+      string,
+      { id: string; name: string; archived: boolean; count: number }
+    >();
     for (const b of bookings) {
       if (!b.therapist_id) continue;
       const cur = perTherapist.get(b.therapist_id) ?? {
+        id: b.therapist_id,
         name: b.therapist_name ?? "—",
         archived: b.therapist_archived,
         count: 0,
@@ -161,39 +170,89 @@ export function AnalyticsBrowser({
     };
   }, [sales, bookings]);
 
-  if (currentRole !== "Owner") {
+  if (section === "sales") {
+    const perRows = salesView === "day" ? computed.salesPerDay : computed.salesPerMonth;
     return (
-      <div className="rounded-xl border border-border bg-surface p-6 text-sm text-muted max-w-md">
-        Analytics is Owner-only. Sign in with an Owner account to view this
-        page.
+      <div className="space-y-8">
+        <section>
+          <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">
+            Sales
+          </h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <StatCard label="Today" value={peso(computed.salesToday)} />
+            <StatCard label="Last 7 Days" value={peso(computed.sales7)} />
+            <StatCard label="This Month" value={peso(computed.salesMonth)} />
+          </div>
+        </section>
+
+        <section>
+          <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">
+            Client Visits
+          </h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <StatCard label="Today" value={String(computed.visitsToday)} />
+            <StatCard label="Last 7 Days" value={String(computed.visits7)} />
+            <StatCard label="This Month" value={String(computed.visitsMonth)} />
+          </div>
+        </section>
+
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-muted uppercase tracking-wide">
+              Sales Per {salesView === "day" ? "Day" : "Month"}
+            </h2>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setSalesView("day")}
+                className={`rounded-lg px-3 py-1 text-[11px] font-bold transition ${
+                  salesView === "day"
+                    ? "border border-[#a97e2e] bg-surface text-accent-gold"
+                    : "border border-border text-muted hover:text-fg"
+                }`}
+              >
+                Per Day
+              </button>
+              <button
+                onClick={() => setSalesView("month")}
+                className={`rounded-lg px-3 py-1 text-[11px] font-bold transition ${
+                  salesView === "month"
+                    ? "border border-[#a97e2e] bg-surface text-accent-gold"
+                    : "border border-border text-muted hover:text-fg"
+                }`}
+              >
+                Per Month
+              </button>
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-surface divide-y divide-border max-h-96 overflow-y-auto">
+            {perRows.length === 0 && (
+              <p className="p-4 text-sm text-muted">No sales recorded yet.</p>
+            )}
+            {salesView === "day"
+              ? computed.salesPerDay.map((row) => (
+                  <div key={row.day} className="flex items-center justify-between p-3 px-4">
+                    <span className="text-sm text-fg">{fmtSpaDay(row.day)}</span>
+                    <span className="text-sm text-muted">
+                      {row.visits} visit{row.visits === 1 ? "" : "s"} · {peso(row.amount)}
+                    </span>
+                  </div>
+                ))
+              : computed.salesPerMonth.map((row) => (
+                  <div key={row.month} className="flex items-center justify-between p-3 px-4">
+                    <span className="text-sm text-fg">{fmtSpaMonth(row.month)}</span>
+                    <span className="text-sm text-muted">
+                      {row.visits} visit{row.visits === 1 ? "" : "s"} · {peso(row.amount)}
+                    </span>
+                  </div>
+                ))}
+          </div>
+        </section>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-8">
-      <section>
-        <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">
-          Sales
-        </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <StatCard label="Today" value={peso(computed.salesToday)} />
-          <StatCard label="Last 7 Days" value={peso(computed.sales7)} />
-          <StatCard label="This Month" value={peso(computed.salesMonth)} />
-        </div>
-      </section>
-
-      <section>
-        <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">
-          Client Visits
-        </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <StatCard label="Today" value={String(computed.visitsToday)} />
-          <StatCard label="Last 7 Days" value={String(computed.visits7)} />
-          <StatCard label="This Month" value={String(computed.visitsMonth)} />
-        </div>
-      </section>
-
+  if (section === "most-availed") {
+    return (
       <section>
         <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">
           Most Availed Service
@@ -212,45 +271,11 @@ export function AnalyticsBrowser({
           ))}
         </div>
       </section>
+    );
+  }
 
-      <section>
-        <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">
-          Sales Per Day
-        </h2>
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border max-h-96 overflow-y-auto">
-          {computed.salesPerDay.length === 0 && (
-            <p className="p-4 text-sm text-muted">No sales recorded yet.</p>
-          )}
-          {computed.salesPerDay.map((row) => (
-            <div key={row.day} className="flex items-center justify-between p-3 px-4">
-              <span className="text-sm text-fg">{fmtSpaDay(row.day)}</span>
-              <span className="text-sm text-muted">
-                {row.visits} visit{row.visits === 1 ? "" : "s"} · {peso(row.amount)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">
-          Sales Per Month
-        </h2>
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
-          {computed.salesPerMonth.length === 0 && (
-            <p className="p-4 text-sm text-muted">No sales recorded yet.</p>
-          )}
-          {computed.salesPerMonth.map((row) => (
-            <div key={row.month} className="flex items-center justify-between p-3 px-4">
-              <span className="text-sm text-fg">{fmtSpaMonth(row.month)}</span>
-              <span className="text-sm text-muted">
-                {row.visits} visit{row.visits === 1 ? "" : "s"} · {peso(row.amount)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
-
+  if (section === "top-clients") {
+    return (
       <section>
         <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">
           Top Clients
@@ -272,26 +297,38 @@ export function AnalyticsBrowser({
           ))}
         </div>
       </section>
+    );
+  }
 
-      <section>
-        <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">
-          Therapist Ranking
-        </h2>
-        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
-          {computed.therapistRanking.length === 0 && (
-            <p className="p-4 text-sm text-muted">No bookings recorded yet.</p>
-          )}
-          {computed.therapistRanking.map((t, i) => (
-            <div key={t.name + i} className="flex items-center justify-between p-3 px-4">
-              <span className="text-sm text-fg">
-                {i + 1}. {t.name}
-                {t.archived && <span className="text-muted"> (Archived)</span>}
-              </span>
+  return (
+    <section>
+      <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">
+        Top Thera
+      </h2>
+      <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+        {computed.therapistRanking.length === 0 && (
+          <p className="p-4 text-sm text-muted">No bookings recorded yet.</p>
+        )}
+        {computed.therapistRanking.map((t, i) => (
+          <div key={t.name + i} className="flex items-center justify-between p-3 px-4">
+            <span className="text-sm text-fg">
+              {i + 1}. {t.name}
+              {t.archived && <span className="text-muted"> (Archived)</span>}
+            </span>
+            <div className="flex items-center gap-3">
               <span className="text-sm text-muted">{t.count} booking{t.count === 1 ? "" : "s"}</span>
+              {onViewCommission && (
+                <button
+                  onClick={() => onViewCommission(t.id, t.name)}
+                  className="text-[11px] font-bold text-accent-gold hover:underline"
+                >
+                  View Commission →
+                </button>
+              )}
             </div>
-          ))}
-        </div>
-      </section>
-    </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

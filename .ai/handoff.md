@@ -5,6 +5,40 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Analytics — 5-Tab Restructure + Top Thera → Commission Deep Link — complete**
+  (`ohm#4k7n2wc9`, 2026-08-31). Plan + regression risk assessment presented
+  and approved before any code was written, per the prompt's mandatory gate.
+  - **Discrepancy stopped on and resolved before coding**: the prompt
+    described Commission as net-new (formula: `sales.amount ×
+    commission_rates.percent`, Rates UI "out of scope"). Both were already
+    false — Commission (Rates + Report) shipped same-day in
+    `ohm#4k8t2wq9`/`ohm#8x2m4tqz`, and the live Report formula is
+    `bookings` (`Booked`/`Completed`, `booking_date`-filtered) ×
+    `services.price` × `percent`, not `sales`-based. User decision: keep
+    the shipped bookings-based formula; fold the existing Commission tab
+    into the new layout unchanged.
+  - `components/analytics-browser.tsx`: `useMemo` computation untouched;
+    added a `section` prop (`"sales" | "most-availed" | "top-clients" |
+    "top-thera"`) so each tab renders one existing block. Sales tab gained
+    a Per Day/Per Month toggle over the already-computed tables. Added
+    `id` to the `therapistRanking` map entries (values/order unchanged) so
+    the deep-link button has something to pass.
+  - `components/analytics-tabs.tsx`: top tabs now Sales | Most Availed
+    Services | Top Clients | Top Thera | Commission (was Overview |
+    Commission). Owner-only gate moved up to this component, same check.
+  - `components/commission-report-browser.tsx`: new optional
+    `filterTherapist`/`onClearFilter` props. When set (via the Top Thera
+    deep link), auto-runs `getCommissionReport` for the current default
+    range and filters the returned rows to that therapist client-side —
+    no new query, no route change. Clearable "Filtering: {name} ×" chip.
+  - No migration, no RLS change, no changes to `getCommissionReport`,
+    `setCommissionRate`, or `commission_rates`.
+  - `npx tsc --noEmit` and `eslint` both clean.
+  - **Not verified live in-browser this session** — no `.env.local`
+    present, same recurring credentials/env blocker as recent prior
+    tasks; verified via code review and `tsc`/`eslint`. See
+    [[analytics_state]].
+
 - **Commission Module — Report UI (Analytics > Commission > Report) — complete**
   (`ohm#8x2m4tqz`, 2026-08-31). Plan + regression risk assessment presented
   and approved before any code was written, per the prompt's mandatory

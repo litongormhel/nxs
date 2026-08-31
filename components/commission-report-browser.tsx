@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { useStaffSim } from "@/lib/staff-context";
 import { getCommissionReport, type CommissionReportRow } from "@/app/(staff)/analytics/actions";
 import { spaDayNow, spaMonthNow } from "@/lib/analytics/spa-day";
@@ -27,7 +27,13 @@ function presetRange(preset: Preset): { start: string; end: string } {
   return { start: spaDayNow(), end: spaDayNow() };
 }
 
-export function CommissionReportBrowser() {
+export function CommissionReportBrowser({
+  filterTherapist,
+  onClearFilter,
+}: {
+  filterTherapist?: { id: string; name: string } | null;
+  onClearFilter?: () => void;
+} = {}) {
   const { currentRole } = useStaffSim();
   const [preset, setPreset] = useState<Preset>("1-15");
   const [range, setRange] = useState(() => presetRange("1-15"));
@@ -41,7 +47,7 @@ export function CommissionReportBrowser() {
     setRange(presetRange(p));
   }
 
-  function handleGenerate() {
+  const handleGenerate = useCallback(() => {
     setError(null);
     startTransition(async () => {
       const result = await getCommissionReport(range.start, range.end);
@@ -54,7 +60,29 @@ export function CommissionReportBrowser() {
       setRows(result.rows);
       setGrand({ total: result.grandTotal, commission: result.grandCommission, bookings: result.grandBookings });
     });
-  }
+  }, [range.start, range.end]);
+
+  useEffect(() => {
+    if (!filterTherapist) return;
+    const timer = setTimeout(handleGenerate, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterTherapist?.id]);
+
+  const displayRows = filterTherapist
+    ? (rows ?? []).filter((r) => r.therapistId === filterTherapist.id)
+    : rows;
+  const displayGrand =
+    filterTherapist && rows
+      ? (() => {
+          const filtered = rows.filter((r) => r.therapistId === filterTherapist.id);
+          return {
+            total: filtered.reduce((s, r) => s + r.total, 0),
+            commission: filtered.reduce((s, r) => s + r.commission, 0),
+            bookings: filtered.reduce((s, r) => s + r.bookingsCount, 0),
+          };
+        })()
+      : grand;
 
   if (currentRole !== "Owner") {
     return (
@@ -111,9 +139,24 @@ export function CommissionReportBrowser() {
         </button>
       </div>
 
+      {filterTherapist && (
+        <div className="mb-4 flex items-center gap-2">
+          <span className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold">
+            Filtering: {filterTherapist.name}
+            <button
+              onClick={onClearFilter}
+              className="ml-2 text-muted hover:text-fg"
+              aria-label="Clear therapist filter"
+            >
+              ×
+            </button>
+          </span>
+        </div>
+      )}
+
       {error && <div className="mb-4 text-[11px] text-accent-red">{error}</div>}
 
-      {rows && grand && (
+      {displayRows && displayGrand && (
         <div className="overflow-x-auto rounded-xl border border-border bg-surface">
           <table className="w-full text-[12.5px]">
             <thead>
@@ -126,14 +169,14 @@ export function CommissionReportBrowser() {
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && (
+              {displayRows.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-6 text-center text-muted">
                     No bookings in this range.
                   </td>
                 </tr>
               )}
-              {rows.map((row) => (
+              {displayRows.map((row) => (
                 <tr key={row.therapistId} className="border-b border-border last:border-0">
                   <td className="px-4 py-3 font-bold text-foreground">
                     {row.therapistName}
@@ -163,14 +206,14 @@ export function CommissionReportBrowser() {
                 </tr>
               ))}
             </tbody>
-            {rows.length > 0 && (
+            {displayRows.length > 0 && (
               <tfoot>
                 <tr className="border-t border-border font-bold">
                   <td className="px-4 py-3 text-foreground">Grand Total</td>
-                  <td className="px-4 py-3">{grand.bookings}</td>
+                  <td className="px-4 py-3">{displayGrand.bookings}</td>
                   <td className="px-4 py-3" />
-                  <td className="px-4 py-3">{peso(grand.total)}</td>
-                  <td className="px-4 py-3 text-accent-gold">{peso(grand.commission)}</td>
+                  <td className="px-4 py-3">{peso(displayGrand.total)}</td>
+                  <td className="px-4 py-3 text-accent-gold">{peso(displayGrand.commission)}</td>
                 </tr>
               </tfoot>
             )}

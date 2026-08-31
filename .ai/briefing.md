@@ -82,7 +82,56 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-31 — Commission Module — Report UI (Analytics > Commission >
+1. **2026-08-31 — Analytics — 5-Tab Restructure + Top Thera → Commission
+   Deep Link** (`ohm#4k7n2wc9`). Plan + regression risk assessment
+   presented and approved before any code was written, per the prompt's
+   mandatory gate.
+   - **Discrepancy surfaced and resolved before coding**: the prompt
+     described building a net-new Commission tab computing commission as
+     `sales.amount × commission_rates.percent` (joined via
+     `sales.service_id`/`sales.created_at`), with "no admin UI for
+     `commission_rates`" as out of scope. Both were already false —
+     Commission (Rates + Report sub-tabs) shipped same-day in
+     `ohm#4k8t2wq9`/`ohm#8x2m4tqz`, and the live Report computes
+     commission from **`bookings`** (`Booked`/`Completed`,
+     `booking_date`-filtered) × `services.price` × `percent`, not from
+     `sales`. User decision: keep the shipped bookings-based formula
+     as-is; fold the existing Rates/Report Commission tab into the new
+     layout unchanged rather than rebuilding it. See [[commission_state]].
+   - **Pure refactor, no calc changes**: `components/analytics-browser.tsx`
+     kept its `useMemo` computation byte-for-byte identical — only the
+     render was split via a new `section` prop
+     (`"sales" | "most-availed" | "top-clients" | "top-thera"`) so each
+     top-level tab renders one existing block instead of all four
+     stacked. Sales tab keeps the Today/7-day/Month Sales + Client Visits
+     cards (Client Visits had no other named home in the prompt, so it
+     stayed with Sales) and gained a Per Day/Per Month toggle switching
+     between the already-computed `salesPerDay`/`salesPerMonth` tables
+     instead of showing both.
+   - `components/analytics-tabs.tsx`: top tabs became **Sales | Most
+     Availed Services | Top Clients | Top Thera | Commission** (was
+     Overview | Commission). Owner-only gate moved up to this component
+     (one blocking message for the page, not one per tab) — same
+     `useStaffSim`/`currentRole` check, just relocated.
+   - **Top Thera → Commission deep link**: each Top Thera row gained a
+     "View Commission →" button (needed `id` added to the existing
+     `therapistRanking` map entries, ranking order/values unchanged).
+     Click sets top tab → Commission, sub-tab → Report, and a
+     `filterTherapist` state passed into `CommissionReportBrowser`, which
+     auto-runs `getCommissionReport` for the current default range and
+     filters the already-returned rows to that therapist client-side — no
+     new query. A "Filtering: {name} ×" chip clears it back to the full
+     report. No route change, no new page, per the prompt.
+   - No migration, no RLS change, no changes to `getCommissionReport`,
+     `setCommissionRate`, or `commission_rates` — read-only tab-shell
+     work only.
+   - `npx tsc --noEmit` and `eslint` both clean on all changed files.
+   - **Not verified live in-browser this session** — no `.env.local`
+     present, same recurring credentials/env blocker as recent prior
+     tasks; verified via code review and `tsc`/`eslint`. See
+     [[analytics_state]].
+
+2. **2026-08-31 — Commission Module — Report UI (Analytics > Commission >
    Report)** (`ohm#8x2m4tqz`). Plan + regression risk assessment presented
    and approved before any code was written, per the prompt's mandatory
    gate. Report sub-tab, sibling to the already-shipped Rates tab.
@@ -116,7 +165,7 @@ Full invariant list: [[nxs-architecture-locks]].
      tasks; verified via code review, `tsc`/`eslint`, and the live-schema
      check. See [[commission_state]].
 
-2. **2026-08-31 — Commission Module — Schema (`commission_rates`) + Rates
+3. **2026-08-31 — Commission Module — Schema (`commission_rates`) + Rates
    Settings UI** (`ohm#4k8t2wq9`). Plan + regression risk assessment
    presented and approved before any code/migration was written, per the
    prompt's mandatory gate. Schema + Rates Settings UI only — Report UI is
@@ -168,7 +217,7 @@ Full invariant list: [[nxs-architecture-locks]].
      tasks; verified via code review, `tsc`/`eslint`, and the Supabase
      advisors check. See [[commission_state]].
 
-3. **2026-08-30 — Sidebar Nav — Collapsible Hamburger Menu for
+4. **2026-08-30 — Sidebar Nav — Collapsible Hamburger Menu for
    Mobile/Tablet** (`ohm#757d5b08`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. UI/layout only. Fixes the reported bug (sidebar
@@ -200,7 +249,7 @@ Full invariant list: [[nxs-architecture-locks]].
    for sidebar/nav (not in `current_state.md`'s routing index), so no
    state-file update was made for this task.
 
-4. **2026-08-30 — Booking Flow — Mobile/Tablet Responsive Pass**
+5. **2026-08-30 — Booking Flow — Mobile/Tablet Responsive Pass**
    (`ohm#68b329da`). Plan + regression risk assessment presented and
    approved before any code was written, per the prompt's mandatory gate.
    UI/layout only, no backend/DB/business-logic changes. Made **New
@@ -229,42 +278,3 @@ Full invariant list: [[nxs-architecture-locks]].
    have (same recurring blocker); verified via code review, `tsc`/
    `eslint`, and manual trace of Tailwind breakpoint semantics. See
    [[bookings_state]].
-
-5. **2026-08-30 — Therapist Absent/Leave status → Dashboard reassignment
-   trigger** (`ohm#3f8q1w6z`). Plan + regression risk assessment presented
-   and approved before any code/migration was written, per the prompt's
-   mandatory gate. `Mark Absent Today`/`Mark On Leave` (menu wired
-   `ohm#7k2m9x4p`, previously local-state-only) now persist for real:
-   new `markAbsentToday()`/`markOnLeave()` server actions
-   (`app/(staff)/therapists/actions.ts`) upsert/insert into
-   `therapist_absence`/`therapist_leave` and flag that therapist's
-   `Booked` bookings for the affected day(s) to `Needs Reassignment` —
-   already an existing `bookings.status` enum value, already inside both
-   GiST no-double-booking constraints' scope, so **no schema/enum change
-   was needed** for the flagging itself. New migration
-   `20260830024144_therapist_absence_leave_rls.sql` adds `staff_select`/
-   `staff_insert` RLS to `therapist_absence`/`therapist_leave` (both had
-   RLS enabled with zero policies since the baseline snapshot, same gap
-   `therapist_day_off` had before `ohm#7k2m9x4p`) — applied live after
-   explicit user confirmation (the auto-mode classifier blocked applying
-   it directly, as expected for a live schema change). Dashboard
-   (`app/(staff)/dashboard/page.tsx`, previously 4 static stat cards only)
-   now also fetches `Needs Reassignment` bookings and non-archived
-   therapists, rendering a new `components/reassignment-panel.tsx`
-   (`ReassignmentPanel`) with a Transfer action per flagged booking.
-   Transfer reuses the existing `changeBookingTherapist()` action
-   (`app/(staff)/bookings/actions.ts`) unchanged in its exclusion-
-   violation handling — the no-double-booking GiST constraints are
-   untouched and unweakened. **Gap found and fixed**: that function never
-   flipped a `Needs Reassignment` booking's status back to `Booked` after
-   a successful reassignment (so the Bookings tab's own pre-existing
-   `ohm#7k2m9xq4` "Reassign" button never actually resolved the flag
-   either) — now it does, as part of the same UPDATE. No changes to
-   Points Ledger, Sales, or Locker Board. `npx tsc --noEmit` and `eslint`
-   both clean on all changed/new files. **Not verified live in-browser**
-   this session — another chat's dev server was already running on
-   :3000 and the login page requires real staff credentials this session
-   doesn't have (same blocker as recent prior tasks); verified via code
-   review, `tsc`/`eslint`, and the Supabase advisors check confirming the
-   new RLS closed the flagged gap with no new issues introduced. See
-   [[therapists_state]], [[bookings_state]], [[dashboard_state]].
