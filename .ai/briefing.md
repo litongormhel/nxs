@@ -82,6 +82,10 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
+## Last Completed Tasks
+- ohm#3n8y5w1q — Call sheet: re-added "All" tab (pinned, opt-in) for total-count/shift-overview visibility; footer label + canvas export branch on timeFilter === "all"; Download JPEG hidden in All view
+- ohm#7k2p9m4x — Call sheet: replaced "All Times" dropdown with data-driven scrollable time-slot tabs (sourced from availableSlots/sortSlotTimes, not hardcoded); added Thera column (Locker/Room/Service/Thera); default tab = nearest upcoming slot
+
 1. **2026-09-01 — Sale Void — Owner-Set 6-Digit Authorization Code**
    (`ohm#6f3p8dxn`, supersedes `ohm#8m2k5vqz` — email+password step-up was
    drafted but never implemented). Plan + regression risk assessment

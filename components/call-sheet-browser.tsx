@@ -8,6 +8,7 @@ type Entry = {
   room_number: number | null;
   service_name: string;
   slot_time: string | null;
+  therapist_name: string | null;
 };
 
 function fmtTime(hhmm: string): string {
@@ -51,7 +52,7 @@ function drawCallSheetJpeg(rows: Entry[], label: string): string {
   const tableTop = 96;
   const tableLeft = 32;
   const tableWidth = width - 64;
-  const colX = [tableLeft + 20, tableLeft + 220, tableLeft + 400];
+  const colX = [tableLeft + 20, tableLeft + 220, tableLeft + 400, tableLeft + 680];
 
   ctx.strokeStyle = border;
   ctx.lineWidth = 1;
@@ -65,6 +66,7 @@ function drawCallSheetJpeg(rows: Entry[], label: string): string {
   ctx.fillText("LOCKER", colX[0], tableTop + 25);
   ctx.fillText("ROOM", colX[1], tableTop + 25);
   ctx.fillText("SERVICE", colX[2], tableTop + 25);
+  ctx.fillText("THERA", colX[3], tableTop + 25);
 
   ctx.strokeStyle = border;
   ctx.beginPath();
@@ -88,6 +90,10 @@ function drawCallSheetJpeg(rows: Entry[], label: string): string {
     ctx.font = "bold 15px system-ui, sans-serif";
     ctx.fillText(row.service_name, colX[2], y + 27);
 
+    ctx.fillStyle = muted;
+    ctx.font = "15px system-ui, sans-serif";
+    ctx.fillText(row.therapist_name ?? "—", colX[3], y + 27);
+
     ctx.strokeStyle = border;
     ctx.beginPath();
     ctx.moveTo(tableLeft, y + rowHeight);
@@ -106,6 +112,21 @@ function drawCallSheetJpeg(rows: Entry[], label: string): string {
   return canvas.toDataURL("image/jpeg", 0.92);
 }
 
+function toMinutesSinceOpen(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  const minutes = h * 60 + m;
+  return minutes < 16 * 60 ? minutes + 24 * 60 : minutes;
+}
+
+function nearestUpcomingSlot(slots: string[]): string {
+  const now = new Date();
+  const nowMinutes = toMinutesSinceOpen(
+    `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
+  );
+  const upcoming = slots.find((s) => toMinutesSinceOpen(s) >= nowMinutes);
+  return upcoming ?? slots[0];
+}
+
 export function CallSheetBrowser({
   entries,
   availableSlots,
@@ -113,11 +134,11 @@ export function CallSheetBrowser({
   entries: Entry[];
   availableSlots: string[];
 }) {
-  const [timeFilter, setTimeFilter] = useState("all");
+  const [timeFilter, setTimeFilter] = useState<string>(() => nearestUpcomingSlot(availableSlots));
   const downloadRef = useRef<HTMLAnchorElement>(null);
 
   const filtered = useMemo(
-    () => entries.filter((e) => timeFilter === "all" || e.slot_time === timeFilter),
+    () => (timeFilter === "all" ? entries : entries.filter((e) => e.slot_time === timeFilter)),
     [entries, timeFilter]
   );
 
@@ -133,32 +154,50 @@ export function CallSheetBrowser({
 
   return (
     <div className="max-w-xl space-y-4">
-      <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2.5">
-        <div className="text-[10.5px] font-bold tracking-[0.13em] uppercase text-muted">
-          Call Sheet — Locker / Room / Service
+      <div className="mb-1.5">
+        <div className="text-[10.5px] font-bold tracking-[0.13em] uppercase text-muted mb-2">
+          Call Sheet — Locker / Room / Service / Thera
         </div>
-        <select
-          value={timeFilter}
-          onChange={(e) => setTimeFilter(e.target.value)}
-          className="rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
-        >
-          <option value="all">All Times</option>
-          {availableSlots.map((t) => (
-            <option key={t} value={t}>
-              {fmtTime(t)}
-            </option>
-          ))}
-        </select>
+        <div className="flex gap-1.5">
+          <button
+            onClick={() => setTimeFilter("all")}
+            className={
+              "shrink-0 rounded-lg border px-3 py-1.5 text-[11px] font-bold transition " +
+              (timeFilter === "all"
+                ? "border-[#a97e2e] bg-[#c89b3c]/15 text-accent-gold"
+                : "border-border bg-surface-2 text-muted hover:text-foreground")
+            }
+          >
+            All
+          </button>
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {availableSlots.map((t) => (
+              <button
+                key={t}
+                onClick={() => setTimeFilter(t)}
+                className={
+                  "shrink-0 rounded-lg border px-3 py-1.5 text-[11px] font-bold transition " +
+                  (t === timeFilter
+                    ? "border-[#a97e2e] bg-[#c89b3c]/15 text-accent-gold"
+                    : "border-border bg-surface-2 text-muted hover:text-foreground")
+                }
+              >
+                {fmtTime(t)}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="rounded-xl border border-border bg-surface overflow-hidden">
         <div
           className="grid gap-3 border-b border-border px-4 py-2.5 text-[10px] font-bold tracking-wider uppercase text-muted"
-          style={{ gridTemplateColumns: "1fr 1fr 1.6fr" }}
+          style={{ gridTemplateColumns: "1fr 1fr 1.6fr 1fr" }}
         >
           <div>Locker</div>
           <div>Room</div>
           <div>Service</div>
+          <div>Thera</div>
         </div>
         {filtered.length === 0 ? (
           <div className="px-4 py-4 text-sm text-muted">No massages match this time.</div>
@@ -167,11 +206,12 @@ export function CallSheetBrowser({
             <div
               key={e.id}
               className="grid gap-3 border-b border-border px-4 py-3 text-[12px] last:border-b-0"
-              style={{ gridTemplateColumns: "1fr 1fr 1.6fr" }}
+              style={{ gridTemplateColumns: "1fr 1fr 1.6fr 1fr" }}
             >
               <div className="text-foreground">{e.locker_number}</div>
               <div className="text-muted">{e.room_number ?? "—"}</div>
               <div className="font-semibold text-accent-gold">{e.service_name}</div>
+              <div className="text-muted">{e.therapist_name ?? "—"}</div>
             </div>
           ))
         )}

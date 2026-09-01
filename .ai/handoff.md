@@ -5,6 +5,27 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+-## ohm#3n8y5w1q — Call sheet: re-add All tab
+Files: components/call-sheet-browser.tsx, app/(staff)/call-sheet/page.tsx
+- Re-added "All" as a pinned tab (outside the scrollable slot row), opt-in only — default state still resolves to nearestUpcomingSlot, never defaults to "all"
+- Filtering: entries unfiltered when timeFilter === "all", else filtered by slot_time
+- Footer label restored to conditional branch: "Total: X massages in progress" (all) vs "Total: X massages at [time]" (specific slot)
+- Download JPEG button hidden when timeFilter === "all" (matches pre-existing pre-ohm#7k2p9m4x behavior) — canvas export label becomes "All Times" and reflects all entries when active
+- Typecheck: clean (tsc --noEmit)
+- Dev-server/browser verification: not completed (Windows path/tooling issue with preview tool locating dev script) — static/typecheck verification only
+- Open item: Download-button-hidden-in-All-view was implemented as the default assumption; not explicitly confirmed by Ohm before merge — worth a quick look
+
+## ohm#7k2p9m4x — Call sheet: time-slot tabs + Thera column
+Files: components/call-sheet-browser.tsx, app/(staff)/call-sheet/page.tsx
+- Removed "All Times" dropdown/branch (later reintroduced in ohm#3n8y5w1q)
+- Replaced with horizontal scrollable tabs, data-driven from availableSlots (sorted via existing sortSlotTimes/weekend_slots config) — deliberately not hardcoded to avoid drift from Settings-configured slots
+- Default tab on mount: nearest upcoming slot vs current time, falls back to first slot if all passed
+- Entry type gains therapist_name: string | null; sourced via Supabase nested select o.bookings?.therapists?.name ?? null (page.tsx:26)
+- Table: added Thera column (Locker/Room/Service/Thera), grid 1fr 1fr 1.6fr 1fr; null-safe render via ?? "—"
+- drawCallSheetJpeg (canvas export) updated in parallel: THERA header + per-row draw, kept in sync with on-screen table
+- Typecheck: clean (tsc --noEmit, both files + full project pass)
+- Untouched: points ledger, bookings, sales table/logic — no shared code between these and call-sheet files
+
 - **Sale Void — Owner-Set 6-Digit Authorization Code — complete**
   (`ohm#6f3p8dxn`, 2026-09-01, supersedes `ohm#8m2k5vqz` — email+password
   step-up was drafted but never implemented; Ohm changed the design to a

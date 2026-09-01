@@ -9,7 +9,7 @@ export default async function CallSheetPage() {
     supabase
       .from("locker_occupancy")
       .select(
-        "id, locker_number, room_number, checked_in_at, services(name), bookings(start_time)"
+        "id, locker_number, room_number, checked_in_at, services(name), bookings(start_time, therapists(name))"
       )
       .is("checked_out_at", null),
     supabase.from("weekend_slots").select("slot_time"),
@@ -23,6 +23,7 @@ export default async function CallSheetPage() {
       room_number: o.room_number,
       service_name: o.services!.name,
       slot_time: o.bookings?.start_time ? o.bookings.start_time.slice(0, 5) : null,
+      therapist_name: o.bookings?.therapists?.name ?? null,
     }));
 
   const availableSlots = sortSlotTimes(
