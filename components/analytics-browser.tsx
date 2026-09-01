@@ -12,6 +12,7 @@ export type AnalyticsSale = {
   amount: number;
   created_at: string;
   voided: boolean;
+  therapist_id: string | null;
 };
 
 export type AnalyticsBooking = {
@@ -140,7 +141,14 @@ export function AnalyticsBrowser({
     // Therapist Ranking
     const perTherapist = new Map<
       string,
-      { id: string; name: string; archived: boolean; count: number }
+      {
+        id: string;
+        name: string;
+        archived: boolean;
+        count: number;
+        revenue: number;
+        revenueBookings: number;
+      }
     >();
     for (const b of bookings) {
       if (!b.therapist_id) continue;
@@ -149,11 +157,34 @@ export function AnalyticsBrowser({
         name: b.therapist_name ?? "—",
         archived: b.therapist_archived,
         count: 0,
+        revenue: 0,
+        revenueBookings: 0,
       };
       cur.count += 1;
       perTherapist.set(b.therapist_id, cur);
     }
-    const therapistRanking = [...perTherapist.values()].sort((a, b) => b.count - a.count);
+    for (const s of withBuckets) {
+      if (!s.therapist_id || s.amount === 0) continue;
+      const cur = perTherapist.get(s.therapist_id);
+      if (!cur) continue;
+      cur.revenue += s.amount;
+      cur.revenueBookings += 1;
+    }
+    const totalTherapistRevenue = sum([...perTherapist.values()].map((t) => ({ amount: t.revenue })));
+    const therapistRanking = [...perTherapist.values()]
+      .map((t) => ({
+        ...t,
+        avgRevenue: t.revenueBookings > 0 ? t.revenue / t.revenueBookings : 0,
+        pctShare: totalTherapistRevenue > 0 ? t.revenue / totalTherapistRevenue : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+    const totalTherapistBookings = [...perTherapist.values()].reduce((acc, t) => acc + t.count, 0);
+    const totalTherapistRevenueBookings = [...perTherapist.values()].reduce(
+      (acc, t) => acc + t.revenueBookings,
+      0
+    );
+    const avgTherapistRevenue =
+      totalTherapistRevenueBookings > 0 ? totalTherapistRevenue / totalTherapistRevenueBookings : 0;
 
     return {
       salesToday: sum(inToday),
@@ -167,6 +198,9 @@ export function AnalyticsBrowser({
       salesPerMonth,
       topClients,
       therapistRanking,
+      totalTherapistRevenue,
+      totalTherapistBookings,
+      avgTherapistRevenue,
     };
   }, [sales, bookings]);
 
@@ -301,34 +335,63 @@ export function AnalyticsBrowser({
   }
 
   return (
-    <section>
-      <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">
-        Top Thera
-      </h2>
-      <div className="rounded-lg border border-border bg-surface divide-y divide-border">
-        {computed.therapistRanking.length === 0 && (
-          <p className="p-4 text-sm text-muted">No bookings recorded yet.</p>
-        )}
-        {computed.therapistRanking.map((t, i) => (
-          <div key={t.name + i} className="flex items-center justify-between p-3 px-4">
-            <span className="text-sm text-fg">
-              {i + 1}. {t.name}
-              {t.archived && <span className="text-muted"> (Archived)</span>}
-            </span>
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-muted">{t.count} booking{t.count === 1 ? "" : "s"}</span>
-              {onViewCommission && (
-                <button
-                  onClick={() => onViewCommission(t.id, t.name)}
-                  className="text-[11px] font-bold text-accent-gold hover:underline"
-                >
-                  View Commission →
-                </button>
-              )}
+    <div className="space-y-8">
+      <section>
+        <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">
+          Top Thera
+        </h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <StatCard label="Total Revenue" value={peso(computed.totalTherapistRevenue)} />
+          <StatCard label="Total Bookings" value={String(computed.totalTherapistBookings)} />
+          <StatCard label="Avg Revenue / Booking" value={peso(computed.avgTherapistRevenue)} />
+        </div>
+      </section>
+
+      <section>
+        <div className="rounded-lg border border-border bg-surface divide-y divide-border">
+          {computed.therapistRanking.length === 0 && (
+            <p className="p-4 text-sm text-muted">No bookings recorded yet.</p>
+          )}
+          {computed.therapistRanking.map((t, i) => (
+            <div key={t.name + i} className="p-3 px-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-fg">
+                  {i + 1}. {t.name}
+                  {t.archived && <span className="text-muted"> (Archived)</span>}
+                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted">
+                    {t.count} booking{t.count === 1 ? "" : "s"}
+                  </span>
+                  {onViewCommission && (
+                    <button
+                      onClick={() => onViewCommission(t.id, t.name)}
+                      className="text-[11px] font-bold text-accent-gold hover:underline"
+                    >
+                      View Commission →
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted">
+                <span>
+                  {peso(t.revenue)} revenue · {peso(t.avgRevenue)} avg
+                </span>
+                <span>{(t.pctShare * 100).toFixed(1)}% of total revenue</span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-border overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gold"
+                  style={{ width: `${Math.min(t.pctShare * 100, 100)}%` }}
+                />
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-    </section>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-muted">
+          Redemption-only bookings (₱0 cash / points-redeemed) are counted in bookings but excluded from revenue and avg revenue.
+        </p>
+      </section>
+    </div>
   );
 }

@@ -38,6 +38,7 @@ export default async function AnalyticsPage() {
     amount: Number(s.amount),
     created_at: s.created_at,
     voided: s.voided,
+    therapist_id: s.therapist_id,
   }));
 
   const shapedBookings = (bookings ?? []).map((b) => ({
