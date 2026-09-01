@@ -82,7 +82,27 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-01 — Client Portal — Auth Hardening: Rate Limiting + Session
+1. **2026-09-01 — RLS & Grant Tightening — sale_addons Insert Policy +
+   apply_points_delta REST Exposure** (`ohm#7n4c1wp6`). Addresses audit
+   `ohm#9k3v7bx2`'s Medium #3 (`sale_addons.public_insert` let any anon-key
+   holder insert arbitrary rows via public REST) and Medium #6
+   (trigger-only `apply_points_delta()` directly callable via
+   `/rest/v1/rpc`). Plan + regression risk assessment presented and
+   approved before any migration was written, per the prompt's mandatory
+   gate — including the required check of `quick_walkin()`'s security
+   context: confirmed live via `pg_proc` it is `SECURITY INVOKER`, but
+   since its only caller always runs through the authenticated
+   `@supabase/ssr` client, narrowing `sale_addons` to `is_staff()` doesn't
+   break it (no "flag back" needed; verified end-to-end under an
+   impersonated staff role). Replaced `sale_addons.public_insert` with
+   `staff_insert`/`is_staff()` (matches `locker_occupancy`'s existing
+   pattern); revoked `EXECUTE` on `apply_points_delta()` from `public,
+   anon, authenticated` (trigger firing confirmed unaffected).
+   `clear_own_must_change_password()`/`current_staff_position()` grants
+   left untouched, as scoped. Re-ran Supabase security advisors — both
+   findings clear. See [[bookings_state]] and `.ai/handoff.md`.
+
+2. **2026-09-01 — Client Portal — Auth Hardening: Rate Limiting + Session
    Secret Separation** (`ohm#5t2m8qz1`). Addresses audit `ohm#9k3v7bx2`'s
    High #1 (no brute-force protection on `/portal/api/login`) and High #2
    (portal session HMAC secret reused `SUPABASE_SERVICE_ROLE_KEY`). Plan +
@@ -102,7 +122,7 @@ Full invariant list: [[nxs-architecture-locks]].
    manually — no Vercel env-write tool was available this session. See
    [[client_portal_state]] and `.ai/handoff.md`.
 
-2. **2026-09-01 — Therapists — Services Offered RLS + Wiring**
+3. **2026-09-01 — Therapists — Services Offered RLS + Wiring**
    (`ohm#9q4x1mwr`, Prompt 3 of 3, closes the "Therapist Roster —
    Investigate & Wire" sequence). Investigation surfaced that the prompt's
    premise didn't match live code: `handleToggleService` was genuinely
@@ -122,7 +142,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `therapist_services` join, resolved through a `serviceIdMap` in the
    component. See [[therapists_state]] and `.ai/handoff.md`.
 
-3. **2026-09-01 — Therapists — Add + Edit (Rename) RLS + Wiring**
+4. **2026-09-01 — Therapists — Add + Edit (Rename) RLS + Wiring**
    (`ohm#5v8n3ptc`, Prompt 2 of 3). Investigation phase re-confirmed live
    (not from the prompt's snapshot) that `therapists` still had exactly
    `public_select` + `staff_update` (no INSERT/DELETE), that
@@ -141,7 +161,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `updateTherapistName(therapistId, name, staffId)` server action now backs
    the Edit Name modal. See [[therapists_state]] and `.ai/handoff.md`.
 
-4. **2026-09-01 — Therapists — Archive/Unarchive RLS + Real Persistence**
+5. **2026-09-01 — Therapists — Archive/Unarchive RLS + Real Persistence**
    (`ohm#7m2w9dxk`, Prompt 1 of 3). Investigation phase confirmed live
    (not from the prompt's snapshot) that `therapists` had no INSERT/
    UPDATE/DELETE RLS policy at all, and separately surfaced that Add
@@ -158,15 +178,4 @@ Full invariant list: [[nxs-architecture-locks]].
    unlike a one-day absence). `therapist_day_off`/`therapist_services`
    rows are untouched by archive/unarchive. See [[therapists_state]] and
    `.ai/handoff.md`.
-
-5. **2026-09-01 — Docs Sync: Correct Stale Call Sheet Status** (`ohm#3k9r7fq2`).
-   Documentation-only fix. `docs/state/bookings_state.md`'s "Not yet
-   implemented" list claimed `app/call-sheet/page.tsx` was still an 8-line
-   "Coming soon." stub — false and stale (also stale path; actual path is
-   `app/(staff)/call-sheet/page.tsx`). Confirmed live the page is fully
-   implemented (queries `locker_occupancy` joined to
-   `services`/`bookings`/`therapists`, excludes Wet Area, renders via
-   `components/call-sheet-browser.tsx`), matching what
-   `docs/state/operations_state.md` already documented. Removed the stale
-   bullet; no other bullet touched. No code, schema, or migration changed.
 

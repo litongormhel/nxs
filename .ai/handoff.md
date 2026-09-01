@@ -5,6 +5,59 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **RLS & Grant Tightening — sale_addons Insert Policy +
+  apply_points_delta REST Exposure — complete** (`ohm#7n4c1wp6`,
+  2026-09-01). Addresses two findings from audit `ohm#9k3v7bx2`: Medium #3
+  (`sale_addons.public_insert` was `cmd=INSERT, with_check=true,
+  roles={public}` — any anon-key holder could insert arbitrary
+  `(sale_id, addon_id, price_at_sale)` rows via public REST, independent of
+  the `quick_walkin()` RPC it was meant to support) and Medium #6
+  (`apply_points_delta()`, a trigger-only `SECURITY DEFINER` function, was
+  directly callable via `/rest/v1/rpc/apply_points_delta`).
+  - **Pre-implementation verification (mandatory gate)**: before writing
+    any migration, confirmed live via `pg_proc.prosecdef` that
+    `quick_walkin()` is `SECURITY INVOKER` (`security_definer: false`),
+    not `DEFINER` — matching the docs' existing note but requiring
+    explicit re-verification per the prompt. Traced its only caller
+    (`app/(staff)/bookings/actions.ts:167` `quickWalkin()`) to confirm it
+    always runs through the cookie-based authenticated `@supabase/ssr`
+    client (`lib/supabase/server.ts`), so the RPC's internal `sale_addons`
+    insert executes as the real staff caller's role, not a bypassed one.
+    Concluded narrowing the policy to `is_staff()` would not break it —
+    no "flag back to the user" needed, since this wasn't the
+    SECURITY-INVOKER-depends-on-the-permissive-policy case the prompt
+    warned about.
+  - **Migration**
+    (`supabase/migrations/20260901230000_sale_addons_staff_insert_and_points_delta_grants.sql`):
+    dropped `sale_addons.public_insert`, added `staff_insert`
+    (`with_check: is_staff()`) — exact pattern match to
+    `locker_occupancy`'s existing `staff_insert`/`is_staff()` policy
+    (also surfaced live `locker_occupancy` already uses this pattern,
+    correcting `bookings_state.md`'s stale "anon INSERT policy" note for
+    that table specifically — not touched, per the prompt's do-not-touch
+    scope). Also: `REVOKE EXECUTE ON FUNCTION apply_points_delta() FROM
+    PUBLIC, anon, authenticated` (left `clear_own_must_change_password()`
+    and `current_staff_position()` grants untouched, as scoped — audit
+    noted these self-scope to `auth.uid()` and no-op safely for anon).
+  - **Verification** (all via `execute_sql` in rolled-back transactions,
+    no live data touched): `quick_walkin()` called under an impersonated
+    real staff `auth.uid()` (role `authenticated`) succeeded end-to-end,
+    including its internal `sale_addons` insert. A direct `insert into
+    sale_addons` as role `anon` now raises `42501 — new row violates
+    row-level security policy`. A direct `point_transactions` INSERT as
+    the impersonated staff role still correctly incremented
+    `clients.points_balance` via the `trg_apply_points_delta` trigger,
+    confirming the `REVOKE EXECUTE` (which only blocks direct RPC calls)
+    left trigger firing untouched. Re-ran `get_advisors(security)`: both
+    findings no longer appear (`apply_points_delta` is absent from the
+    SECURITY DEFINER exposure list; no RLS gap on `sale_addons`).
+  - **Note**: the prompt's "DATABASE CHANGE SAFETY RULES" block arrived as
+    a literal unfilled placeholder (`[paste smoke test block here]`) —
+    flagged to the user; no dedicated smoke-test checklist was supplied,
+    so verification above was scoped from the prompt's own "Verification"
+    section instead.
+  - See [[bookings_state]].
+
 - **Client Portal — Auth Hardening: Rate Limiting + Session Secret
   Separation — complete** (`ohm#5t2m8qz1`, 2026-09-01). Addresses two
   findings from the deployment-readiness audit (`ohm#9k3v7bx2`): High #1

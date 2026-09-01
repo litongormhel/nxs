@@ -39,7 +39,8 @@
   Goals 3pax`/`4pax` at −₱150/−₱200, plus Early Bird, Birthmonth, AMBA).
 - `locker_occupancy` gained SELECT (to compute free lockers/rooms) and
   INSERT `anon` policies. `sale_addons` gained an INSERT `anon` policy.
-  Both were previously default-deny.
+  Both were previously default-deny. **`sale_addons`'s policy was later
+  tightened to `is_staff()` — see below.**
 - New function `public.quick_walkin(...)` — atomic write for the Quick
   Walk-in flow, modeled directly on `public.log_visit()`'s pattern (not
   `SECURITY DEFINER`; reachable via the anon INSERT policies above plus
@@ -52,6 +53,23 @@
   constraints as `createBooking` — confirmed via smoke test that a
   conflicting therapist/room still raises `23P01`.
 - Migration: `supabase/migrations/20260827133448_quick_walkin_promo_rls.sql`.
+- **RLS tightened (`ohm#7n4c1wp6`, 2026-09-01)**: `sale_addons.public_insert`
+  (`with_check=true`, role `public`) was replaced with `staff_insert`
+  (`with_check=is_staff()`) — audit `ohm#9k3v7bx2` Medium #3 found any
+  anon-key holder could insert arbitrary `sale_addons` rows via public REST,
+  independent of `quick_walkin()`. Confirmed live via `pg_proc` that
+  `quick_walkin()` is `SECURITY INVOKER` (not `DEFINER`, matching the
+  original note above) — but its only caller
+  (`app/(staff)/bookings/actions.ts` `quickWalkin()`) always runs through
+  the cookie-based authenticated Supabase client, so the function's
+  internal `sale_addons` insert runs as the real staff caller and passes
+  `is_staff()`. Verified end-to-end under an impersonated staff role
+  (`quick_walkin()` succeeds, `sale_addons` row inserted) and that a direct
+  anon insert into `sale_addons` now raises `42501`. Same audit's Medium #6
+  also revoked `EXECUTE` on the trigger-only `apply_points_delta()` from
+  `public, anon, authenticated` (trigger firing on `point_transactions`
+  INSERT is unaffected — verified). Migration:
+  `supabase/migrations/20260901230000_sale_addons_staff_insert_and_points_delta_grants.sql`.
 - `bookings.pax_count` and its check constraint (`IN (3,4)`) are
   **unchanged** — Squad Goals pax is now derived app-side from the
   selected promo's label at insert time rather than a schema change.
