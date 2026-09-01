@@ -82,7 +82,27 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-01 — Therapists — Add + Edit (Rename) RLS + Wiring**
+1. **2026-09-01 — Therapists — Services Offered RLS + Wiring**
+   (`ohm#9q4x1mwr`, Prompt 3 of 3, closes the "Therapist Roster —
+   Investigate & Wire" sequence). Investigation surfaced that the prompt's
+   premise didn't match live code: `handleToggleService` was genuinely
+   local-state-only as expected, but there was no "Services Offered"
+   section on the therapist card at all — it was never called from any
+   JSX (only the separate, still-local Add Therapist modal picker rendered
+   service pills). Also surfaced `Scrub` is a real `services` row but
+   `active: false` live. Both flagged and resolved via explicit user
+   choice before any code was written: build the missing card section;
+   proceed with `Scrub` as-is. Added `staff_select`/`staff_insert`/
+   `staff_delete` (`is_staff()`/`is_supervisor_or_above()`) to
+   `therapist_services` — had **no policies at all**, so 26 pre-seeded
+   rows were previously unreadable. New "Services Offered" pill section on
+   each card, wired to new `toggleTherapistService(therapistId, serviceId,
+   offering, staffId)` server action mirroring `toggleDayOff`'s shape.
+   Page fetch now seeds initial services state via a new `services`/
+   `therapist_services` join, resolved through a `serviceIdMap` in the
+   component. See [[therapists_state]] and `.ai/handoff.md`.
+
+2. **2026-09-01 — Therapists — Add + Edit (Rename) RLS + Wiring**
    (`ohm#5v8n3ptc`, Prompt 2 of 3). Investigation phase re-confirmed live
    (not from the prompt's snapshot) that `therapists` still had exactly
    `public_select` + `staff_update` (no INSERT/DELETE), that
@@ -101,7 +121,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `updateTherapistName(therapistId, name, staffId)` server action now backs
    the Edit Name modal. See [[therapists_state]] and `.ai/handoff.md`.
 
-2. **2026-09-01 — Therapists — Archive/Unarchive RLS + Real Persistence**
+3. **2026-09-01 — Therapists — Archive/Unarchive RLS + Real Persistence**
    (`ohm#7m2w9dxk`, Prompt 1 of 3). Investigation phase confirmed live
    (not from the prompt's snapshot) that `therapists` had no INSERT/
    UPDATE/DELETE RLS policy at all, and separately surfaced that Add
@@ -119,7 +139,7 @@ Full invariant list: [[nxs-architecture-locks]].
    rows are untouched by archive/unarchive. See [[therapists_state]] and
    `.ai/handoff.md`.
 
-3. **2026-09-01 — Docs Sync: Correct Stale Call Sheet Status** (`ohm#3k9r7fq2`).
+4. **2026-09-01 — Docs Sync: Correct Stale Call Sheet Status** (`ohm#3k9r7fq2`).
    Documentation-only fix. `docs/state/bookings_state.md`'s "Not yet
    implemented" list claimed `app/call-sheet/page.tsx` was still an 8-line
    "Coming soon." stub — false and stale (also stale path; actual path is
@@ -130,7 +150,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `docs/state/operations_state.md` already documented. Removed the stale
    bullet; no other bullet touched. No code, schema, or migration changed.
 
-4. **2026-09-01 — Settings — 4-Tab Restructure + Capacity Stepper + Add-ons
+5. **2026-09-01 — Settings — 4-Tab Restructure + Capacity Stepper + Add-ons
    Save Button** (`ohm#9x3f7mq2`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. Two discrepancies caught by the mandatory investigate-first
@@ -142,18 +162,4 @@ Full invariant list: [[nxs-architecture-locks]].
    (General / Services & Loyalty / Promos & Security / Scheduling &
    Capacity) using the tab-state pattern from `analytics-tabs.tsx`. No RBAC
    change, no migrations. See [[settings_state]] and `.ai/handoff.md`.
-
-5. **2026-09-01 — Staff Archive + Owner-Managed Login Credentials**
-   (`ohm#uox20nff`). Plan + regression risk assessment presented and
-   approved before any code/migration was written, per the prompt's
-   mandatory gate. Mid-implementation, confirmed live that switching login
-   to username-based auth would have locked out all 8 existing staff
-   accounts (including the only Owner) — stopped and got explicit approval
-   before backfilling `username`/`auth.users.email` for those accounts
-   rather than silently building over the discrepancy. `staff.active` is
-   now the real archive-gating flag with audit columns mirroring
-   `therapists`; archive/restore pairs a DB update with a Supabase Admin
-   API `ban_duration` flip; Owner-set username+password provisioning via
-   Admin API `createUser`; new self-service password-change view. See
-   [[staff_state]] and `.ai/handoff.md` for full detail.
 

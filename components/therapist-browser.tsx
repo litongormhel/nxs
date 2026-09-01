@@ -11,6 +11,7 @@ import {
   archiveTherapist as archiveTherapistAction,
   unarchiveTherapist as unarchiveTherapistAction,
   updateTherapistName as updateTherapistNameAction,
+  toggleTherapistService as toggleTherapistServiceAction,
 } from "@/app/(staff)/therapists/actions";
 
 const DEFAULT_THERAPISTS = [
@@ -118,6 +119,8 @@ export function TherapistBrowser({
   initialAbsence = {},
   initialLeave = {},
   initialArchived = {},
+  initialServices = {},
+  serviceIds = {},
 }: {
   initialTherapists?: TherapistRecord[];
   initialDayOff?: Record<string, string[]>;
@@ -125,6 +128,8 @@ export function TherapistBrowser({
   initialAbsence?: Record<string, string[]>;
   initialLeave?: Record<string, { start: string; end: string; reason: string }>;
   initialArchived?: Record<string, { reason: string; archivedAt: string }>;
+  initialServices?: Record<string, string[]>;
+  serviceIds?: Record<string, string>;
 }) {
   const { sessionStaff } = useStaffSim();
   const router = useRouter();
@@ -151,6 +156,11 @@ export function TherapistBrowser({
     }
   );
 
+  // Maps service display name -> real DB services.id, for resolving the
+  // fixed UI labels (Combi Massage / Signature Massage / Scrub) into the
+  // FK therapist_services.service_id expects.
+  const [serviceIdMap] = useState<Record<string, string>>(() => serviceIds);
+
   const [therapistMeta, setTherapistMeta] = useState<
     Record<string, TherapistMetaRecord>
   >(() => {
@@ -167,9 +177,12 @@ export function TherapistBrowser({
           : r.name === "Josh" && !initialTherapists
           ? ["Sun"]
           : [],
-        services: restricted[r.name]
-          ? restricted[r.name].slice()
-          : ALL_THERAPIST_SERVICES.slice(),
+        services:
+          r.id in initialServices
+            ? initialServices[r.id].slice()
+            : restricted[r.name]
+            ? restricted[r.name].slice()
+            : ALL_THERAPIST_SERVICES.slice(),
         leave: initialLeave[r.id] ?? null,
         absentDates: initialAbsence[r.id] ? initialAbsence[r.id].slice() : [],
         archived: !!archivedInfo,
@@ -403,21 +416,38 @@ export function TherapistBrowser({
     showToast(`${t} · ${wd} ${turningOff ? "marked off" : "available again"}`);
   };
 
-  // Services offered toggle handler
-  const handleToggleService = (t: string, s: string) => {
+  // Services offered toggle handler — writes through to therapist_services
+  const handleToggleService = async (t: string, s: string) => {
+    const meta = therapistMeta[t];
+    if (!meta || !sessionStaff) return;
+    const offers = meta.services.includes(s);
+    const therapistId = therapistIds[t];
+    const serviceId = serviceIdMap[s];
+    if (!therapistId || !serviceId) return;
+
+    const res = await toggleTherapistServiceAction(
+      therapistId,
+      serviceId,
+      !offers,
+      sessionStaff.id
+    );
+    if (!res.ok) {
+      showToast(`Couldn't update ${t}'s services — ${res.error}`);
+      return;
+    }
+
     setTherapistMeta((prev) => {
-      const meta = prev[t];
-      if (!meta) return prev;
-      const offers = meta.services.includes(s);
+      const current = prev[t];
+      if (!current) return prev;
       const updated = offers
-        ? meta.services.filter((x) => x !== s)
-        : [...meta.services, s];
-      showToast(`${t} now ${!offers ? "offers" : "no longer offers"} ${s}`);
+        ? current.services.filter((x) => x !== s)
+        : [...current.services, s];
       return {
         ...prev,
-        [t]: { ...meta, services: updated },
+        [t]: { ...current, services: updated },
       };
     });
+    showToast(`${t} now ${!offers ? "offers" : "no longer offers"} ${s}`);
   };
 
   // Mark absent today handler — writes through to therapist_absence and
@@ -1063,6 +1093,30 @@ export function TherapistBrowser({
                         }`}
                       >
                         {d}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Services Offered Section */}
+                <div className="text-[9px] font-bold tracking-wider uppercase text-muted mt-3 mb-1.5">
+                  Services Offered
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {ALL_THERAPIST_SERVICES.map((s) => {
+                    const isOffered = meta.services.includes(s);
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => handleToggleService(t, s)}
+                        className={`py-1 px-2 rounded-md border text-[9.5px] font-bold transition-all text-center ${
+                          isOffered
+                            ? "bg-gradient-to-br from-[#3d5a29] to-[#5a7a3c] text-white border-[#3d5a29]"
+                            : "bg-surface-2 text-muted border-border hover:border-gold/40"
+                        }`}
+                      >
+                        {s}
                       </button>
                     );
                   })}

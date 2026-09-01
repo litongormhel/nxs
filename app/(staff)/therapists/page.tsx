@@ -10,6 +10,8 @@ export default async function TherapistsPage() {
     { data: dbDayOff },
     { data: dbAbsence },
     { data: dbLeave },
+    { data: dbServices },
+    { data: dbTherapistServices },
   ] = await Promise.all([
     supabase
       .from("therapists")
@@ -27,6 +29,8 @@ export default async function TherapistsPage() {
       .from("therapist_leave")
       .select("therapist_id, start_date, end_date, reason")
       .order("created_at", { ascending: false }),
+    supabase.from("services").select("id, name"),
+    supabase.from("therapist_services").select("therapist_id, service_id"),
   ]);
 
   const therapists =
@@ -84,6 +88,18 @@ export default async function TherapistsPage() {
     };
   });
 
+  const serviceIds: Record<string, string> = {};
+  (dbServices ?? []).forEach((s) => {
+    serviceIds[s.name] = s.id;
+  });
+
+  const servicesByTherapist: Record<string, string[]> = {};
+  (dbTherapistServices ?? []).forEach((row) => {
+    const service = (dbServices ?? []).find((s) => s.id === row.service_id);
+    if (!service) return;
+    (servicesByTherapist[row.therapist_id] ??= []).push(service.name);
+  });
+
   const bookings: BookingInfo[] = (dbBookings ?? []).map((b: any) => ({
     id: b.id,
     therapist: b.therapists?.name ?? "",
@@ -107,6 +123,8 @@ export default async function TherapistsPage() {
         initialAbsence={absenceByTherapist}
         initialLeave={leaveByTherapist}
         initialArchived={archivedByTherapist}
+        initialServices={servicesByTherapist}
+        serviceIds={serviceIds}
       />
     </div>
   );

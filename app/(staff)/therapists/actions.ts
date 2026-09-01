@@ -226,3 +226,30 @@ export async function toggleDayOff(
   revalidatePath("/therapists");
   return { ok: true };
 }
+
+export async function toggleTherapistService(
+  therapistId: string,
+  serviceId: string,
+  offering: boolean,
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = offering
+    ? await supabase
+        .from("therapist_services")
+        .insert({ therapist_id: therapistId, service_id: serviceId })
+    : await supabase
+        .from("therapist_services")
+        .delete()
+        .eq("therapist_id", therapistId)
+        .eq("service_id", serviceId);
+  if (error) return fail(error);
+  await logAction(
+    supabase,
+    staffId,
+    "therapist_toggle_service",
+    `therapist=${therapistId} service=${serviceId} offering=${offering}`
+  );
+  revalidatePath("/therapists");
+  return { ok: true };
+}

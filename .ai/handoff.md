@@ -5,6 +5,81 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Therapists — Services Offered RLS + Wiring — complete** (`ohm#9q4x1mwr`,
+  2026-09-01, Prompt 3 of 3, closing the "Therapist Roster — Investigate &
+  Wire" sequence started at `ohm#7m2w9dxk`). Investigation phase (no code)
+  re-confirmed live rather than trusting the prompt's snapshot, and
+  surfaced two discrepancies against the prompt's stated premise — the
+  mandatory gate was presented and explicit approval obtained on both
+  before any code/migration was written.
+  - **Discrepancy 1 — the "Services Offered toggle pills on each therapist
+    card" the prompt described did not exist in the live UI.**
+    `handleToggleService(t, s)` was genuinely local-state-only as the
+    prompt said, but it was never called anywhere in the JSX — full read
+    of the card render (status line → available slots → Weekly Day(s)
+    Off) confirmed there was no "Services Offered" section on the card at
+    all. The only place `ALL_THERAPIST_SERVICES` pills rendered was inside
+    the separate Add Therapist modal, driven by its own local
+    `addServices`/`setAddServices` state, not `handleToggleService`/
+    `meta.services`. Presented two options (build the missing card section
+    vs. wire the Add modal only vs. stop and ship RLS-only); user chose to
+    build the card section, matching the prompt's stated intent.
+  - **Discrepancy 2 — `Scrub` is a real but inactive service.** Live
+    `services`: Combi Massage (active), Signature Massage (active), Wet
+    Area (active), Scrub (`active: false`). It resolves to a real
+    `services.id` — not stale UI copy that silently drops — but the
+    service itself is deactivated. User chose to proceed as-is: keep all
+    three labels, let Scrub persist against its real (inactive) id.
+  - Confirmed live: `therapist_services` RLS had zero policies (default-
+    deny on every command); 26 rows already existed in the table
+    (pre-seeded, previously unreadable). PK `(therapist_id, service_id)`,
+    both FKs `ON DELETE CASCADE`, no check constraint — pure join table,
+    no UPDATE use case, confirmed rather than assumed.
+  - `supabase/migrations/20260901210000_therapist_services_rls.sql`: adds
+    `staff_select` (`is_staff()`), `staff_insert`/`staff_delete`
+    (`is_supervisor_or_above()`) to `therapist_services` — exact mirror of
+    `therapist_day_off`'s policy shape. No UPDATE policy.
+  - `app/(staff)/therapists/actions.ts`: new `toggleTherapistService(
+    therapistId, serviceId, offering, staffId)` — mirrors `toggleDayOff`'s
+    plain insert-on/delete-off shape exactly (no upsert/conflict handling
+    needed, same as the day-off precedent). One `action_logs` row
+    (`therapist_toggle_service`), `revalidatePath("/therapists")`.
+  - `app/(staff)/therapists/page.tsx`: now also fetches `services (id,
+    name)` and `therapist_services (therapist_id, service_id)`, builds a
+    `name → id` `serviceIds` map and a `therapist_id → service names[]`
+    `servicesByTherapist` map, and passes both as new `serviceIds`/
+    `initialServices` props — closing the same "refresh silently loses
+    state" gap already closed for day-off/absence/leave/archive (services
+    were previously seeded from a hardcoded `restricted` map + full-list
+    fallback, never from live data).
+  - `components/therapist-browser.tsx`: new `serviceIdMap` state (seeded
+    from the `serviceIds` prop); `therapistMeta[t].services` now seeded
+    from `initialServices[r.id]` when present (falls back to the old
+    `restricted`/`ALL_THERAPIST_SERVICES` behavior only for the DB-empty
+    demo path, distinguished via `r.id in initialServices` rather than
+    truthiness, so a therapist with zero real services offered doesn't
+    fall back to "offers everything"). New "Services Offered" pill section
+    added to each therapist card, directly below Weekly Day(s) Off, same
+    visual/interaction pattern. `handleToggleService` is now `async` and
+    calls `toggleTherapistServiceAction` before updating local state —
+    same async-then-local-update pattern as `handleToggleDayOff`.
+  - **Regression check**: confirmed per `docs/state/bookings_state.md`'s
+    "Known simplifications" that no booking/quick-walkin therapist
+    selection filters by `therapist_services` today, and this prompt
+    doesn't change that — making the table real doesn't newly filter
+    anything elsewhere. Explicitly out of scope and untouched: Dashboard,
+    Commission, Call Sheet, the Add Therapist modal's own service picker.
+  - Verification: `tsc --noEmit` clean. Migration applied directly to the
+    live Supabase project via `apply_migration`; `get_advisors` shows no
+    new security issues introduced (all remaining lints pre-exist this
+    change). Same pre-existing environment gap as prior prompts in this
+    sequence — no `.env.local` in this sandbox — so no live browser smoke
+    test.
+  - This closes the 3-prompt "Therapist Roster — Investigate & Wire"
+    sequence: Add, Archive/Unarchive, Edit-rename, Day Off, and now
+    Services Offered all have real Supabase persistence and RLS. See
+    [[therapists_state]].
+
 - **Therapists — Add + Edit (Rename) RLS + Wiring — complete**
   (`ohm#5v8n3ptc`, 2026-09-01, Prompt 2 of 3 in the "Therapist Roster —
   Investigate & Wire" sequence). Investigation phase (no code) re-confirmed
