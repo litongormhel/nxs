@@ -58,6 +58,7 @@ function fmtTime(t: string): string {
 export function SettingsBrowser({
   initialServices,
   initialPromos,
+  promosError,
   initialAddons,
   initialWeekendSlots,
   initialLockersCount,
@@ -67,6 +68,7 @@ export function SettingsBrowser({
 }: {
   initialServices: Service[];
   initialPromos: Promo[];
+  promosError?: boolean;
   initialAddons: Addon[];
   initialWeekendSlots: WeekendSlot[];
   initialLockersCount: number;
@@ -84,8 +86,7 @@ export function SettingsBrowser({
 
   const canEditServices =
     currentRole === "Supervisor" || currentRole === "Owner";
-  const canEditPromos =
-    currentRole === "Supervisor" || currentRole === "Owner";
+  const canEditPromos = currentRole === "Owner";
   const canEditCatalog =
     currentRole === "Supervisor" || currentRole === "Owner";
   const canEditLoyaltyFormula = currentRole === "Owner";
@@ -101,17 +102,8 @@ export function SettingsBrowser({
     ];
   });
 
-  const [promos, setPromos] = useState<Promo[]>(() => {
-    if (initialPromos && initialPromos.length > 0) return initialPromos;
-    return [
-      { id: "amba2", label: "AMBA · NXSKD100", discount: 100 },
-      { id: "birthmonth", label: "Birthmonth", discount: 200 },
-      { id: "birthmonth_exact", label: "Birthmonth Exact Date", discount: 500 },
-      { id: "squad3", label: "Squad Goals 3pax", discount: 150 },
-      { id: "squad4", label: "Squad Goals 4pax", discount: 200 },
-      { id: "earlybird", label: "Early Bird 4/5:30PM", discount: 200 },
-    ];
-  });
+  const [promos, setPromos] = useState<Promo[]>(initialPromos ?? []);
+  const [promoDrafts, setPromoDrafts] = useState<Record<string, string>>({});
 
   const [weekendSlots, setWeekendSlots] = useState<WeekendSlot[]>(
     initialWeekendSlots ?? []
@@ -243,19 +235,35 @@ export function SettingsBrowser({
   };
 
   // Handlers for Promos
-  const handleUpdatePromoDiscount = async (index: number, val: string) => {
-    const num = parseInt(val, 10) || 0;
-    const promo = promos[index];
-    const updated = [...promos];
-    updated[index] = { ...updated[index], discount: num };
-    setPromos(updated);
+  const handlePromoDraftChange = (promoId: string, val: string) => {
+    setPromoDrafts((prev) => ({ ...prev, [promoId]: val }));
+  };
+
+  const handleSavePromoDiscount = async (promo: Promo) => {
+    const draft = promoDrafts[promo.id];
+    if (draft === undefined) return;
+    const num = parseInt(draft, 10) || 0;
     const res = await updatePromoDiscount(promo.id, num, selectedStaffId);
     if (!res.ok) {
       showToast(`Failed to update ${promo.label} discount: ${res.error}`);
       return;
     }
+    setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, discount: num } : p)));
+    setPromoDrafts((prev) => {
+      const next = { ...prev };
+      delete next[promo.id];
+      return next;
+    });
     showToast(`${promo.label} discount updated to -₱${num}`);
     router.refresh();
+  };
+
+  const handleCancelPromoDraft = (promoId: string) => {
+    setPromoDrafts((prev) => {
+      const next = { ...prev };
+      delete next[promoId];
+      return next;
+    });
   };
 
   const handleAddPromo = () => {
@@ -632,39 +640,70 @@ export function SettingsBrowser({
         <div className="text-[11px] text-muted mb-2.5">
           {canEditPromos
             ? "You can add, edit, or delete promos in this role."
-            : "Read-only for Front Desk. Only Supervisor or Owner roles can edit."}
+            : "Read-only. Only the Owner role can edit promos."}
         </div>
-        <div className="space-y-2">
-          {promos.map((p, idx) => (
-            <div
-              key={p.id || idx}
-              className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3"
-            >
-              <div className="flex-1 text-[12px] font-bold text-foreground">
-                {p.label}
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-[11px] text-muted">-₱</span>
-                <input
-                  type="number"
-                  disabled={!canEditPromos}
-                  defaultValue={p.discount}
-                  key={`${p.id}-discount-${p.discount}`}
-                  onBlur={(e) => handleUpdatePromoDiscount(idx, e.target.value)}
-                  className="w-[70px] rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none disabled:opacity-50 focus:border-gold"
-                />
-              </div>
-              {canEditPromos && (
-                <button
-                  onClick={() => handleDeletePromo(idx)}
-                  className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-accent-red hover:brightness-125"
+        {promosError ? (
+          <div className="rounded-xl border border-[#5e3c3c] bg-surface px-4 py-3 text-[11.5px] text-accent-red">
+            Couldn&apos;t load promos. Try refreshing the page.
+          </div>
+        ) : promos.length === 0 ? (
+          <div className="rounded-xl border border-border bg-surface px-4 py-3 text-[11.5px] text-muted">
+            {canEditPromos
+              ? "No promos configured yet."
+              : "No promos configured."}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {promos.map((p, idx) => {
+              const draft = promoDrafts[p.id];
+              const isDirty = draft !== undefined && parseInt(draft, 10) !== p.discount;
+              return (
+                <div
+                  key={p.id || idx}
+                  className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 flex-wrap"
                 >
-                  Delete
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
+                  <div className="flex-1 text-[12px] font-bold text-foreground">
+                    {p.label}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] text-muted">-₱</span>
+                    <input
+                      type="number"
+                      disabled={!canEditPromos}
+                      value={draft ?? String(p.discount)}
+                      onChange={(e) => handlePromoDraftChange(p.id, e.target.value)}
+                      className="w-[70px] rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none disabled:opacity-50 focus:border-gold"
+                    />
+                  </div>
+                  {canEditPromos && isDirty && (
+                    <>
+                      <button
+                        onClick={() => handleCancelPromoDraft(p.id)}
+                        className="rounded-lg border border-border px-2 py-1 text-[10px] font-bold text-muted hover:text-foreground"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => handleSavePromoDiscount(p)}
+                        className="rounded-lg bg-gold px-2 py-1 text-[10px] font-bold text-black hover:brightness-110"
+                      >
+                        Save
+                      </button>
+                    </>
+                  )}
+                  {canEditPromos && (
+                    <button
+                      onClick={() => handleDeletePromo(idx)}
+                      className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-accent-red hover:brightness-125"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* SECTION: Weekend Fixed Time Slots */}

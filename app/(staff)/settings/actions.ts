@@ -22,6 +22,26 @@ function fail(error: unknown): ActionResult {
   return { ok: false, error: error instanceof Error ? error.message : String(error) };
 }
 
+async function requireOwner(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<ActionResult | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { data: staff, error } = await supabase
+    .from("staff")
+    .select("position")
+    .eq("user_id", user.id)
+    .single();
+  if (error) return fail(error);
+  if (staff?.position !== "Owner") {
+    return { ok: false, error: "Owner only." };
+  }
+  return null;
+}
+
 // ---------- Services ----------
 
 export async function updateServicePrice(
@@ -94,6 +114,8 @@ export async function addPromo(
   staffId: string
 ): Promise<ActionResult & { id?: string }> {
   const supabase = await createClient();
+  const ownerCheck = await requireOwner(supabase);
+  if (ownerCheck) return ownerCheck;
   const { data, error } = await supabase
     .from("promos")
     .insert({ label, discount })
@@ -111,6 +133,8 @@ export async function updatePromoDiscount(
   staffId: string
 ): Promise<ActionResult> {
   const supabase = await createClient();
+  const ownerCheck = await requireOwner(supabase);
+  if (ownerCheck) return ownerCheck;
   const { error } = await supabase
     .from("promos")
     .update({ discount })
@@ -123,6 +147,8 @@ export async function updatePromoDiscount(
 
 export async function deletePromo(promoId: string, staffId: string): Promise<ActionResult> {
   const supabase = await createClient();
+  const ownerCheck = await requireOwner(supabase);
+  if (ownerCheck) return ownerCheck;
   const { error } = await supabase
     .from("promos")
     .update({ active: false })

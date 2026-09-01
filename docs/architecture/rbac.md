@@ -31,6 +31,19 @@ loginable.
 | RLS policy scoping | Every `public` table's RLS is keyed off `auth.uid()` via `current_staff_position()` (`SECURITY DEFINER`) and the `is_staff()`/`is_supervisor_or_above()`/`is_owner()` helpers — no table has an open `USING (true)` policy left |
 | Role-based route restriction | Not at the `proxy.ts` layer — only session presence is checked there. Role gating (Owner-only pages) is enforced at both the app level (`lib/nav.ts`'s `ownerOnly`, per-page content guards) and the DB level (RLS), so a non-Owner is blocked twice over even without proxy-level role checks |
 
+## Per-feature permission matrix
+
+No per-feature role matrix existed in this doc before `ohm#3n7x9kwp`
+(2026-09-01) — the table above documents enforcement *mechanisms*, not
+which role can do what on a given feature. This table starts that
+convention; add a row here whenever a prompt is the first to pin down a
+feature's role gate, rather than assuming a prior convention that doesn't
+exist yet.
+
+| Feature | Front Desk (Receptionist) | Supervisor | Owner |
+|---|---|---|---|
+| Promo Codes — create/edit/delete (`ohm#3n7x9kwp`, 2026-09-01) | Read-only | Read-only | Full (UI + `requireOwner()` app check + `is_owner()` RLS on `promos` INSERT/UPDATE) |
+
 ## History note
 
 Staff auth was deliberately built last in the roadmap so the core

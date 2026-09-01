@@ -7,7 +7,7 @@ export default async function SettingsPage() {
 
   const [
     { data: services },
-    { data: promos },
+    { data: promos, error: promosError },
     { data: addons },
     { data: weekendSlots },
     { count: lockersCount },
@@ -62,6 +62,7 @@ export default async function SettingsPage() {
       <SettingsBrowser
         initialServices={services ?? []}
         initialPromos={promos ?? []}
+        promosError={!!promosError}
         initialAddons={addons ?? []}
         initialWeekendSlots={(weekendSlots ?? [])
           .map((s) => ({

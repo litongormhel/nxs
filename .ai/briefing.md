@@ -82,7 +82,18 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-01 — Member QR — Reception Scan + Prefill Into Log Visit /
+1. **2026-09-01 — Promo Codes — Remove Hardcoded Fallback, Owner-Only
+   Enforcement, Explicit Save** (`ohm#3n7x9kwp`). Plan + regression risk
+   assessment presented and approved before any code/migration was
+   written, per the prompt's mandatory gate. Hardcoded fallback promos
+   array removed (explicit empty-vs-error UI instead); promo create/edit/
+   delete restricted to Owner only at both the UI gate and real
+   server-side + RLS enforcement (was Supervisor-or-above at all three
+   layers); discount edits now use per-row draft state with explicit
+   Save/Cancel instead of auto-save-on-blur. See [[settings_state]] and
+   `.ai/handoff.md` for full detail.
+
+2. **2026-09-01 — Member QR — Reception Scan + Prefill Into Log Visit /
    Quick Walk-in (7B-2 of 2)** (`ohm#7q4d8vnw`). Plan + regression risk
    assessment presented and approved before any code was written, per the
    prompt's mandatory gate. Phase 7B (Member QR, 7B-1 + 7B-2) is now
@@ -92,7 +103,7 @@ Full invariant list: [[nxs-architecture-locks]].
    client-locked — no new write logic, no changes to points/ledger. See
    [[client_portal_state]] and `.ai/handoff.md` for full detail.
 
-2. **2026-09-01 — Member QR — Per-Account Token + Client-Facing QR Display
+3. **2026-09-01 — Member QR — Per-Account Token + Client-Facing QR Display
    (7B-1 of 2)** (`ohm#5t9k2mxr`). Plan + regression risk assessment
    presented and approved before any code/migration was written, per the
    prompt's mandatory gate. Discrepancy confirmed before planning:
@@ -100,14 +111,14 @@ Full invariant list: [[nxs-architecture-locks]].
    only generates/displays the QR, no scan/lookup logic (that's 7B-2). See
    [[client_portal_state]] and `.ai/handoff.md` for full detail.
 
-3. **2026-09-01 — Loyalty Points Formula — Wire Into Live Points-Award Flow
+4. **2026-09-01 — Loyalty Points Formula — Wire Into Live Points-Award Flow
    (Part 2 of 2)** (`ohm#2r8w5nfz`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. Points are now formula-driven end-to-end. See
    [[points_ledger_state]], [[settings_state]], and `.ai/handoff.md` for
    full detail.
 
-4. **2026-09-01 — Loyalty Points Formula — Settings Schema + Configuration
+5. **2026-09-01 — Loyalty Points Formula — Settings Schema + Configuration
    UI (Part 1 of 2)** (`ohm#9k3m7qxc`). Plan + regression risk assessment
    presented and approved before any code/migration was written, per the
    prompt's mandatory gate.
@@ -147,12 +158,3 @@ Full invariant list: [[nxs-architecture-locks]].
      tasks; verified via the live-schema/live-data checks, `get_advisors`,
      and `tsc`/`eslint`. See [[points_ledger_state]] and
      [[client_portal_state]].
-
-5. **2026-09-01 — Points EARN/REDEEM Guard — Require Client Portal
-   Account** (`ohm#4x8k2p9d`). Plan + regression risk assessment presented
-   and approved before any code/migration was written, per the prompt's
-   mandatory gate. New `BEFORE INSERT` trigger blocks EARN/REDEEM ledger
-   rows for clients with no `client_portal_accounts` row; app-level
-   pre-flight gating added to `client-browser.tsx`/`booking-browser.tsx`/
-   `log-visit-modal.tsx`. See [[points_ledger_state]] and
-   [[client_portal_state]] for full detail.

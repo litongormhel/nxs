@@ -5,6 +5,62 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Promo Codes — Remove Hardcoded Fallback, Owner-Only Enforcement,
+  Explicit Save — complete** (`ohm#3n7x9kwp`, 2026-09-01). Plan + regression
+  risk assessment presented and approved before any code/migration was
+  written, per the prompt's mandatory gate.
+  - **Discrepancies confirmed live before coding, not assumed**: hardcoded
+    fallback array in `settings-browser.tsx` masked "zero rows" vs "query
+    failed"; `addPromo`/`updatePromoDiscount`/`deletePromo` had zero
+    app-level role check; live RLS on `promos` (checked directly against
+    project `zqwiqrvqyinacjozubtc`, not inferred from migration history)
+    was `is_supervisor_or_above()` for INSERT/UPDATE — so Supervisors could
+    genuinely write promos at the DB layer, not just via a hidden UI button.
+  - **Correction to the prompt's assumed precedent**: the prompt pointed at
+    `updateLoyaltyFormula` as an "established pattern" for an app-level
+    Owner check to reuse — grepped every `actions.ts` in the app and found
+    no app-level role check anywhere; `updateLoyaltyFormula` relies solely
+    on `app_settings_update`'s `is_owner()` RLS policy. No such pattern
+    existed to reuse, so this prompt establishes the first one
+    (`requireOwner()` in `app/(staff)/settings/actions.ts`).
+  - **Fallback removed**: `app/(staff)/settings/page.tsx` now passes
+    `promosError` (from the promos query's discarded `error`) alongside
+    `initialPromos`. `settings-browser.tsx` renders a distinct "couldn't
+    load" message vs. "no promos configured yet" instead of ever falling
+    back to the old hardcoded `AMBA`/`Birthmonth`/`Squad Goals`/`Early Bird`
+    array. Services' equivalent fallback array is untouched (explicitly
+    out of scope).
+  - **Owner-only, both layers**: UI `canEditPromos` narrowed from
+    `Supervisor || Owner` to `Owner` only. New `requireOwner()` helper
+    resolves the caller's role from `supabase.auth.getUser()` →
+    `staff.user_id` → `staff.position` — deliberately ignores the
+    client-supplied `staffId` parameter for the authorization decision
+    (that parameter is still used only for `action_logs` attribution) so
+    the check can't be spoofed by a tampered client call. Called at the top
+    of all three promo mutations before any DB call.
+  - **RLS tightened**, not left at the old tier: new migration
+    `20260901160000_promos_owner_only_rls.sql` replaces `staff_insert`/
+    `staff_update` on `promos` from `is_supervisor_or_above()` to
+    `is_owner()`, matching the precedent `app_settings_update` already set
+    for Owner-only config. `staff_select` (`is_staff()`) is unchanged — read
+    access for all roles was not part of this prompt's scope. Applied live
+    via `apply_migration`.
+  - **Explicit Save**: replaced per-field auto-save-on-blur with per-row
+    draft state (`promoDrafts`) — each promo row has its own dirty flag
+    and Save/Cancel pair, since each row edits one independent field
+    (discount), unlike the loyalty formula's single-object draft/save
+    pattern it's modeled after. Add and Delete remain immediate, per scope.
+  - **Regression accepted, not a side effect**: Supervisors could
+    previously add/edit/delete promos; they no longer can, confirmed
+    intended before coding.
+  - `npx tsc --noEmit` and `eslint` both clean on all changed files.
+    `get_advisors` showed no new findings tied to `promos` after applying
+    the migration.
+  - **Not verified live in-browser this session** — no `.env.local`
+    present, same recurring credentials/env blocker as recent prior tasks.
+    Verified via the live-schema/live-RLS checks, `get_advisors`, and
+    `tsc`/`eslint`. See [[settings_state]] and `docs/architecture/rbac.md`.
+
 - **Member QR — Reception Scan + Prefill Into Log Visit / Quick Walk-in
   (7B-2 of 2) — Phase 7B (Member QR) now complete end-to-end**
   (`ohm#7q4d8vnw`, 2026-09-01). Plan + regression risk assessment presented

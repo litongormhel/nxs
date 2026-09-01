@@ -57,9 +57,24 @@ just local React state.
   → `addService`. Delete → `deleteService` (**soft delete**, sets
   `active = false`; Supervisor/Owner only). Numeric inputs commit on blur,
   not per keystroke.
-- **Promo Codes**: editable discount values (locked for Front Desk) →
-  `updatePromoDiscount`. `+ Add Promo` → `addPromo`. Delete →
-  `deletePromo` (**soft delete**; Supervisor/Owner only).
+- **Promo Codes** (`ohm#3n7x9kwp`, 2026-09-01 — narrowed from
+  Supervisor/Owner to **Owner-only**, at all three layers: UI
+  (`canEditPromos`), server action (`requireOwner()` in
+  `app/(staff)/settings/actions.ts`, resolves role from
+  `auth.getUser() → staff.user_id → staff.position`, ignores the
+  client-supplied `staffId` param for the auth decision), and RLS
+  (`staff_insert`/`staff_update` on `promos` now `is_owner()`, was
+  `is_supervisor_or_above()` since 6C-4). `staff_select` stays `is_staff()`
+  — read access unchanged. No hardcoded fallback promos array anymore —
+  `app/(staff)/settings/page.tsx` passes `promosError` alongside
+  `initialPromos`; the UI shows a distinct "couldn't load" state vs. "no
+  promos configured yet" instead of ever substituting stale local data.
+  Discount edits (`updatePromoDiscount`) use per-row draft state with
+  explicit Save/Cancel (was auto-save-on-blur) — each row has its own
+  dirty flag, since promos are an independent-field list rather than one
+  settings object (contrast with the Loyalty Formula's single-object
+  draft/save below). `+ Add Promo` → `addPromo` and Delete → `deletePromo`
+  (**soft delete**) remain immediate, unchanged.
 - **Weekend Fixed Time Slots**: list with 12-hour formatting, backed by a
   new `weekend_slots` table (`id`, `slot_time`, `created_at`) — nothing in
   the schema modeled this before `ohm#5x1p8m3v`. `+ Add Slot` →
@@ -109,8 +124,18 @@ As of Staff Auth 6C-4 (`ohm#9d2k6y4p`, 2026-08-29), the gap below is closed:
 `public_*` policy on `services`/`promos`/`addons`/`rooms`/`lockers`/
 `weekend_slots` with identity-keyed policies reusing 6C-2's role helpers
 (`is_staff()`, `is_supervisor_or_above()`). SELECT requires `is_staff()` on
-all six tables; INSERT/UPDATE require `is_supervisor_or_above()` (no
+all six tables; INSERT/UPDATE required `is_supervisor_or_above()` (no
 distinction beyond that blanket rule — same for every table/operation).
+
+**Promos is now the one exception to that blanket rule**
+(`ohm#3n7x9kwp`, 2026-09-01,
+`supabase/migrations/20260901160000_promos_owner_only_rls.sql`):
+`staff_insert`/`staff_update` on `promos` tightened from
+`is_supervisor_or_above()` to `is_owner()`, matching the Owner-only tier
+`app_settings_update` already used. `staff_select` on `promos` is
+unchanged (`is_staff()`). Services/Add-ons/Rooms/Lockers/Weekend Slots
+still use `is_supervisor_or_above()` for INSERT/UPDATE, untouched by this
+prompt.
 `weekend_slots` additionally has a real `staff_delete` policy
 (`is_supervisor_or_above()`), the only hard-DELETE case of the six —
 confirmed via a live FK scan that nothing references `weekend_slots`.
