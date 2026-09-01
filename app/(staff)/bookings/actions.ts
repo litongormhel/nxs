@@ -3,8 +3,45 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/types/database";
+import { computeLoyaltyPoints, WET_AREA_POINTS, type LoyaltyFormulaMode } from "@/lib/loyalty";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
+
+/**
+ * Resolves the EARN points for a completed visit: Wet Area always gets its
+ * fixed WET_AREA_POINTS, bypassing the formula entirely. Otherwise reads the
+ * owner-configured app_settings formula (single read per call site — each
+ * booking/walk-in has exactly one service line under the current schema, so
+ * this is never called more than once per visit) and runs
+ * computeLoyaltyPoints(). Returns null when the formula isn't configured yet
+ * — callers must skip the ledger insert on null, not substitute a fallback.
+ */
+async function resolveEarnedPoints(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  serviceName: string,
+  servicePaidAmount: number,
+  fullPrice: number,
+  basePoints: number
+): Promise<number | null> {
+  if (serviceName === "Wet Area") return WET_AREA_POINTS;
+
+  const { data: settings } = await supabase
+    .from("app_settings")
+    .select("loyalty_formula_mode, peso_per_point")
+    .eq("id", true)
+    .single();
+
+  const mode = (settings?.loyalty_formula_mode ?? null) as LoyaltyFormulaMode | null;
+  if (!mode) return null;
+
+  return computeLoyaltyPoints(
+    mode,
+    servicePaidAmount,
+    fullPrice,
+    basePoints,
+    settings?.peso_per_point ?? null
+  );
+}
 
 export type CreateBookingInput = {
   clientId: string | null;
@@ -90,13 +127,15 @@ export type QuickWalkinInput = {
   manualDiscountValue: number | null;
   addonIds: string[];
   amount: number;
+  /** Service-only paid amount (post-promo/discount, excluding add-ons) — the input to the loyalty formula, distinct from `amount` which includes add-ons and is what's recorded on the sale. */
+  servicePaidAmount: number;
   paymentMethod: "Cash" | "GCash";
   paymentRef: string | null;
   staffId: string;
 };
 
 export type QuickWalkinResult =
-  | { ok: true; bookingId: string }
+  | { ok: true; bookingId: string; pointsAwarded: number | null }
   | { ok: false; error: string; field?: "room" | "therapist" | "locker" };
 
 const UNIQUE_VIOLATION = "23505";
@@ -105,6 +144,25 @@ export async function quickWalkin(
   input: QuickWalkinInput
 ): Promise<QuickWalkinResult> {
   const supabase = await createClient();
+
+  let pointsAwarded: number | null = null;
+  if (input.clientId) {
+    const { data: service, error: svcErr } = await supabase
+      .from("services")
+      .select("name, price, points_earned")
+      .eq("id", input.serviceId)
+      .single();
+    if (svcErr || !service) {
+      return { ok: false, error: svcErr?.message ?? "Service not found." };
+    }
+    pointsAwarded = await resolveEarnedPoints(
+      supabase,
+      service.name,
+      input.servicePaidAmount,
+      service.price,
+      service.points_earned
+    );
+  }
 
   const { data, error } = await supabase.rpc("quick_walkin", {
     p_client_id: input.clientId,
@@ -123,6 +181,7 @@ export async function quickWalkin(
     p_payment_method: input.paymentMethod,
     p_payment_ref: input.paymentRef,
     p_staff_id: input.staffId,
+    p_points_earned: pointsAwarded,
   });
 
   if (error) {
@@ -170,7 +229,7 @@ export async function quickWalkin(
   revalidatePath("/bookings");
   revalidatePath("/dashboard");
 
-  return { ok: true, bookingId };
+  return { ok: true, bookingId, pointsAwarded };
 }
 
 export async function updateBookingStatus(
@@ -292,6 +351,8 @@ export type LogVisitBookingInput = {
   manualDiscountValue: number | null;
   addonIds: string[];
   amount: number;
+  /** Service-only paid amount (post-promo/discount, excluding add-ons) — the input to the loyalty formula, distinct from `amount` which includes add-ons and is what's recorded on the sale. */
+  servicePaidAmount: number;
   paymentMethod: "Cash" | "GCash" | "Card" | "Points";
   paymentRef: string | null;
   isRedemption: boolean;
@@ -301,7 +362,7 @@ export type LogVisitBookingInput = {
 };
 
 export type LogVisitBookingResult =
-  | { ok: true; saleId: string | null; ledgerId: string | null }
+  | { ok: true; saleId: string | null; ledgerId: string | null; pointsAwarded: number | null }
   | { ok: false; error: string; field?: "room" | "therapist" | "locker" };
 
 export async function logVisitBooking(
@@ -325,6 +386,7 @@ export async function logVisitBooking(
       manualDiscountValue: input.manualDiscountValue,
       addonIds: input.addonIds,
       amount: input.amount,
+      servicePaidAmount: input.servicePaidAmount,
       paymentMethod: input.paymentMethod === "GCash" ? "GCash" : "Cash",
       paymentRef: input.paymentRef,
       staffId: input.staffId,
@@ -332,19 +394,29 @@ export async function logVisitBooking(
     if (!res.ok) {
       return { ok: false, error: res.error, field: res.field };
     }
-    return { ok: true, saleId: null, ledgerId: null };
+    return { ok: true, saleId: null, ledgerId: null, pointsAwarded: res.pointsAwarded };
   }
 
   // 1. Fetch service info
   const { data: service, error: svcErr } = await supabase
     .from("services")
-    .select("name, points_earned")
+    .select("name, price, points_earned")
     .eq("id", input.serviceId)
     .single();
 
   if (svcErr || !service) {
     return { ok: false, error: svcErr?.message ?? "Service not found." };
   }
+
+  const earnedPoints = input.isRedemption
+    ? null
+    : await resolveEarnedPoints(
+        supabase,
+        service.name,
+        input.servicePaidAmount,
+        service.price,
+        service.points_earned
+      );
 
   // 2. Update booking status to Completed
   const { error: bookingErr } = await supabase
@@ -405,9 +477,13 @@ export async function logVisitBooking(
   }
 
   // 5. Insert Points Transaction (for registered clients)
+  // EARN with earnedPoints === null means the loyalty formula isn't
+  // configured yet — the ledger insert is skipped entirely (no fabricated
+  // zero-point row); the visit still completes, and this is flagged in the
+  // action_logs entry below instead of a silent skip.
   let ledgerId: string | null = null;
-  if (input.clientId) {
-    const pointsDelta = input.isRedemption ? -100 : service.points_earned;
+  if (input.clientId && (input.isRedemption || earnedPoints !== null)) {
+    const pointsDelta = input.isRedemption ? -100 : (earnedPoints as number);
     const entryType = input.isRedemption ? "REDEEM" : "EARN";
     const notes = input.isRedemption
       ? `Redemption: ${service.name}${input.upgradeTo ? ` → ${input.upgradeTo} (upgrade)` : ""}`
@@ -458,10 +534,14 @@ export async function logVisitBooking(
   }
 
   // 7. Insert Action Log
+  const pointsLogNote =
+    input.clientId && !input.isRedemption
+      ? ` points_awarded=${earnedPoints === null ? "NONE:formula_not_configured" : earnedPoints}`
+      : "";
   await supabase.from("action_logs").insert({
     staff_id: input.staffId,
     action: "log_visit",
-    detail: `client=${input.clientId ?? input.guestLabel} service=${service.name} amount=${input.amount} sale_id=${saleId} booking_id=${input.bookingId}`,
+    detail: `client=${input.clientId ?? input.guestLabel} service=${service.name} amount=${input.amount} sale_id=${saleId} booking_id=${input.bookingId}${pointsLogNote}`,
   });
 
   revalidatePath("/bookings");
@@ -470,5 +550,5 @@ export async function logVisitBooking(
   revalidatePath("/lockers");
   revalidatePath("/call-sheet");
 
-  return { ok: true, saleId, ledgerId };
+  return { ok: true, saleId, ledgerId, pointsAwarded: input.isRedemption ? null : earnedPoints };
 }

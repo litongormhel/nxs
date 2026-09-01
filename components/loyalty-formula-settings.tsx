@@ -3,9 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateLoyaltyFormula } from "@/app/(staff)/settings/actions";
-import { computeLoyaltyPoints, type LoyaltyFormulaMode } from "@/lib/loyalty";
-
-const WET_AREA_POINTS = 3;
+import { computeLoyaltyPoints, WET_AREA_POINTS, type LoyaltyFormulaMode } from "@/lib/loyalty";
 
 export type LoyaltyPreviewService = {
   id: string;

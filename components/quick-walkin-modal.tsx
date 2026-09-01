@@ -101,6 +101,7 @@ export function QuickWalkinModal({
   const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [pointsWarning, setPointsWarning] = useState<string | null>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
@@ -197,6 +198,20 @@ export function QuickWalkinModal({
     return value + addonsTotal;
   }, [selectedService, selectedPromo, manualDiscountOn, discountType, discountValue, addonIds, addons]);
 
+  // Service-only paid amount (post-promo/discount, excluding add-ons) — the
+  // input to the loyalty formula. Distinct from `amount`, which is what's
+  // recorded on the sale and includes add-ons.
+  const servicePaidAmount = useMemo(() => {
+    const base = selectedService?.price ?? 0;
+    if (selectedPromo) return Math.max(base - selectedPromo.discount, 0);
+    if (manualDiscountOn) {
+      return discountType === "pct"
+        ? Math.max(Math.round(base * (1 - discountValue / 100)), 0)
+        : Math.max(base - discountValue, 0);
+    }
+    return base;
+  }, [selectedService, selectedPromo, manualDiscountOn, discountType, discountValue]);
+
   function toggleAddon(id: string) {
     setAddonIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
@@ -237,6 +252,7 @@ export function QuickWalkinModal({
         manualDiscountValue: manualDiscountOn ? discountValue : null,
         addonIds,
         amount,
+        servicePaidAmount,
         paymentMethod,
         paymentRef: paymentMethod === "GCash" ? gcashRef.trim() || null : null,
         staffId,
@@ -247,8 +263,36 @@ export function QuickWalkinModal({
         return;
       }
 
+      if (clientId && result.pointsAwarded === null) {
+        setPointsWarning(
+          "Walk-in logged, pero WALANG POINTS na-award — hindi pa naka-configure ang loyalty formula sa Settings."
+        );
+        return;
+      }
+
       onCreated();
     });
+  }
+
+  if (pointsWarning) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="w-full max-w-sm rounded-xl border border-[#a97e2e] bg-surface p-6 shadow-2xl space-y-4">
+          <h2 className="text-base font-semibold text-accent-gold">⚠ Points Not Awarded</h2>
+          <p className="text-sm text-foreground">{pointsWarning}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setPointsWarning(null);
+              onCreated();
+            }}
+            className="w-full rounded-md border border-gold bg-gold px-4 py-2.5 text-sm font-semibold text-black hover:brightness-105"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

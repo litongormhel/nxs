@@ -115,6 +115,7 @@ export function LogVisitModal({
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [pointsWarning, setPointsWarning] = useState<string | null>(null);
 
   // Fetch open bookings and occupied lockers on mount
   useEffect(() => {
@@ -267,6 +268,32 @@ export function LogVisitModal({
     addons,
   ]);
 
+  // Service-only paid amount (post-promo/discount, excluding add-ons) — the
+  // input to the loyalty formula. Distinct from computedAmount, which is
+  // what's recorded on the sale and includes add-ons.
+  const servicePaidAmount = useMemo(() => {
+    if (isRedemption && !isUpgraded) return 0;
+    if (isRedemption && isUpgraded) return upgradeCash;
+
+    const basePrice = selectedService?.price ?? 0;
+    if (selectedPromo) return Math.max(basePrice - selectedPromo.discount, 0);
+    if (manualDiscountOn) {
+      return discountType === "pct"
+        ? Math.max(Math.round(basePrice * (1 - discountValue / 100)), 0)
+        : Math.max(basePrice - discountValue, 0);
+    }
+    return basePrice;
+  }, [
+    isRedemption,
+    isUpgraded,
+    upgradeCash,
+    selectedService,
+    selectedPromo,
+    manualDiscountOn,
+    discountType,
+    discountValue,
+  ]);
+
   const canEarnRedeem = !clientId || !!selectedClient?.has_portal_account;
 
   const canSubmit =
@@ -309,6 +336,7 @@ export function LogVisitModal({
         manualDiscountValue: manualDiscountOn ? discountValue : null,
         addonIds,
         amount: computedAmount,
+        servicePaidAmount,
         paymentMethod,
         paymentRef: paymentMethod === "GCash" ? gcashRef.trim() || null : null,
         isRedemption,
@@ -322,8 +350,36 @@ export function LogVisitModal({
         return;
       }
 
+      if (clientId && !isRedemption && result.pointsAwarded === null) {
+        setPointsWarning(
+          "Visit logged, pero WALANG POINTS na-award — hindi pa naka-configure ang loyalty formula sa Settings."
+        );
+        return;
+      }
+
       onLogged();
     });
+  }
+
+  if (pointsWarning) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="w-full max-w-sm rounded-xl border border-[#a97e2e] bg-surface p-6 shadow-2xl space-y-4">
+          <h2 className="text-base font-semibold text-accent-gold">⚠ Points Not Awarded</h2>
+          <p className="text-sm text-foreground">{pointsWarning}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setPointsWarning(null);
+              onLogged();
+            }}
+            className="w-full rounded-md border border-gold bg-gold px-4 py-2.5 text-sm font-semibold text-black hover:brightness-105"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -162,8 +162,9 @@ boolean flag rather than shoehorned into an existing catalog table.
 Part 1 of 2)
 
 Adds owner-configurable loyalty formula fields to the same `app_settings`
-singleton above. **Not wired into any live points-award path** — that is
-Part 2, a separate follow-up prompt, not started.
+singleton above. **Wired into the live points-award path as of Part 2
+(`ohm#2r8w5nfz`, 2026-09-01)** — see [[points_ledger_state]] for the
+wiring detail.
 
 - `app_settings.loyalty_formula_mode` (text, nullable, `check (in
   ('uniform','proportional'))`) and `app_settings.peso_per_point` (numeric,

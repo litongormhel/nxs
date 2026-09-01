@@ -5,6 +5,90 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Loyalty Points Formula — Wire Into Live Points-Award Flow (Part 2 of
+  2) — complete** (`ohm#2r8w5nfz`, 2026-09-01). Plan + regression risk
+  assessment presented and approved before any code was written, per the
+  prompt's mandatory gate. **Loyalty points are now fully live
+  end-to-end** — no longer computed-but-unused.
+  - **Precondition check (mandatory before planning)**: confirmed live
+    against project `zqwiqrvqyinacjozubtc` that `app_settings.loyalty_formula_mode`/
+    `peso_per_point` exist and `computeLoyaltyPoints()` is present in
+    `lib/loyalty.ts`, both landed by Part 1 as documented.
+  - **Three EARN write paths identified**, one left untouched: `log_visit()`
+    SQL RPC (baseline migration) is **not called by any UI component**
+    (grepped every `components/*` file) — left as dead code, out of scope,
+    matching the "do not scan the wider booking flow" instruction.
+    `logVisitBooking()` (`app/(staff)/bookings/actions.ts`, linked-booking
+    completion) and `quick_walkin()` SQL RPC (walk-ins with no linked
+    booking, also invoked internally by `logVisitBooking()` when
+    `bookingId` is null) are the two live paths — both wired.
+  - **Points computed once in TypeScript, not duplicated in SQL**: new
+    `resolveEarnedPoints()` helper (`app/(staff)/bookings/actions.ts`) —
+    Wet Area (`service.name === "Wet Area"`, same check already used
+    elsewhere in this codebase) always returns the fixed `WET_AREA_POINTS`
+    (3, now exported from `lib/loyalty.ts`), bypassing the formula
+    entirely; otherwise does a single `app_settings` read (mode +
+    peso_per_point) and calls `computeLoyaltyPoints()`. Returns `null` when
+    `loyalty_formula_mode IS NULL` — callers skip the ledger insert on
+    `null`, never substitute a fallback. Only one service line exists per
+    booking/walk-in under the current schema, so "single read, don't
+    re-query per line item" is naturally satisfied.
+  - **`quick_walkin()` signature changed** (migration
+    `supabase/migrations/20260901140000_quick_walkin_points_param.sql`,
+    applied live after approval): dropped and recreated with a new
+    `p_points_earned integer default null` parameter replacing its
+    internal `services.points_earned` lookup for the EARN case; still
+    looks up the service name for notes/logging. `p_client_id is not null
+    and p_points_earned is not null` gates the ledger insert — a `NULL`
+    value (formula unconfigured) skips it, and the function's own
+    `action_logs` row now records `points_awarded=NONE:formula_not_configured`
+    instead of silently omitting the fact. `get_advisors` showed no new
+    findings after applying.
+  - **`logVisitBooking()`'s direct-insert branch**: same skip-on-null
+    behavior for EARN; REDEEM's fixed `-100` is completely untouched (the
+    formula never runs for REDEEM). The `action_logs` insert gained a
+    `points_awarded=...` suffix mirroring `quick_walkin()`'s.
+  - **`paidAmount` discrepancy caught before coding**: the existing
+    `amount`/`computedAmount` value (used for `sales.amount`) bundles the
+    service price with add-on totals — wrong as the formula's `paidAmount`
+    input, since `fullPrice` (`services.price`) is service-only and using
+    the addon-inflated figure would skew both modes. Added a separate
+    `servicePaidAmount` field (service price post-promo/manual-discount,
+    excluding add-ons) computed in parallel in both
+    `components/log-visit-modal.tsx` and `components/quick-walkin-modal.tsx`
+    and threaded through `LogVisitBookingInput`/`QuickWalkinInput` — `amount`
+    itself is unchanged and still what's recorded on the `sales` row.
+  - **Unconfigured-formula UX**: the visit/sale/locker-assignment still
+    completes normally — never blocked — only the EARN ledger row is
+    withheld. Both modals now surface an explicit "⚠ Points Not Awarded"
+    confirmation screen (Tagalog message) before closing, driven by the
+    new `pointsAwarded: number | null` field returned on both
+    `LogVisitBookingResult` and `QuickWalkinResult`, so reception sees the
+    gap live rather than only in `action_logs`.
+  - **Regression check (prompt's #4) — two real dependencies found, not
+    silently altered, flagged instead**: `components/log-visit-modal.tsx`
+    (the "Points to award" preview field, driven by a `pointsDelta` local
+    that still reads `selectedService.points_earned` directly) and
+    `components/client-browser.tsx`'s per-service quick-select cards
+    (`+{svc.points_earned} pts` label) both display the **old fixed
+    value** as a pre-submission preview — this can now diverge from what's
+    actually awarded (discount changes the proportional result; unconfigured
+    formula awards nothing). Left as-is per the prompt's instruction to
+    flag rather than silently alter; a UI-preview-accuracy follow-up, not a
+    data-correctness bug (nothing incorrect is written to the ledger).
+    Confirmed unrelated: `commission_rates` is computed from
+    `bookings`/`services.price` × `percent`, wholly separate from points.
+  - Untouched, per the prompt's scope: ledger schema/triggers/ADJUSTMENT
+    type, `log_visit()` RPC (dead code), commission calc, Wet Area's fixed
+    path, the Part 1 Settings UI.
+  - `npx tsc --noEmit` clean; `eslint` clean except two pre-existing
+    unrelated warnings (`'staff' is defined but never used` in both
+    modals, present before this change).
+  - **Not verified live in-browser this session** — no `.env.local`
+    present, same recurring credentials/env blocker as recent prior tasks;
+    verified via the precondition/live-schema check, `get_advisors`, and
+    `tsc`/`eslint`. See [[points_ledger_state]] and [[settings_state]].
+
 - **Loyalty Points Formula — Settings Schema + Configuration UI (Part 1 of
   2) — complete** (`ohm#9k3m7qxc`, 2026-09-01). Plan + regression risk
   assessment presented and approved before any code/migration was written,

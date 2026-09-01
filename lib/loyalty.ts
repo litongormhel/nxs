@@ -1,5 +1,7 @@
 export type LoyaltyFormulaMode = "uniform" | "proportional";
 
+export const WET_AREA_POINTS = 3;
+
 /**
  * Not yet wired into any live points-award path (see ohm#9k3m7qxc Part 2).
  * Wet Area is never passed through this function — it stays a fixed 3 pts,

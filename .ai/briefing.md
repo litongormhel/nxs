@@ -82,14 +82,19 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-01 — Loyalty Points Formula — Settings Schema + Configuration
+1. **2026-09-01 — Loyalty Points Formula — Wire Into Live Points-Award Flow
+   (Part 2 of 2)** (`ohm#2r8w5nfz`). Plan + regression risk assessment
+   presented and approved before any code was written, per the prompt's
+   mandatory gate. Points are now formula-driven end-to-end. See
+   [[points_ledger_state]], [[settings_state]], and `.ai/handoff.md` for
+   full detail.
+
+2. **2026-09-01 — Loyalty Points Formula — Settings Schema + Configuration
    UI (Part 1 of 2)** (`ohm#9k3m7qxc`). Plan + regression risk assessment
    presented and approved before any code/migration was written, per the
-   prompt's mandatory gate. Part 2 (wiring into the live points-award path)
-   is a separate follow-up, not started. See [[settings_state]] and
-   `.ai/handoff.md` for full detail.
+   prompt's mandatory gate.
 
-2. **2026-09-01 — Points EARN/REDEEM Guard — Require Client Portal
+3. **2026-09-01 — Points EARN/REDEEM Guard — Require Client Portal
    Account** (`ohm#4x8k2p9d`). Plan + regression risk assessment presented
    and approved before any code/migration was written, per the prompt's
    mandatory gate.
@@ -130,7 +135,7 @@ Full invariant list: [[nxs-architecture-locks]].
      and `tsc`/`eslint`. See [[points_ledger_state]] and
      [[client_portal_state]].
 
-3. **2026-08-31 — Analytics — 5-Tab Restructure + Top Thera → Commission
+4. **2026-08-31 — Analytics — 5-Tab Restructure + Top Thera → Commission
    Deep Link** (`ohm#4k7n2wc9`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate.
@@ -179,7 +184,7 @@ Full invariant list: [[nxs-architecture-locks]].
      tasks; verified via code review and `tsc`/`eslint`. See
      [[analytics_state]].
 
-4. **2026-08-31 — Commission Module — Report UI (Analytics > Commission >
+5. **2026-08-31 — Commission Module — Report UI (Analytics > Commission >
    Report)** (`ohm#8x2m4tqz`). Plan + regression risk assessment presented
    and approved before any code was written, per the prompt's mandatory
    gate. Report sub-tab, sibling to the already-shipped Rates tab.
@@ -212,55 +217,3 @@ Full invariant list: [[nxs-architecture-locks]].
      present, same recurring credentials/env blocker as recent prior
      tasks; verified via code review, `tsc`/`eslint`, and the live-schema
      check. See [[commission_state]].
-
-5. **2026-08-31 — Commission Module — Schema (`commission_rates`) + Rates
-   Settings UI** (`ohm#4k8t2wq9`). Plan + regression risk assessment
-   presented and approved before any code/migration was written, per the
-   prompt's mandatory gate. Schema + Rates Settings UI only — Report UI is
-   a separate follow-up prompt, not built here.
-   - **Live-schema finding (before any migration)**: `services` had no
-     field distinguishing "requires a therapist" vs "facility/room-only."
-     Wet Area was previously identified only by a hardcoded name string
-     match (`selectedService?.name !== "Wet Area"` in
-     `components/booking-form-modal.tsx`, and again in the Call Sheet
-     exclusion) — nothing structural existed to reuse.
-   - **Minimal addition (per the prompt's own fallback)**: new
-     `services.requires_therapist boolean not null default true`,
-     backfilled `false` for Wet Area. `booking-form-modal.tsx` and the
-     Call Sheet were **not touched** — still using the old name check;
-     out of scope for this prompt.
-   - New migration `supabase/migrations/20260831063000_commission_rates.sql`,
-     applied live after approval: adds `requires_therapist`, and creates
-     `commission_rates` (id, service_id FK, percent, effective_from,
-     effective_to nullable, is_active, created_by, created_at) — same
-     append-only/effective-dated philosophy as the points ledger. RLS:
-     Owner-only SELECT/INSERT/UPDATE (`is_owner()`); no policy allows
-     changing `percent` on an existing row — editing closes the row
-     (`effective_to`/`is_active`) and inserts a new one, both done in
-     `setCommissionRate()` (`app/(staff)/analytics/actions.ts`).
-     `get_advisors` showed no new findings after applying.
-   - **UI**: Analytics gained its first tab strip
-     (`components/analytics-tabs.tsx`) — "Overview" (unchanged
-     `AnalyticsBrowser`) and "Commission" → "Rates"
-     (`components/commission-rates-browser.tsx`). Service list is
-     query-driven off `requires_therapist = true, active = true` — no
-     name hardcoding, new services appear automatically. Rate shows
-     "Not set" (never defaults to 0%) until a rate exists; inline
-     Edit → Save/Cancel. Same Owner-only content guard pattern as
-     `AnalyticsBrowser`.
-   - No `nxs-commission-mockup.html` exists in the repo — built using the
-     existing app's design tokens/components (same classes as
-     `components/settings-browser.tsx`'s inline-edit rows) instead of
-     adapting a mockup, since none was found.
-   - `lib/types/database.ts` hand-patched with just the two new pieces
-     (`commission_rates` table, `services.requires_therapist`) rather than
-     a full regen — a full `generate_typescript_types` pull also changed
-     the unrelated `quick_walkin` RPC arg nullability and broke
-     `app/(staff)/bookings/actions.ts` (pre-existing type-gen drift,
-     unrelated to this change) — reverted that and hand-patched instead.
-   - `npx tsc --noEmit` and `eslint` both clean on all changed/new files.
-   - **Not verified live in-browser this session** — no `.env.local`
-     present (`NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`
-     missing), same recurring credentials/env blocker as recent prior
-     tasks; verified via code review, `tsc`/`eslint`, and the Supabase
-     advisors check. See [[commission_state]].

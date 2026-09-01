@@ -105,14 +105,57 @@
   entry_type exists in the DB and was exercised directly in migration
   testing, but has no app-level entry point — and is exempt from the
   portal-account guard above).
-- **Owner-configurable loyalty points formula (`ohm#9k3m7qxc`, 2026-09-01,
-  Part 1 of 2)**: `app_settings.loyalty_formula_mode`/`peso_per_point` and
-  the pure `computeLoyaltyPoints()` function (`lib/loyalty.ts`) exist, plus
-  a Settings UI to configure them — see [[settings_state]]. **Not called
-  from `log_visit()`, `quick_walkin()`, or `logVisitBooking()` yet** —
-  those all still use `services.points_earned` directly, unchanged. Wiring
-  the formula into the actual points-award path is Part 2, a separate
-  follow-up prompt, not started.
 - Ledger history view is a fixed last-10 list on the Client Profile detail
   panel (`components/client-browser.tsx`) — no pagination, no full ledger
   browser.
+- **UI preview labels not yet reconciled with the formula** (flagged, not
+  fixed, during `ohm#2r8w5nfz`): `components/log-visit-modal.tsx`'s
+  "Points to award" field and `components/client-browser.tsx`'s
+  per-service quick-select cards both display `services.points_earned`
+  directly as a pre-submission preview. Since EARN now goes through
+  `computeLoyaltyPoints()`, the actual awarded amount can diverge from
+  this preview (discounts change the proportional result; an unconfigured
+  formula awards nothing). Nothing incorrect is written to the ledger —
+  this is a display-accuracy gap, not a data-correctness bug.
+
+## Implemented (app level, `ohm#2r8w5nfz`, 2026-09-01) — loyalty formula
+wired end-to-end
+
+Points are no longer a fixed per-service constant — EARN entries are now
+computed via `computeLoyaltyPoints()` (`lib/loyalty.ts`), using the
+owner-configured `app_settings.loyalty_formula_mode`/`peso_per_point` (see
+[[settings_state]] for Part 1, the schema/config UI). **No longer
+"computed but unused"** — this is now the live points-award path.
+
+- New `resolveEarnedPoints()` helper (`app/(staff)/bookings/actions.ts`):
+  Wet Area (`service.name === "Wet Area"`) always gets the fixed
+  `WET_AREA_POINTS` (3, exported from `lib/loyalty.ts`), bypassing the
+  formula entirely. Otherwise: one `app_settings` read, then
+  `computeLoyaltyPoints()`. Returns `null` when
+  `loyalty_formula_mode IS NULL` — callers skip the EARN ledger insert
+  entirely on `null` rather than inserting a fabricated zero-point row or
+  falling back to the old fixed value.
+- **Two live EARN write paths wired**: `logVisitBooking()`'s direct insert
+  (linked-booking completion) and `quick_walkin()` (walk-ins with no
+  linked booking — signature changed to accept a precomputed
+  `p_points_earned integer` parameter instead of looking up
+  `services.points_earned` internally; migration
+  `supabase/migrations/20260901140000_quick_walkin_points_param.sql`).
+  Both functions' `action_logs` entries record
+  `points_awarded=NONE:formula_not_configured` when skipped, instead of
+  silently omitting the fact.
+- **`log_visit()` RPC deliberately left untouched** — confirmed unused by
+  any UI component (dead code), out of scope per the prompt.
+- **REDEEM (`-100` fixed) is completely unaffected** — the formula only
+  ever runs for EARN.
+- **`paidAmount` is a new `servicePaidAmount` field**, not the existing
+  `amount`/`computedAmount` — the latter bundles add-on totals with the
+  service price (needed for `sales.amount`) and would have skewed the
+  formula; `servicePaidAmount` is service price post-promo/manual-discount,
+  excluding add-ons, computed in parallel in
+  `components/log-visit-modal.tsx` and `components/quick-walkin-modal.tsx`.
+- **Unconfigured-formula UX**: the visit/sale/locker-assignment still
+  completes normally; both modals show an explicit "⚠ Points Not Awarded"
+  screen before closing (driven by the new `pointsAwarded: number | null`
+  field on `LogVisitBookingResult`/`QuickWalkinResult`), so reception sees
+  the gap live, not just in `action_logs`.
