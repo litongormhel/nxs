@@ -13,7 +13,7 @@ export default async function TherapistsPage() {
   ] = await Promise.all([
     supabase
       .from("therapists")
-      .select("id, name")
+      .select("id, name, archived, archived_reason, archived_at")
       .order("name", { ascending: true }),
     supabase
       .from("bookings")
@@ -44,6 +44,19 @@ export default async function TherapistsPage() {
           "Akio",
           "Josh",
         ].map((name) => ({ id: name, name }));
+
+  const archivedByTherapist: Record<
+    string,
+    { reason: string; archivedAt: string }
+  > = {};
+  (dbTherapists ?? []).forEach((t) => {
+    if (t.archived) {
+      archivedByTherapist[t.id] = {
+        reason: t.archived_reason ?? "",
+        archivedAt: t.archived_at ?? "",
+      };
+    }
+  });
 
   const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const dayOffByTherapist: Record<string, string[]> = {};
@@ -93,6 +106,7 @@ export default async function TherapistsPage() {
         initialBookings={bookings.length > 0 ? bookings : undefined}
         initialAbsence={absenceByTherapist}
         initialLeave={leaveByTherapist}
+        initialArchived={archivedByTherapist}
       />
     </div>
   );

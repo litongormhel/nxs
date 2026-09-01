@@ -82,7 +82,25 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-01 — Docs Sync: Correct Stale Call Sheet Status** (`ohm#3k9r7fq2`).
+1. **2026-09-01 — Therapists — Archive/Unarchive RLS + Real Persistence**
+   (`ohm#7m2w9dxk`, Prompt 1 of 3). Investigation phase confirmed live
+   (not from the prompt's snapshot) that `therapists` had no INSERT/
+   UPDATE/DELETE RLS policy at all, and separately surfaced that Add
+   Therapist was *not* the local-only stub the docs claimed — it already
+   called a real `createTherapist()` insert that RLS was silently
+   rejecting (a bug, deferred to Prompt 2). Plan + regression risk
+   assessment presented and approved before any code/migration was
+   written, per the prompt's mandatory gate — this prompt itself also
+   got its own pre-implementation gate. Added `staff_update`
+   (`is_supervisor_or_above()`) to `therapists`, no DELETE policy.
+   `archiveTherapist()`/`unarchiveTherapist()` server actions now back
+   the kebab menu's Archive/Unarchive; Archive's booking-flagging reuses
+   `markAbsentToday`'s exact UPDATE shape with no date filter (permanent,
+   unlike a one-day absence). `therapist_day_off`/`therapist_services`
+   rows are untouched by archive/unarchive. See [[therapists_state]] and
+   `.ai/handoff.md`.
+
+2. **2026-09-01 — Docs Sync: Correct Stale Call Sheet Status** (`ohm#3k9r7fq2`).
    Documentation-only fix. `docs/state/bookings_state.md`'s "Not yet
    implemented" list claimed `app/call-sheet/page.tsx` was still an 8-line
    "Coming soon." stub — false and stale (also stale path; actual path is
@@ -93,7 +111,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `docs/state/operations_state.md` already documented. Removed the stale
    bullet; no other bullet touched. No code, schema, or migration changed.
 
-2. **2026-09-01 — Settings — 4-Tab Restructure + Capacity Stepper + Add-ons
+3. **2026-09-01 — Settings — 4-Tab Restructure + Capacity Stepper + Add-ons
    Save Button** (`ohm#9x3f7mq2`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. Two discrepancies caught by the mandatory investigate-first
@@ -106,7 +124,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Capacity) using the tab-state pattern from `analytics-tabs.tsx`. No RBAC
    change, no migrations. See [[settings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-01 — Staff Archive + Owner-Managed Login Credentials**
+4. **2026-09-01 — Staff Archive + Owner-Managed Login Credentials**
    (`ohm#uox20nff`). Plan + regression risk assessment presented and
    approved before any code/migration was written, per the prompt's
    mandatory gate. Mid-implementation, confirmed live that switching login
@@ -120,7 +138,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Admin API `createUser`; new self-service password-change view. See
    [[staff_state]] and `.ai/handoff.md` for full detail.
 
-4. **2026-09-01 — Sale Void — Owner-Set 6-Digit Authorization Code**
+5. **2026-09-01 — Sale Void — Owner-Set 6-Digit Authorization Code**
    (`ohm#6f3p8dxn`, supersedes `ohm#8m2k5vqz` — email+password step-up was
    drafted but never implemented). Plan + regression risk assessment
    presented and approved before any code/migration was written, per the
@@ -133,15 +151,4 @@ Full invariant list: [[nxs-architecture-locks]].
    and resolved before/during coding — see [[sales_state]],
    [[settings_state]], `docs/architecture/rbac.md`, and `.ai/handoff.md`
    for full detail.
-
-5. **2026-09-01 — Promo Codes — Remove Hardcoded Fallback, Owner-Only
-   Enforcement, Explicit Save** (`ohm#3n7x9kwp`). Plan + regression risk
-   assessment presented and approved before any code/migration was
-   written, per the prompt's mandatory gate. Hardcoded fallback promos
-   array removed (explicit empty-vs-error UI instead); promo create/edit/
-   delete restricted to Owner only at both the UI gate and real
-   server-side + RLS enforcement (was Supervisor-or-above at all three
-   layers); discount edits now use per-row draft state with explicit
-   Save/Cancel instead of auto-save-on-blur. See [[settings_state]] and
-   `.ai/handoff.md` for full detail.
 

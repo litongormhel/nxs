@@ -123,6 +123,65 @@ export async function markOnLeave(
   return { ok: true };
 }
 
+export async function archiveTherapist(
+  therapistId: string,
+  reason: string,
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  const { error: archiveError } = await supabase
+    .from("therapists")
+    .update({
+      archived: true,
+      archived_reason: reason,
+      archived_by: staffId,
+      archived_at: new Date().toISOString(),
+    })
+    .eq("id", therapistId);
+  if (archiveError) return fail(archiveError);
+
+  const { data: flagged, error: flagError } = await supabase
+    .from("bookings")
+    .update({ status: "Needs Reassignment" })
+    .eq("therapist_id", therapistId)
+    .eq("status", "Booked")
+    .select("id");
+  if (flagError) return fail(flagError);
+
+  await logAction(
+    supabase,
+    staffId,
+    "therapist_archive",
+    `therapist=${therapistId} reason=${reason} flagged=${flagged?.length ?? 0}`
+  );
+  revalidatePath("/therapists");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function unarchiveTherapist(
+  therapistId: string,
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("therapists")
+    .update({
+      archived: false,
+      archived_reason: null,
+      archived_by: null,
+      archived_at: null,
+    })
+    .eq("id", therapistId);
+  if (error) return fail(error);
+
+  await logAction(supabase, staffId, "therapist_unarchive", `therapist=${therapistId}`);
+  revalidatePath("/therapists");
+  return { ok: true };
+}
+
 export async function toggleDayOff(
   therapistId: string,
   weekday: number,

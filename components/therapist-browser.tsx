@@ -8,6 +8,8 @@ import {
   createTherapist as createTherapistAction,
   markAbsentToday as markAbsentTodayAction,
   markOnLeave as markOnLeaveAction,
+  archiveTherapist as archiveTherapistAction,
+  unarchiveTherapist as unarchiveTherapistAction,
 } from "@/app/(staff)/therapists/actions";
 
 const DEFAULT_THERAPISTS = [
@@ -114,12 +116,14 @@ export function TherapistBrowser({
   initialBookings = [],
   initialAbsence = {},
   initialLeave = {},
+  initialArchived = {},
 }: {
   initialTherapists?: TherapistRecord[];
   initialDayOff?: Record<string, string[]>;
   initialBookings?: BookingInfo[];
   initialAbsence?: Record<string, string[]>;
   initialLeave?: Record<string, { start: string; end: string; reason: string }>;
+  initialArchived?: Record<string, { reason: string; archivedAt: string }>;
 }) {
   const { sessionStaff } = useStaffSim();
   const router = useRouter();
@@ -155,6 +159,7 @@ export function TherapistBrowser({
       Akio: ["Signature Massage"],
     };
     initialRecords.forEach((r) => {
+      const archivedInfo = initialArchived[r.id];
       meta[r.name] = {
         dayOff: initialDayOff[r.id]
           ? initialDayOff[r.id].slice()
@@ -166,8 +171,9 @@ export function TherapistBrowser({
           : ALL_THERAPIST_SERVICES.slice(),
         leave: initialLeave[r.id] ?? null,
         absentDates: initialAbsence[r.id] ? initialAbsence[r.id].slice() : [],
-        archived: false,
-        archivedReason: "",
+        archived: !!archivedInfo,
+        archivedReason: archivedInfo?.reason ?? "",
+        archivedAt: archivedInfo?.archivedAt,
       };
     });
     return meta;
@@ -502,8 +508,11 @@ export function TherapistBrowser({
     router.refresh();
   };
 
-  // Confirm archive
-  const handleConfirmArchive = () => {
+  // Confirm archive — writes through to therapists (archived/archived_reason/
+  // archived_by/archived_at) and flags that therapist's Booked appointments
+  // (no date filter — permanent, unlike Mark Absent/On Leave) as Needs
+  // Reassignment.
+  const handleConfirmArchive = async () => {
     if (!archiveTherapist) return;
     const reason = archiveReason.trim();
     if (!reason) {
@@ -511,6 +520,18 @@ export function TherapistBrowser({
       return;
     }
     const t = archiveTherapist;
+    const therapistId = therapistIds[t];
+    if (!therapistId || !sessionStaff) {
+      setArchiveError("No staff session found.");
+      return;
+    }
+
+    const res = await archiveTherapistAction(therapistId, reason, sessionStaff.id);
+    if (!res.ok) {
+      setArchiveError(`Couldn't archive ${t} — ${res.error}`);
+      return;
+    }
+
     setTherapistMeta((prev) => {
       const meta = prev[t];
       if (!meta) return prev;
@@ -542,10 +563,20 @@ export function TherapistBrowser({
       }`
     );
     setArchiveTherapist(null);
+    router.refresh();
   };
 
-  // Unarchive therapist
-  const handleUnarchive = (t: string) => {
+  // Unarchive therapist — writes through to therapists.
+  const handleUnarchive = async (t: string) => {
+    const therapistId = therapistIds[t];
+    if (!therapistId || !sessionStaff) return;
+
+    const res = await unarchiveTherapistAction(therapistId, sessionStaff.id);
+    if (!res.ok) {
+      showToast(`Couldn't unarchive ${t} — ${res.error}`);
+      return;
+    }
+
     setTherapistMeta((prev) => {
       const meta = prev[t];
       if (!meta) return prev;
@@ -555,6 +586,7 @@ export function TherapistBrowser({
       };
     });
     showToast(`${t} unarchived — back on the active roster`);
+    router.refresh();
   };
 
   // Confirm edit therapist name

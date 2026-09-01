@@ -5,6 +5,69 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Therapists — Archive/Unarchive RLS + Real Persistence — complete**
+  (`ohm#7m2w9dxk`, 2026-09-01, Prompt 1 of 3 in the "Therapist Roster —
+  Investigate & Wire" sequence). Investigation phase (no code) presented an
+  overview plan for all four affordances (Add, Archive/Unarchive, Edit,
+  Services Offered) and got explicit approval to split into 3 follow-up
+  prompts; Prompt 1 itself then got its own separate plan + regression
+  risk gate before any code/migration was written, per the prompt's
+  mandatory rule that each follow-up prompt re-triggers the gate.
+  - **Two discrepancies surfaced during investigation, not built over**:
+    1. Live schema check confirmed `public.therapists` had only
+       `public_select` (`USING (true)`) — no INSERT/UPDATE/DELETE policy at
+       all — matching the prompt's snapshot.
+    2. Live *code* check did not match the prompt's snapshot: Add Therapist
+       is not the cosmetic local-state stub `docs/state/therapists_state.md`
+       described. `handleConfirmAdd` already calls a real `createTherapist()`
+       server action that does a genuine `.from("therapists").insert(...)`.
+       With no INSERT policy on the table, that insert is silently rejected
+       by RLS — Add Therapist is currently **broken** (shows an error toast),
+       not a harmless no-op. Flagged to Ohm; corrected framing carried into
+       `docs/state/therapists_state.md`. The actual fix (INSERT policy) is
+       scoped to Prompt 2, since this prompt's gate covered Archive/Unarchive
+       only.
+  - Confirmed with Ohm: no `block_archive_last_*`-style guard needed for
+    therapists (no singleton role concept like Owner) — skipped, unlike
+    `staff.active`'s `trg_block_archive_last_owner`.
+  - `supabase/migrations/20260901190000_therapists_archive_rls.sql`: adds
+    `staff_update` (`is_supervisor_or_above()`) to `therapists`. No DELETE
+    policy — matches the `services`/`addons` catalog pattern, not `promos`'
+    stricter `is_owner()`.
+  - `app/(staff)/therapists/actions.ts`: new `archiveTherapist(therapistId,
+    reason, staffId)` and `unarchiveTherapist(therapistId, staffId)`.
+    `archiveTherapist` updates `archived`/`archived_reason`/`archived_by`/
+    `archived_at`, then flags that therapist's `Booked` bookings to `Needs
+    Reassignment` — same UPDATE shape as `markAbsentToday`, deliberately
+    with no date filter (archive is permanent), matching the pre-existing
+    local-only behavior it replaces exactly. `unarchiveTherapist` clears
+    those four columns and does not un-flag bookings (no un-flag path
+    exists anywhere in this codebase yet). Neither touches
+    `therapist_day_off` or `therapist_services` — confirmed those rows are
+    left untouched through an archive/unarchive cycle.
+  - `components/therapist-browser.tsx`: `handleConfirmArchive`/
+    `handleUnarchive` now call the new server actions before updating local
+    state; both `router.refresh()` on success.
+  - `app/(staff)/therapists/page.tsx`: now also selects
+    `archived`/`archived_reason`/`archived_at` from `therapists` and seeds a
+    new `initialArchived` prop on `TherapistBrowser` — previously the
+    component always initialized every therapist as `archived: false`
+    regardless of DB state, so a page refresh would have silently
+    un-archived everyone in the UI even before this fix (nothing was ever
+    persisted to read back).
+  - Verification: `tsc --noEmit` clean; Supabase security advisors show no
+    new issues from the migration (`therapist_services` gap is pre-existing,
+    out of this prompt's scope). Could not do a full live-session browser
+    smoke test — this sandbox has no `.env.local`/Supabase env vars
+    configured for `next dev`, a pre-existing environment gap unrelated to
+    this change (confirmed `next dev` itself starts and compiles cleanly;
+    the failure is `proxy.ts` throwing on missing
+    `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`).
+  - Still local-state-only / broken after this prompt: Add Therapist
+    (broken, not local-only — see above), Edit-rename (local-only). Services
+    Offered (local-only). See [[therapists_state]] for the per-affordance
+    RLS table.
+
 - **Docs Sync: Correct Stale Call Sheet Status — complete** (`ohm#3k9r7fq2`,
   2026-09-01). Documentation-only fix, no approval gate needed beyond the
   diff-review step (no code/schema touched). Removed the stale "Not yet
