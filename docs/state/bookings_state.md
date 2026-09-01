@@ -318,8 +318,6 @@ backend/DB/business-logic change.
   [[clients_state]] (no schema for it beyond the `pax_count` headcount
   field, now derived from the selected promo rather than a manual
   stepper).
-- `app/call-sheet/page.tsx` is still an 8-line "Coming soon." stub, though
-  it will likely consume `bookings` + `therapists` once built.
 - `completeWalkinBooking()` ("Complete Walk-in Visit" — converting an
   existing `Booked` booking into a paid walk-in checkout) is not built.
   Explicitly excluded from `ohm#8r3n6y1q`'s scope. The `bookings` UPDATE

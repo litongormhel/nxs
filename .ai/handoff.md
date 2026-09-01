@@ -5,6 +5,15 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Docs Sync: Correct Stale Call Sheet Status — complete** (`ohm#3k9r7fq2`,
+  2026-09-01). Documentation-only fix, no approval gate needed beyond the
+  diff-review step (no code/schema touched). Removed the stale "Not yet
+  implemented" bullet in `docs/state/bookings_state.md` claiming
+  `app/call-sheet/page.tsx` was an 8-line "Coming soon." stub — confirmed
+  live the page (actual path `app/(staff)/call-sheet/page.tsx`) is fully
+  implemented, matching `docs/state/operations_state.md`'s existing
+  description. No other bullet in that section touched.
+
 - **Settings — 4-Tab Restructure + Capacity Stepper + Add-ons Save — complete**
   (`ohm#9x3f7mq2`, 2026-09-01). Plan + regression risk assessment presented
   and approved before any code was written, per the prompt's mandatory gate.
