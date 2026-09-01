@@ -153,16 +153,16 @@ export function CallSheetBrowser({
   };
 
   return (
-    <div className="max-w-xl space-y-4">
-      <div className="mb-1.5">
-        <div className="text-[10.5px] font-bold tracking-[0.13em] uppercase text-muted mb-2">
+    <div className="max-w-5xl space-y-6">
+      <div className="mb-2">
+        <div className="text-sm font-bold tracking-[0.13em] uppercase text-muted mb-3">
           Call Sheet — Locker / Room / Service / Thera
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => setTimeFilter("all")}
             className={
-              "shrink-0 rounded-lg border px-3 py-1.5 text-[11px] font-bold transition " +
+              "shrink-0 rounded-lg border px-5 py-2.5 text-base font-bold transition " +
               (timeFilter === "all"
                 ? "border-[#a97e2e] bg-[#c89b3c]/15 text-accent-gold"
                 : "border-border bg-surface-2 text-muted hover:text-foreground")
@@ -170,13 +170,13 @@ export function CallSheetBrowser({
           >
             All
           </button>
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
+          <div className="flex gap-2 flex-wrap">
             {availableSlots.map((t) => (
               <button
                 key={t}
                 onClick={() => setTimeFilter(t)}
                 className={
-                  "shrink-0 rounded-lg border px-3 py-1.5 text-[11px] font-bold transition " +
+                  "shrink-0 rounded-lg border px-5 py-2.5 text-base font-bold transition " +
                   (t === timeFilter
                     ? "border-[#a97e2e] bg-[#c89b3c]/15 text-accent-gold"
                     : "border-border bg-surface-2 text-muted hover:text-foreground")
@@ -191,7 +191,7 @@ export function CallSheetBrowser({
 
       <div className="rounded-xl border border-border bg-surface overflow-hidden">
         <div
-          className="grid gap-3 border-b border-border px-4 py-2.5 text-[10px] font-bold tracking-wider uppercase text-muted"
+          className="grid gap-4 border-b border-border px-6 py-4 text-sm font-bold tracking-wider uppercase text-muted"
           style={{ gridTemplateColumns: "1fr 1fr 1.6fr 1fr" }}
         >
           <div>Locker</div>
@@ -200,12 +200,12 @@ export function CallSheetBrowser({
           <div>Thera</div>
         </div>
         {filtered.length === 0 ? (
-          <div className="px-4 py-4 text-sm text-muted">No massages match this time.</div>
+          <div className="px-6 py-8 text-lg text-muted">No massages match this time.</div>
         ) : (
           filtered.map((e) => (
             <div
               key={e.id}
-              className="grid gap-3 border-b border-border px-4 py-3 text-[12px] last:border-b-0"
+              className="grid gap-4 border-b border-border px-6 py-5 text-lg last:border-b-0"
               style={{ gridTemplateColumns: "1fr 1fr 1.6fr 1fr" }}
             >
               <div className="text-foreground">{e.locker_number}</div>
@@ -217,15 +217,15 @@ export function CallSheetBrowser({
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-2.5 flex-wrap">
-        <div className="text-[10.5px] text-muted">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-base text-muted">
           Total: {filtered.length} massage{filtered.length === 1 ? "" : "s"}
           {timeFilter === "all" ? " in progress" : ` at ${fmtTime(timeFilter)}`}
         </div>
         {timeFilter !== "all" && (
           <button
             onClick={handleDownload}
-            className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold transition hover:bg-[#c89b3c]/10"
+            className="rounded-lg border border-[#a97e2e] bg-surface px-5 py-2.5 text-base font-bold text-accent-gold transition hover:bg-[#c89b3c]/10"
           >
             Download JPEG
           </button>
