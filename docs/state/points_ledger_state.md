@@ -13,6 +13,18 @@
 - Triggers: `trg_block_ledger_update` and `trg_block_ledger_delete`
   (`block_ledger_mutation()`) reject any UPDATE/DELETE on this table —
   true DB-level immutability, not just convention.
+- **`trg_require_portal_account_for_earn_redeem`
+  (`require_portal_account_for_earn_redeem()`), added `ohm#4x8k2p9d`,
+  2026-09-01**: `BEFORE INSERT`, rejects any row with `entry_type IN
+  ('EARN','REDEEM')` where `EXISTS (SELECT 1 FROM client_portal_accounts
+  WHERE client_id = NEW.client_id)` is false. `ADJUSTMENT` is exempt. This
+  covers all three write paths into the table (`log_visit()`,
+  `quick_walkin()`, and `logVisitBooking()`'s direct insert) since it fires
+  on every INSERT regardless of caller. See [[client_portal_state]] for the
+  companion `staff_select` RLS policy and the app-level pre-flight gating
+  in `client-browser.tsx`/`booking-browser.tsx`/`log-visit-modal.tsx` that
+  blocks the UI before this trigger would ever fire (required because
+  `logVisitBooking()`'s linked-booking branch is non-atomic — see below).
 - Trigger `trg_apply_points_delta` (`apply_points_delta()`) runs AFTER
   INSERT and applies the delta to `clients.points_balance`. As of Core Loop
   (`ohm#7f3k9d2m`) this function is `SECURITY DEFINER` — it must run with
@@ -62,11 +74,37 @@
   only who may `SELECT`/`INSERT` changed. See [[staff_state]] for the
   shared role-helper functions this and every other 6C-2+ policy uses.
 
+## Implemented (app level, `ohm#4x8k2p9d`, 2026-09-01)
+
+- `app/(staff)/clients/page.tsx` and `app/(staff)/bookings/page.tsx` each
+  query `client_portal_accounts` and pass a `has_portal_account` boolean
+  per client. `components/client-browser.tsx`'s "Log Visit" button and
+  every service card, and `components/booking-browser.tsx`'s per-row "Log
+  Visit" action, are disabled (with an inline "Walang portal account —
+  hindi pa mag-eearn/redeem ng points." note) when the linked client lacks
+  a `client_portal_accounts` row. `components/log-visit-modal.tsx` bakes
+  the same check into `canSubmit` and `handleConfirm()` as defense-in-depth
+  regardless of which parent opened it. Guests/walk-ins with no `client_id`
+  are unaffected — they never get a ledger entry either way (`if
+  (input.clientId)` / `if p_client_id is not null` gates in the existing
+  write paths, unchanged). Blocking happens app-side before any write is
+  attempted — not by catching the DB trigger's exception — because
+  `logVisitBooking()`'s linked-booking branch is a sequence of separate
+  Supabase calls (booking update → sale insert → addon insert → ledger
+  insert → locker insert), not one transaction; letting the trigger reject
+  only the ledger insert would leave the booking already marked
+  `Completed` and the sale already recorded.
+- **Known immediate effect**: at ship time, only 1 of 78 `clients` rows had
+  a linked `client_portal_accounts` row — 77 clients cannot EARN/REDEEM
+  until they register on the portal. Confirmed as the intended business
+  rule, shipped with no feature flag.
+
 ## Not yet implemented — see roadmap
 
 - No QR-scan earn flow, no standalone manual-adjustment UI (the `ADJUSTMENT`
   entry_type exists in the DB and was exercised directly in migration
-  testing, but has no app-level entry point).
+  testing, but has no app-level entry point — and is exempt from the
+  portal-account guard above).
 - Ledger history view is a fixed last-10 list on the Client Profile detail
   panel (`components/client-browser.tsx`) — no pagination, no full ledger
   browser.

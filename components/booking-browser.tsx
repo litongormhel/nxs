@@ -11,7 +11,12 @@ import { QuickWalkinModal } from "@/components/quick-walkin-modal";
 import { LogVisitModal } from "@/components/log-visit-modal";
 import type { Database } from "@/lib/types/database";
 
-export type Client = { id: string; codename: string; username: string };
+export type Client = {
+  id: string;
+  codename: string;
+  username: string;
+  has_portal_account: boolean;
+};
 export type Service = {
   id: string;
   name: string;
@@ -264,6 +269,8 @@ export function BookingBrowser({
   }
 
   function renderActions(row: BookingRow) {
+    const canEarnRedeem =
+      !row.client_id || (clients.find((c) => c.id === row.client_id)?.has_portal_account ?? false);
     return (
       <div className="flex items-center gap-1.5">
         {row.status === "Booked" && (
@@ -271,7 +278,9 @@ export function BookingBrowser({
             <button
               type="button"
               onClick={() => setLogVisitBooking(row)}
-              className="rounded-md border border-[#a97e2e] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-gold hover:brightness-125 transition-all"
+              disabled={!canEarnRedeem}
+              title={canEarnRedeem ? undefined : "Walang portal account — hindi pa mag-eearn/redeem ng points."}
+              className="rounded-md border border-[#a97e2e] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-gold hover:brightness-125 transition-all disabled:cursor-not-allowed disabled:opacity-50"
             >
               Log Visit
             </button>

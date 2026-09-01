@@ -14,6 +14,7 @@ type Client = {
   since_date: string;
   phone?: string | null;
   qr_token?: string | null;
+  has_portal_account: boolean;
 };
 
 type Service = {
@@ -361,12 +362,17 @@ export function ClientBrowser({
               <button
                 type="button"
                 onClick={() => openLogVisit()}
-                disabled={services.length === 0 || staff.length === 0}
+                disabled={services.length === 0 || staff.length === 0 || !selected.has_portal_account}
                 className="flex items-center gap-1.5 rounded-md border border-gold bg-gold/10 px-3 py-1.5 text-xs font-medium text-gold hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
               >
                 <span>+</span> Log Visit
               </button>
             </div>
+            {!selected.has_portal_account && (
+              <p className="mt-2 text-xs text-accent-red">
+                Walang portal account — hindi pa mag-eearn/redeem ng points.
+              </p>
+            )}
 
             {/* Service cards grid — each card is clickable */}
             {services.length > 0 ? (
@@ -376,7 +382,7 @@ export function ClientBrowser({
                     key={svc.id}
                     type="button"
                     onClick={() => openLogVisit(svc.id)}
-                    disabled={staff.length === 0}
+                    disabled={staff.length === 0 || !selected.has_portal_account}
                     className="group rounded-lg border border-border bg-surface-2 p-3 text-left transition-colors hover:border-gold/50 hover:bg-gold/5 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
                   >
                     <p className="text-sm font-medium text-foreground leading-tight group-hover:text-gold transition-colors">

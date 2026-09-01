@@ -129,6 +129,19 @@ system-generated.
   `portalAccountId`, no PIN/password reference. Not touched.
 - **Explicitly deferred, no scaffolding added**: SMS OTP, Forgot Password.
 
+## Implemented (Points EARN/REDEEM Guard, `ohm#4x8k2p9d`, 2026-09-01)
+
+- **First RLS policy on `client_portal_accounts`**: `staff_select`
+  (`for select using (is_staff())`), added in
+  `supabase/migrations/20260901090000_point_transactions_portal_guard.sql`.
+  Additive only — INSERT/UPDATE remain unpoliced (still service-role-only
+  via the 7A-2/7A-3 portal API routes). Added so staff pages can read which
+  clients are portal-registered, to gate the Earn/Redeem UI. See
+  [[points_ledger_state]] for the companion `point_transactions` trigger
+  (`trg_require_portal_account_for_earn_redeem`) that enforces the same
+  rule at the DB level, and for the app-level gating built on top of this
+  policy.
+
 ## Not yet implemented — see roadmap
 
 - Member QR (per-account, permanent, client-side) and its `log_visit` RPC
@@ -136,10 +149,11 @@ system-generated.
   triggers are untouched so far.
 - Phone masking/reveal UI and the actual `phone_number_revealed` logging
   call site.
-- RLS policies on `client_portal_accounts` (currently default-deny for
-  everyone, including staff — 7A-2's Route Handlers bypass this via the
-  service-role client rather than designing the real policy matrix).
+- No INSERT/UPDATE RLS policy on `client_portal_accounts` yet (only the new
+  `staff_select` read policy above) — 7A-2/7A-3's Route Handlers still
+  bypass RLS entirely via the service-role client for registration/login.
 - Points balance / visit history / promos views for the client portal.
 - Manual points entry UI gated by `allow_receptionist_manual_points`
   (uses the existing `ADJUSTMENT` ledger entry type — no new entry type,
-  no ledger schema change, per ADR-001).
+  no ledger schema change, per ADR-001; `ADJUSTMENT` is exempt from the
+  new portal-account guard).

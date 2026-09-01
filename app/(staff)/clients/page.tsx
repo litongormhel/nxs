@@ -13,6 +13,7 @@ export default async function ClientsPage() {
     { data: addons },
     { data: lockers },
     { data: occupancy },
+    { data: portalAccounts },
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -52,6 +53,7 @@ export default async function ClientsPage() {
       .select("client_id, locker_number")
       .is("checked_out_at", null)
       .not("client_id", "is", null),
+    supabase.from("client_portal_accounts").select("client_id"),
   ]);
 
   // Build map: clientId → active locker number
@@ -61,6 +63,13 @@ export default async function ClientsPage() {
       clientLockerMap[row.client_id] = row.locker_number;
     }
   }
+
+  // Which clients can EARN/REDEEM points — must have a client_portal_accounts row
+  const portalAccountClientIds = new Set((portalAccounts ?? []).map((p) => p.client_id));
+  const clientsWithPortalFlag = (clients ?? []).map((c) => ({
+    ...c,
+    has_portal_account: portalAccountClientIds.has(c.id),
+  }));
 
   return (
     <div className="p-8">
@@ -76,7 +85,7 @@ export default async function ClientsPage() {
         </div>
       ) : (
         <ClientBrowser
-          clients={clients}
+          clients={clientsWithPortalFlag}
           services={services ?? []}
           staff={staff ?? []}
           therapists={therapists ?? []}

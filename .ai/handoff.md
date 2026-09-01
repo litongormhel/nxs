@@ -5,6 +5,77 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Points EARN/REDEEM Guard — Require Client Portal Account — complete**
+  (`ohm#4x8k2p9d`, 2026-09-01). Plan + regression risk assessment presented
+  and approved before any code/migration was written, per the prompt's
+  mandatory gate.
+  - **Live-schema check (mandatory before any migration)**: confirmed live
+    against project `zqwiqrvqyinacjozubtc` — `point_transactions` had only
+    the pre-existing `trg_block_ledger_update`/`trg_block_ledger_delete`/
+    `trg_apply_points_delta` triggers; `client_portal_accounts` had **zero**
+    RLS policies (confirmed via `pg_policies`, default-deny for every role
+    including staff, matching docs). Live data check: **77 of 78** `clients`
+    rows have no `client_portal_accounts` row — the blast radius of turning
+    this guard on immediately, surfaced and accepted by the user before
+    coding (no feature flag, ship live per confirmed business rule).
+  - **Three write paths into `point_transactions` for EARN/REDEEM**, all
+    covered by one DB trigger since it fires on every INSERT regardless of
+    caller: (1) `public.log_visit()` RPC (baseline function, called by
+    `logVisit()` in `app/(staff)/clients/actions.ts` — appears unused by any
+    current UI), (2) `public.quick_walkin()` RPC (new walk-ins with no
+    linked booking), (3) the direct multi-step insert inside
+    `logVisitBooking()` (`app/(staff)/bookings/actions.ts`) used by the
+    actual Log Visit modal when a booking is linked.
+  - **Migration** `supabase/migrations/20260901090000_point_transactions_portal_guard.sql`,
+    applied live after approval: new `BEFORE INSERT` trigger
+    `trg_require_portal_account_for_earn_redeem` /
+    `require_portal_account_for_earn_redeem()` on `point_transactions` —
+    same file/style as `trg_block_ledger_update`/`_delete`. Gates only
+    `entry_type IN ('EARN','REDEEM')`; `ADJUSTMENT` untouched. Plus one new
+    additive RLS policy, `staff_select` (`is_staff()`) on
+    `client_portal_accounts`, needed so the app can read which clients are
+    portal-registered to gate the UI (that table had no read path for
+    anyone before this). `get_advisors` showed no new findings after
+    applying — only pre-existing, unrelated warnings.
+  - **Key risk that shaped the implementation**: `logVisitBooking()`'s
+    linked-booking branch is **not atomic** — booking-status-update →
+    sale-insert → addon-insert → ledger-insert → locker-insert are separate
+    Supabase calls, not one transaction. If the DB trigger were the only
+    guard, rejecting the ledger insert would leave the booking already
+    marked `Completed` and the sale already recorded, with no ledger entry
+    and no locker assigned — a partial-write bug. So app-level gating is a
+    **hard pre-flight block** (disabled trigger buttons, `canSubmit`/
+    `handleConfirm` guard inside the modal) rather than a catch of the DB
+    exception after the fact. `quick_walkin()`/`log_visit()` are single
+    atomic Postgres functions, so the DB trigger alone is safe for those two
+    paths.
+  - **App-level gating**: `app/(staff)/clients/page.tsx` and
+    `app/(staff)/bookings/page.tsx` now also query
+    `client_portal_accounts` and pass a `has_portal_account` boolean per
+    client. `components/client-browser.tsx` disables "Log Visit" and every
+    service card, plus shows an inline note, when the selected client lacks
+    a portal account. `components/booking-browser.tsx` disables the
+    per-row "Log Visit" action the same way (walk-ins/guests with no
+    `client_id` are unaffected — they never got a ledger entry either way).
+    `components/log-visit-modal.tsx` adds a `canEarnRedeem` check baked
+    into `canSubmit` and a guard at the top of `handleConfirm()`, plus an
+    inline note, as defense-in-depth for whichever parent opened it.
+  - **Left untouched per user instruction**: the "Redeem" button in
+    `client-browser.tsx` (~line 406) has no `onClick` handler at all — dead
+    UI, out of scope, not wired to gating.
+  - Untouched: booking creation flow, `sales` table/logic, `ADJUSTMENT`
+    entry-type behavior, `locker_occupancy`, `apply_points_delta()`/
+    `points_balance` sync logic, Commission/Analytics.
+  - `npx tsc --noEmit` and `eslint` both clean on all changed files (two
+    pre-existing unused-var warnings in untouched lines of
+    `client-browser.tsx`/`log-visit-modal.tsx`, confirmed via `git diff` not
+    introduced by this change).
+  - **Not verified live in-browser this session** — no `.env.local`
+    present, same recurring credentials/env blocker as recent prior tasks;
+    verified via the live-schema/live-data checks above, `get_advisors`,
+    and `tsc`/`eslint`. See [[points_ledger_state]] and
+    [[client_portal_state]].
+
 - **Analytics — 5-Tab Restructure + Top Thera → Commission Deep Link — complete**
   (`ohm#4k7n2wc9`, 2026-08-31). Plan + regression risk assessment presented
   and approved before any code was written, per the prompt's mandatory gate.

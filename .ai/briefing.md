@@ -82,7 +82,48 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-08-31 — Analytics — 5-Tab Restructure + Top Thera → Commission
+1. **2026-09-01 — Points EARN/REDEEM Guard — Require Client Portal
+   Account** (`ohm#4x8k2p9d`). Plan + regression risk assessment presented
+   and approved before any code/migration was written, per the prompt's
+   mandatory gate.
+   - **Live-schema + live-data check before any migration**: confirmed
+     `point_transactions` triggers and `client_portal_accounts`'s zero RLS
+     policies directly against project `zqwiqrvqyinacjozubtc`; found only
+     1 of 78 `clients` rows has a linked `client_portal_accounts` row — the
+     immediate blast radius (77 clients losing EARN/REDEEM until portal
+     registration), surfaced and accepted before coding, shipped live with
+     no feature flag.
+   - New migration `20260901090000_point_transactions_portal_guard.sql`:
+     `BEFORE INSERT` trigger `trg_require_portal_account_for_earn_redeem`
+     on `point_transactions` blocks `EARN`/`REDEEM` rows for a `client_id`
+     with no `client_portal_accounts` row (`ADJUSTMENT` exempt); plus one
+     additive `staff_select` RLS policy on `client_portal_accounts` so the
+     app can read portal-registration status. Covers all three existing
+     write paths into the ledger (`log_visit()` RPC, `quick_walkin()` RPC,
+     and `logVisitBooking()`'s direct insert) since it fires on every
+     INSERT regardless of caller.
+   - **App-level gating is a hard pre-flight block, not a catch of the DB
+     exception** — `logVisitBooking()`'s linked-booking branch does
+     booking-update → sale-insert → ledger-insert → locker-insert as
+     separate non-atomic calls, so relying on the trigger alone would leave
+     a booking marked `Completed`/sale recorded with no ledger entry or
+     locker on rejection. `app/(staff)/clients/page.tsx` and
+     `app/(staff)/bookings/page.tsx` now pass a `has_portal_account` flag
+     per client; `client-browser.tsx`, `booking-browser.tsx`, and
+     `log-visit-modal.tsx` all disable their Log Visit triggers (with an
+     inline Tagalog note) before ever calling into the ledger. Guests/
+     walk-ins with no `client_id` are unaffected.
+   - Left untouched per instruction: the dead "Redeem" button in
+     `client-browser.tsx` (no `onClick`, not wired to anything).
+   - `get_advisors` showed no new findings after applying the migration.
+     `npx tsc --noEmit` and `eslint` both clean on all changed files.
+   - **Not verified live in-browser this session** — no `.env.local`
+     present, same recurring credentials/env blocker as recent prior
+     tasks; verified via the live-schema/live-data checks, `get_advisors`,
+     and `tsc`/`eslint`. See [[points_ledger_state]] and
+     [[client_portal_state]].
+
+2. **2026-08-31 — Analytics — 5-Tab Restructure + Top Thera → Commission
    Deep Link** (`ohm#4k7n2wc9`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate.
@@ -131,7 +172,7 @@ Full invariant list: [[nxs-architecture-locks]].
      tasks; verified via code review and `tsc`/`eslint`. See
      [[analytics_state]].
 
-2. **2026-08-31 — Commission Module — Report UI (Analytics > Commission >
+3. **2026-08-31 — Commission Module — Report UI (Analytics > Commission >
    Report)** (`ohm#8x2m4tqz`). Plan + regression risk assessment presented
    and approved before any code was written, per the prompt's mandatory
    gate. Report sub-tab, sibling to the already-shipped Rates tab.
@@ -165,7 +206,7 @@ Full invariant list: [[nxs-architecture-locks]].
      tasks; verified via code review, `tsc`/`eslint`, and the live-schema
      check. See [[commission_state]].
 
-3. **2026-08-31 — Commission Module — Schema (`commission_rates`) + Rates
+4. **2026-08-31 — Commission Module — Schema (`commission_rates`) + Rates
    Settings UI** (`ohm#4k8t2wq9`). Plan + regression risk assessment
    presented and approved before any code/migration was written, per the
    prompt's mandatory gate. Schema + Rates Settings UI only — Report UI is
@@ -217,7 +258,7 @@ Full invariant list: [[nxs-architecture-locks]].
      tasks; verified via code review, `tsc`/`eslint`, and the Supabase
      advisors check. See [[commission_state]].
 
-4. **2026-08-30 — Sidebar Nav — Collapsible Hamburger Menu for
+5. **2026-08-30 — Sidebar Nav — Collapsible Hamburger Menu for
    Mobile/Tablet** (`ohm#757d5b08`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. UI/layout only. Fixes the reported bug (sidebar
@@ -248,33 +289,3 @@ Full invariant list: [[nxs-architecture-locks]].
    fixed positioning logic. No dedicated `docs/state/*.md` file exists
    for sidebar/nav (not in `current_state.md`'s routing index), so no
    state-file update was made for this task.
-
-5. **2026-08-30 — Booking Flow — Mobile/Tablet Responsive Pass**
-   (`ohm#68b329da`). Plan + regression risk assessment presented and
-   approved before any code was written, per the prompt's mandatory gate.
-   UI/layout only, no backend/DB/business-logic changes. Made **New
-   Booking** (`components/booking-form-modal.tsx`) and **Quick Walk-in**
-   (`components/quick-walkin-modal.tsx`) fully usable on mobile/tablet:
-   Tailwind `sm:` breakpoints stack previously-fixed 2-column field rows
-   (Service/Therapist, Discount, Amount/Payment) to 1 column below `sm:`,
-   `quick-walkin-modal.tsx`'s time-slot grid changed from fixed
-   `grid-cols-4` to `grid-cols-3 sm:grid-cols-4` to match the existing
-   pattern in `booking-form-modal.tsx`, interactive rows (time slots,
-   client-search suggestions, add-ons) gained `min-h-[44px] sm:min-h-0`
-   touch targets, and the bottom action-button row became sticky on
-   mobile only so it stays reachable on long forms. Conflict-error
-   display (same existing `23P01`/`23505` parsing, untouched) gained
-   larger mobile text and an auto-scroll-into-view on appearance so a
-   double-booking conflict is never missed off-screen on a small
-   viewport. No dedicated Room/Therapist selector component exists — the
-   grid UI in scope was the inline time-slot grid in both modal files.
-   Desktop fully preserved (every mobile class paired with an `sm:` reset
-   to the prior desktop value); no Supabase/migration/exclusion-
-   constraint touch; `createBooking`/`quickWalkin` server actions and
-   `components/booking-browser.tsx` untouched. `npx tsc --noEmit` and
-   `eslint` both clean on changed files. **Not verified live in-browser**
-   this session — another chat's dev server was already running on
-   :3000 and Staff Login requires real credentials this session doesn't
-   have (same recurring blocker); verified via code review, `tsc`/
-   `eslint`, and manual trace of Tailwind breakpoint semantics. See
-   [[bookings_state]].

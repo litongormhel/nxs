@@ -15,6 +15,7 @@ export default async function BookingsPage() {
     { data: addons },
     { data: lockers },
     { data: weekendSlots },
+    { data: portalAccounts },
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -56,9 +57,17 @@ export default async function BookingsPage() {
       .eq("active", true)
       .order("number", { ascending: true }),
     supabase.from("weekend_slots").select("slot_time"),
+    supabase.from("client_portal_accounts").select("client_id"),
   ]);
 
   const timeSlots = sortSlotTimes((weekendSlots ?? []).map((s) => s.slot_time.slice(0, 5)));
+
+  // Which clients can EARN/REDEEM points — must have a client_portal_accounts row
+  const portalAccountClientIds = new Set((portalAccounts ?? []).map((p) => p.client_id));
+  const clientsWithPortalFlag = (clients ?? []).map((c) => ({
+    ...c,
+    has_portal_account: portalAccountClientIds.has(c.id),
+  }));
 
   return (
     <div className="p-8">
@@ -70,7 +79,7 @@ export default async function BookingsPage() {
         </div>
       ) : (
         <BookingBrowser
-          clients={clients ?? []}
+          clients={clientsWithPortalFlag}
           services={services ?? []}
           therapists={therapists ?? []}
           rooms={(rooms ?? []).map((r) => r.number)}

@@ -267,16 +267,23 @@ export function LogVisitModal({
     addons,
   ]);
 
+  const canEarnRedeem = !clientId || !!selectedClient?.has_portal_account;
+
   const canSubmit =
     !isPending &&
     (clientId ? true : (guestLabel && guestLabel.trim().length > 0)) &&
     !!serviceId &&
     (isWetArea || !!therapistId) &&
     !!lockerNumber &&
-    !!staffId;
+    !!staffId &&
+    canEarnRedeem;
 
   function handleConfirm() {
     setError(null);
+    if (!canEarnRedeem) {
+      setError("Walang portal account — hindi pa mag-eearn/redeem ng points.");
+      return;
+    }
     if (!isWetArea && !therapistId) {
       setError("Please select a therapist for this service.");
       return;
@@ -328,6 +335,11 @@ export function LogVisitModal({
             ? `${selectedClient.codename} · @${selectedClient.username}`
             : guestLabel ?? "Walk-in Guest"}
         </p>
+        {!canEarnRedeem && (
+          <p className="mt-1 text-xs text-accent-red">
+            Walang portal account — hindi pa mag-eearn/redeem ng points.
+          </p>
+        )}
 
         <div className="mt-5 space-y-4">
           {/* Find Booking */}
