@@ -670,7 +670,10 @@ export function TherapistBrowser({
         : busyNow
         ? "booked"
         : "available";
-      return { t, meta, isOff, onLeave, booked, isTop, slotStatus };
+      const openSlots = WEEKEND_SLOTS.filter(
+        (s) => !isTherapistBusy(t, viewDate, s, 90)
+      );
+      return { t, meta, isOff, onLeave, booked, isTop, slotStatus, openSlots };
     })
     .filter((r) => {
       if (!showArchived && r.meta.archived) return false;
@@ -777,7 +780,7 @@ export function TherapistBrowser({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {cardRows.map((r) => {
-            const { t, meta, isOff, onLeave, booked, isTop, slotStatus } = r;
+            const { t, meta, isOff, onLeave, booked, isTop, slotStatus, openSlots } = r;
             const isAbsentToday = meta.absentDates.includes(viewDate);
             const statusLabel = meta.archived
               ? "Archived"
@@ -975,28 +978,25 @@ export function TherapistBrowser({
                   </div>
                 )}
 
-                {/* Services Offered Section */}
+                {/* Available Slot Section */}
                 <div className="text-[9px] font-bold tracking-wider uppercase text-muted mt-3 mb-1.5">
-                  Services Offered
+                  Available Slot
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {ALL_THERAPIST_SERVICES.map((s) => {
-                    const isOffered = meta.services.includes(s);
-                    return (
-                      <button
+                  {openSlots.length === 0 ? (
+                    <span className="px-2.5 py-1 rounded-full text-[9.5px] font-bold bg-[#F5E4E1] text-[#8A3A2E]">
+                      Fully booked
+                    </span>
+                  ) : (
+                    openSlots.slice(0, 3).map((s) => (
+                      <span
                         key={s}
-                        type="button"
-                        onClick={() => handleToggleService(t, s)}
-                        className={`px-2 py-1 rounded-lg border text-[9.5px] font-bold transition-all ${
-                          isOffered
-                            ? "bg-gradient-to-br from-[#8a9a76] to-[#4e5941] text-white border-[#4e5941]"
-                            : "bg-surface-2 text-muted border-border hover:border-gold/40"
-                        }`}
+                        className="px-2.5 py-1 rounded-full text-[9.5px] font-bold bg-[#E9F1E1] text-[#3D5A29]"
                       >
-                        {s}
-                      </button>
-                    );
-                  })}
+                        {fmtTime(s)}
+                      </span>
+                    ))
+                  )}
                 </div>
 
                 {/* Weekly Day(s) Off Section */}
