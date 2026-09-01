@@ -217,6 +217,32 @@ export async function deleteAddon(addonId: string, staffId: string): Promise<Act
   return { ok: true };
 }
 
+// ---------- Loyalty Points Formula (schema/config only — not wired into any live points-award path) ----------
+
+export async function updateLoyaltyFormula(
+  mode: "uniform" | "proportional",
+  pesoPerPoint: number | null,
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("app_settings")
+    .update({
+      loyalty_formula_mode: mode,
+      peso_per_point: mode === "uniform" ? pesoPerPoint : null,
+    })
+    .eq("id", true);
+  if (error) return fail(error);
+  await logAction(
+    supabase,
+    staffId,
+    "settings_update_loyalty_formula",
+    `mode=${mode} peso_per_point=${mode === "uniform" ? pesoPerPoint : "n/a"}`
+  );
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
 // ---------- Capacity ----------
 
 export async function addLockerBatch(staffId: string): Promise<ActionResult & { added?: number[] }> {

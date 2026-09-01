@@ -105,6 +105,14 @@
   entry_type exists in the DB and was exercised directly in migration
   testing, but has no app-level entry point — and is exempt from the
   portal-account guard above).
+- **Owner-configurable loyalty points formula (`ohm#9k3m7qxc`, 2026-09-01,
+  Part 1 of 2)**: `app_settings.loyalty_formula_mode`/`peso_per_point` and
+  the pure `computeLoyaltyPoints()` function (`lib/loyalty.ts`) exist, plus
+  a Settings UI to configure them — see [[settings_state]]. **Not called
+  from `log_visit()`, `quick_walkin()`, or `logVisitBooking()` yet** —
+  those all still use `services.points_earned` directly, unchanged. Wiring
+  the formula into the actual points-award path is Part 2, a separate
+  follow-up prompt, not started.
 - Ledger history view is a fixed last-10 list on the Client Profile detail
   panel (`components/client-browser.tsx`) — no pagination, no full ledger
   browser.

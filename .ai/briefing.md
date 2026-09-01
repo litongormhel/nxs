@@ -82,7 +82,14 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-01 — Points EARN/REDEEM Guard — Require Client Portal
+1. **2026-09-01 — Loyalty Points Formula — Settings Schema + Configuration
+   UI (Part 1 of 2)** (`ohm#9k3m7qxc`). Plan + regression risk assessment
+   presented and approved before any code/migration was written, per the
+   prompt's mandatory gate. Part 2 (wiring into the live points-award path)
+   is a separate follow-up, not started. See [[settings_state]] and
+   `.ai/handoff.md` for full detail.
+
+2. **2026-09-01 — Points EARN/REDEEM Guard — Require Client Portal
    Account** (`ohm#4x8k2p9d`). Plan + regression risk assessment presented
    and approved before any code/migration was written, per the prompt's
    mandatory gate.
@@ -123,7 +130,7 @@ Full invariant list: [[nxs-architecture-locks]].
      and `tsc`/`eslint`. See [[points_ledger_state]] and
      [[client_portal_state]].
 
-2. **2026-08-31 — Analytics — 5-Tab Restructure + Top Thera → Commission
+3. **2026-08-31 — Analytics — 5-Tab Restructure + Top Thera → Commission
    Deep Link** (`ohm#4k7n2wc9`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate.
@@ -172,7 +179,7 @@ Full invariant list: [[nxs-architecture-locks]].
      tasks; verified via code review and `tsc`/`eslint`. See
      [[analytics_state]].
 
-3. **2026-08-31 — Commission Module — Report UI (Analytics > Commission >
+4. **2026-08-31 — Commission Module — Report UI (Analytics > Commission >
    Report)** (`ohm#8x2m4tqz`). Plan + regression risk assessment presented
    and approved before any code was written, per the prompt's mandatory
    gate. Report sub-tab, sibling to the already-shipped Rates tab.
@@ -206,7 +213,7 @@ Full invariant list: [[nxs-architecture-locks]].
      tasks; verified via code review, `tsc`/`eslint`, and the live-schema
      check. See [[commission_state]].
 
-4. **2026-08-31 — Commission Module — Schema (`commission_rates`) + Rates
+5. **2026-08-31 — Commission Module — Schema (`commission_rates`) + Rates
    Settings UI** (`ohm#4k8t2wq9`). Plan + regression risk assessment
    presented and approved before any code/migration was written, per the
    prompt's mandatory gate. Schema + Rates Settings UI only — Report UI is
@@ -257,35 +264,3 @@ Full invariant list: [[nxs-architecture-locks]].
      missing), same recurring credentials/env blocker as recent prior
      tasks; verified via code review, `tsc`/`eslint`, and the Supabase
      advisors check. See [[commission_state]].
-
-5. **2026-08-30 — Sidebar Nav — Collapsible Hamburger Menu for
-   Mobile/Tablet** (`ohm#757d5b08`). Plan + regression risk assessment
-   presented and approved before any code was written, per the prompt's
-   mandatory gate. UI/layout only. Fixes the reported bug (sidebar
-   squeezing page content on mobile, confirmed via screenshot on
-   nxsspa.vercel.app): `components/sidebar.tsx`'s `<aside>` is now `fixed`
-   off-canvas (`-translate-x-full`) below the `sm:` breakpoint and
-   `sm:static sm:translate-x-0` at `sm:` and up — taking it out of the
-   root `flex` layout on mobile (no changes needed to
-   `app/layout.tsx`/`app/(staff)/layout.tsx`, since `fixed` positioning
-   alone stops it from being a flex sibling competing for width). New
-   `useState<boolean>` (`isOpen`, default `false`) drives a `sm:hidden`
-   44×44px hamburger toggle button (top-left, fixed) that opens the
-   drawer; while open, a close ("×") button in the sidebar's own header
-   replaces it, plus a `sm:hidden` full-screen backdrop closes on tap;
-   every nav `<Link>` also closes the drawer on click. Nav item and
-   sign-out/log-in button padding got a mobile-only touch-target bump
-   (`py-3 sm:py-2.5`, `py-2.5 sm:py-1.5`), resetting to today's exact
-   desktop size at `sm:`. **Role-gating logic untouched** — the
-   `navItems.filter((item) => !("ownerOnly" in item && item.ownerOnly) ||
-   currentRole === "Owner")` line is unchanged, same conditional
-   rendering, only the container around it changed. No other component,
-   `lib/nav.ts`, layout file, or Supabase/auth logic touched. `npx tsc
-   --noEmit` and `eslint` both clean. **Not verified live in-browser**
-   this session — same recurring blocker as `ohm#68b329da`: another
-   chat's dev server already on :3000, Staff Login requires real
-   credentials this session doesn't have; verified via code review,
-   `tsc`/`eslint`, and manual trace of the Tailwind breakpoint/flex-vs-
-   fixed positioning logic. No dedicated `docs/state/*.md` file exists
-   for sidebar/nav (not in `current_state.md`'s routing index), so no
-   state-file update was made for this task.

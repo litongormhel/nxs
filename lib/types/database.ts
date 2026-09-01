@@ -78,14 +78,20 @@ export type Database = {
         Row: {
           allow_receptionist_manual_points: boolean
           id: boolean
+          loyalty_formula_mode: string | null
+          peso_per_point: number | null
         }
         Insert: {
           allow_receptionist_manual_points?: boolean
           id?: boolean
+          loyalty_formula_mode?: string | null
+          peso_per_point?: number | null
         }
         Update: {
           allow_receptionist_manual_points?: boolean
           id?: boolean
+          loyalty_formula_mode?: string | null
+          peso_per_point?: number | null
         }
         Relationships: []
       }

@@ -12,6 +12,7 @@ export default async function SettingsPage() {
     { data: weekendSlots },
     { count: lockersCount },
     { count: roomsCount },
+    { data: appSettings },
   ] = await Promise.all([
     supabase
       .from("services")
@@ -37,6 +38,11 @@ export default async function SettingsPage() {
       .from("rooms")
       .select("*", { count: "exact", head: true })
       .eq("active", true),
+    supabase
+      .from("app_settings")
+      .select("loyalty_formula_mode, peso_per_point")
+      .eq("id", true)
+      .single(),
   ]);
 
   return (
@@ -65,6 +71,10 @@ export default async function SettingsPage() {
           .sort((a, b) => compareSlotTimes(a.slot_time, b.slot_time))}
         initialLockersCount={lockersCount ?? 100}
         initialRoomsCount={roomsCount ?? 18}
+        initialLoyaltyFormulaMode={
+          (appSettings?.loyalty_formula_mode as "uniform" | "proportional" | null) ?? null
+        }
+        initialPesoPerPoint={appSettings?.peso_per_point ?? null}
       />
     </div>
   );

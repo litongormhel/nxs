@@ -22,6 +22,7 @@ import {
 import { compareSlotTimes } from "@/lib/bookings/slots";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useTheme } from "@/lib/theme-context";
+import { LoyaltyFormulaSettings } from "@/components/loyalty-formula-settings";
 
 export type Service = {
   id: string;
@@ -61,6 +62,8 @@ export function SettingsBrowser({
   initialWeekendSlots,
   initialLockersCount,
   initialRoomsCount,
+  initialLoyaltyFormulaMode,
+  initialPesoPerPoint,
 }: {
   initialServices: Service[];
   initialPromos: Promo[];
@@ -68,6 +71,8 @@ export function SettingsBrowser({
   initialWeekendSlots: WeekendSlot[];
   initialLockersCount: number;
   initialRoomsCount: number;
+  initialLoyaltyFormulaMode: "uniform" | "proportional" | null;
+  initialPesoPerPoint: number | null;
 }) {
   const router = useRouter();
 
@@ -83,6 +88,7 @@ export function SettingsBrowser({
     currentRole === "Supervisor" || currentRole === "Owner";
   const canEditCatalog =
     currentRole === "Supervisor" || currentRole === "Owner";
+  const canEditLoyaltyFormula = currentRole === "Owner";
 
   // Data states
   const [services, setServices] = useState<Service[]>(() => {
@@ -598,6 +604,15 @@ export function SettingsBrowser({
           ))}
         </div>
       </div>
+
+      {/* SECTION: Loyalty Points Formula */}
+      <LoyaltyFormulaSettings
+        initialMode={initialLoyaltyFormulaMode}
+        initialPesoPerPoint={initialPesoPerPoint}
+        services={services}
+        canEdit={canEditLoyaltyFormula}
+        staffId={selectedStaffId}
+      />
 
       {/* SECTION: Promo Codes */}
       <div>

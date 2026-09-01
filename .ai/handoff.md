@@ -5,6 +5,57 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Loyalty Points Formula — Settings Schema + Configuration UI (Part 1 of
+  2) — complete** (`ohm#9k3m7qxc`, 2026-09-01). Plan + regression risk
+  assessment presented and approved before any code/migration was written,
+  per the prompt's mandatory gate. **Part 2 (wiring the formula into the
+  live points-award path at checkout/booking completion) is a separate
+  follow-up prompt, not started.**
+  - **Two discrepancies surfaced before coding**: no
+    `points-settings-mockup.html` exists anywhere in the repo (built the UI
+    off `components/settings-browser.tsx`'s existing design tokens instead,
+    same fallback used for the Commission Rates tab); no
+    `docs/state/loyalty_state.md` file exists, so this update lives in
+    `docs/state/settings_state.md` (schema owner) with a cross-reference
+    note added to `docs/state/points_ledger_state.md`.
+  - **Live-schema + live-data check before migration**: confirmed live
+    against project `zqwiqrvqyinacjozubtc` — the prompt's mockup numbers
+    (Signature 10pts, Combi 6pts) do not match live `services` data
+    (Signature Massage is ₱1,300/**6pts**, Combi Massage is ₱1,100/**5pts**).
+    The preview UI queries live `services` rows, not the prompt's numbers.
+  - **Migration**
+    `supabase/migrations/20260901120000_app_settings_loyalty_formula.sql`,
+    applied live after approval: adds nullable `loyalty_formula_mode text`
+    (check constraint `in ('uniform','proportional')`) and nullable
+    `peso_per_point numeric` to the existing `app_settings` singleton.
+    Existing `app_settings_select`/`app_settings_update` RLS policies
+    already cover the new columns — no policy change needed. `get_advisors`
+    showed no new findings after applying.
+  - **Pure function** `lib/loyalty.ts` (`computeLoyaltyPoints`) —
+    standard-rounding (`Math.round`), not called from any live flow yet.
+    Wet Area is never passed through it, per the prompt.
+  - **UI**: new `components/loyalty-formula-settings.tsx`
+    (`LoyaltyFormulaSettings`), wired into `components/settings-browser.tsx`
+    as a new section between Services & Pricing and Promo Codes. Mode
+    radio-cards, conditional peso-per-point field (Uniform only), live
+    preview using real Signature/Combi `services` rows plus a read-only
+    fixed Wet Area (3pt) card, gate banner shown whenever
+    `loyalty_formula_mode IS NULL`. Save/Cancel via new
+    `updateLoyaltyFormula` server action (`app/(staff)/settings/actions.ts`)
+    — **Owner-only** in the UI (`canEditLoyaltyFormula`), matching the
+    RLS's Owner-only `app_settings_update` policy.
+  - Untouched, per the prompt's scope: `point_transactions` and its
+    triggers, `log_visit()`/`quick_walkin()`/`logVisitBooking()`, the
+    `services` table's writes (read-only reference here).
+  - `lib/types/database.ts` hand-patched for the two new `app_settings`
+    columns, same approach as prior tasks (avoids the unrelated
+    `quick_walkin` type-gen drift a full regen would reintroduce).
+  - `npx tsc --noEmit` and `eslint` both clean on all changed/new files.
+  - **Not verified live in-browser this session** — no `.env.local`
+    present, same recurring credentials/env blocker as recent prior tasks;
+    verified via the live-schema/live-data check, `get_advisors`, and
+    `tsc`/`eslint`. See [[settings_state]] and [[points_ledger_state]].
+
 - **Points EARN/REDEEM Guard — Require Client Portal Account — complete**
   (`ohm#4x8k2p9d`, 2026-09-01). Plan + regression risk assessment presented
   and approved before any code/migration was written, per the prompt's

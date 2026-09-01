@@ -158,6 +158,47 @@ boolean flag rather than shoehorned into an existing catalog table.
 - No UI reads or writes this table yet — this prompt was database-layer
   only.
 
+## Loyalty Points Formula — schema + config UI (`ohm#9k3m7qxc`, 2026-09-01,
+Part 1 of 2)
+
+Adds owner-configurable loyalty formula fields to the same `app_settings`
+singleton above. **Not wired into any live points-award path** — that is
+Part 2, a separate follow-up prompt, not started.
+
+- `app_settings.loyalty_formula_mode` (text, nullable, `check (in
+  ('uniform','proportional'))`) and `app_settings.peso_per_point` (numeric,
+  nullable) — added by
+  `supabase/migrations/20260901120000_app_settings_loyalty_formula.sql`.
+  Nullable = "not yet configured." No RLS change needed — existing
+  `app_settings_select`/`app_settings_update` policies already cover these
+  columns on the same row.
+- Pure function `lib/loyalty.ts` (`computeLoyaltyPoints(mode, paidAmount,
+  fullPrice, basePoints, pesoPerPoint)`), standard rounding
+  (`Math.round`). Not called from any live flow yet. Wet Area is never
+  passed through it — stays a fixed 3 pts, to be handled at the call site
+  once Part 2 wires this in.
+- UI: `components/loyalty-formula-settings.tsx`
+  (`LoyaltyFormulaSettings`), a new section in `components/settings-browser.tsx`
+  between Services & Pricing and Promo Codes. Mode radio-cards (Uniform/
+  Proportional), conditional peso-per-point input (Uniform only), live
+  preview against real `services` rows for Signature/Combi Massage plus a
+  read-only fixed Wet Area (3pt) card, gate banner shown whenever
+  `loyalty_formula_mode IS NULL`. Save/Cancel via `updateLoyaltyFormula`
+  (`app/(staff)/settings/actions.ts`) — **Owner-only** in the UI
+  (`canEditLoyaltyFormula`), matching the Owner-only `app_settings_update`
+  RLS policy.
+- **Discrepancy found and resolved before coding**: the prompt's mockup
+  file (`points-settings-mockup.html`) does not exist anywhere in the repo
+  — built off this file's existing design tokens instead (same fallback
+  used for the Commission Rates tab). The prompt's example preview numbers
+  (Signature 10pts, Combi 6pts) also didn't match live `services` data
+  (Signature Massage is ₱1,300/**6pts**, Combi Massage is ₱1,100/**5pts**
+  as of this writing) — the preview queries live `services` rows, not
+  hardcoded numbers, so it stays correct regardless.
+- See [[points_ledger_state]] for why Part 2 (wiring this into
+  `log_visit()`/`quick_walkin()`/`logVisitBooking()`) is deliberately out
+  of scope here.
+
 ## Not persisted — deliberately, not an oversight
 
 **Display/Appearance** (theme) remains local/session-only — confirmed with
