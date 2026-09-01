@@ -60,6 +60,7 @@ export function QuickWalkinModal({
   addons,
   lockers,
   timeSlots,
+  initialClientId = null,
   onClose,
   onCreated,
 }: {
@@ -72,13 +73,18 @@ export function QuickWalkinModal({
   addons: Addon[];
   lockers: number[];
   timeSlots: string[];
+  initialClientId?: string | null;
   onClose: () => void;
   onCreated: () => void;
 }) {
   const date = todayIso();
 
   const [clientQuery, setClientQuery] = useState("");
-  const [clientId, setClientId] = useState<string | null>(null);
+  const [clientId, setClientId] = useState<string | null>(initialClientId);
+  // Set when opened via a Member QR scan — the client field is locked to a
+  // read-only display until the user explicitly clicks "Change client", so a
+  // scan can't be silently overridden by an accidental keystroke.
+  const [clientLocked, setClientLocked] = useState(!!initialClientId);
   const [guestName, setGuestName] = useState("");
   const [serviceId, setServiceId] = useState(services[0]?.id ?? "");
   const [therapistId, setTherapistId] = useState<string>("");
@@ -308,46 +314,67 @@ export function QuickWalkinModal({
             <label className="text-xs text-muted" htmlFor="wk-client-search">
               Client <span className="opacity-70">(search if they already have an account)</span>
             </label>
-            <input
-              id="wk-client-search"
-              type="text"
-              placeholder="Search by name or username…"
-              value={clientId ? `${selectedClient?.codename}` : clientQuery}
-              onChange={(e) => {
-                setClientId(null);
-                setClientQuery(e.target.value);
-              }}
-              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-            />
-            {!clientId && clientQuery && (
-              <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-border bg-background">
-                {filteredClients.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-muted">No matching clients.</p>
-                ) : (
-                  filteredClients.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => {
-                        setClientId(c.id);
-                        setClientQuery("");
-                      }}
-                      className="block min-h-[44px] sm:min-h-0 w-full px-3 py-2 text-left text-sm text-foreground hover:bg-gold/10"
-                    >
-                      {c.codename} <span className="text-muted">@{c.username}</span>
-                    </button>
-                  ))
-                )}
+            {clientLocked ? (
+              <div className="mt-1 flex items-center justify-between gap-2 rounded-md border border-gold/50 bg-gold/5 px-3 py-2">
+                <span className="text-sm font-medium text-foreground">
+                  {selectedClient?.codename} <span className="text-muted">@{selectedClient?.username}</span>
+                  <span className="ml-2 text-[10px] uppercase tracking-wide text-gold">Scanned</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClientLocked(false);
+                    setClientId(null);
+                  }}
+                  className="shrink-0 text-xs text-muted underline hover:text-foreground"
+                >
+                  Change client
+                </button>
               </div>
-            )}
-            {clientId && (
-              <button
-                type="button"
-                onClick={() => setClientId(null)}
-                className="mt-1 text-xs text-muted underline hover:text-foreground"
-              >
-                Clear
-              </button>
+            ) : (
+              <>
+                <input
+                  id="wk-client-search"
+                  type="text"
+                  placeholder="Search by name or username…"
+                  value={clientId ? `${selectedClient?.codename}` : clientQuery}
+                  onChange={(e) => {
+                    setClientId(null);
+                    setClientQuery(e.target.value);
+                  }}
+                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                />
+                {!clientId && clientQuery && (
+                  <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-border bg-background">
+                    {filteredClients.length === 0 ? (
+                      <p className="px-3 py-2 text-xs text-muted">No matching clients.</p>
+                    ) : (
+                      filteredClients.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setClientId(c.id);
+                            setClientQuery("");
+                          }}
+                          className="block min-h-[44px] sm:min-h-0 w-full px-3 py-2 text-left text-sm text-foreground hover:bg-gold/10"
+                        >
+                          {c.codename} <span className="text-muted">@{c.username}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+                {clientId && (
+                  <button
+                    type="button"
+                    onClick={() => setClientId(null)}
+                    className="mt-1 text-xs text-muted underline hover:text-foreground"
+                  >
+                    Clear
+                  </button>
+                )}
+              </>
             )}
           </div>
 

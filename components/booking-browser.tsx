@@ -9,6 +9,7 @@ import { slotsOverlap, compareSlotTimes } from "@/lib/bookings/slots";
 import { BookingFormModal } from "@/components/booking-form-modal";
 import { QuickWalkinModal } from "@/components/quick-walkin-modal";
 import { LogVisitModal } from "@/components/log-visit-modal";
+import { ScanMemberQrModal, type ScannedClient } from "@/components/scan-member-qr-modal";
 import type { Database } from "@/lib/types/database";
 
 export type Client = {
@@ -33,6 +34,22 @@ type LockerOccupancyRow = {
   checked_in_at: string;
   checked_out_at: string | null;
   locker_number: number;
+};
+
+// Minimal shape LogVisitModal's `initialBooking` prop needs — a plain
+// BookingRow satisfies this structurally, and it's also what a Member QR
+// scan's own booking lookup (not the day-view fetch) returns.
+type LogVisitInitialBooking = {
+  id: string;
+  client_id: string | null;
+  guest_label: string | null;
+  service_id: string;
+  therapist_id: string | null;
+  room_number: number | null;
+  booking_date: string;
+  start_time: string;
+  promo_id: string | null;
+  status: Database["public"]["Enums"]["booking_status"];
 };
 
 type BookingRow = {
@@ -120,7 +137,9 @@ export function BookingBrowser({
   const [reloadToken, setReloadToken] = useState(0);
   const [showNewBooking, setShowNewBooking] = useState(false);
   const [showWalkin, setShowWalkin] = useState(false);
-  const [logVisitBooking, setLogVisitBooking] = useState<BookingRow | null>(null);
+  const [walkinInitialClientId, setWalkinInitialClientId] = useState<string | null>(null);
+  const [showScanQr, setShowScanQr] = useState(false);
+  const [logVisitBooking, setLogVisitBooking] = useState<LogVisitInitialBooking | null>(null);
   const [reassignBooking, setReassignBooking] = useState<BookingRow | null>(null);
   const [reassignTherapistId, setReassignTherapistId] = useState("");
   const [reassignStartTime, setReassignStartTime] = useState("");
@@ -194,6 +213,34 @@ export function BookingBrowser({
     await updateBookingStatus(id, status);
     reload();
     router.refresh();
+  }
+
+  // Scanning a Member QR resolves a client, then hands off into whichever of
+  // the existing Log Visit / Quick Walk-in flows fits: Log Visit if the
+  // client has an open (Booked/Needs Reassignment) booking to complete,
+  // Quick Walk-in otherwise. No new write path — same as clicking either
+  // trigger manually, just pre-filled.
+  async function handleScanResolved(client: ScannedClient) {
+    setShowScanQr(false);
+    const supabase = createClient();
+    const { data: booking } = await supabase
+      .from("bookings")
+      .select(
+        "id, client_id, guest_label, service_id, therapist_id, room_number, booking_date, start_time, promo_id, status"
+      )
+      .eq("client_id", client.id)
+      .in("status", ["Booked", "Needs Reassignment"])
+      .order("booking_date", { ascending: true })
+      .order("start_time", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (booking) {
+      setLogVisitBooking(booking as LogVisitInitialBooking);
+    } else {
+      setWalkinInitialClientId(client.id);
+      setShowWalkin(true);
+    }
   }
 
   function openReassign(row: BookingRow) {
@@ -352,7 +399,18 @@ export function BookingBrowser({
         <div className="flex gap-3">
           <button
             type="button"
-            onClick={() => setShowWalkin(true)}
+            onClick={() => setShowScanQr(true)}
+            disabled={services.length === 0 || rooms.length === 0 || staff.length === 0}
+            className="rounded-md border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-foreground hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Scan Member QR
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setWalkinInitialClientId(null);
+              setShowWalkin(true);
+            }}
             disabled={services.length === 0 || rooms.length === 0 || staff.length === 0}
             className="rounded-md border border-emerald-800/60 bg-emerald-950/20 px-4 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -493,13 +551,22 @@ export function BookingBrowser({
           addons={addons}
           lockers={lockers}
           timeSlots={timeSlots}
-          onClose={() => setShowWalkin(false)}
+          initialClientId={walkinInitialClientId}
+          onClose={() => {
+            setShowWalkin(false);
+            setWalkinInitialClientId(null);
+          }}
           onCreated={() => {
             setShowWalkin(false);
+            setWalkinInitialClientId(null);
             reload();
             router.refresh();
           }}
         />
+      )}
+
+      {showScanQr && (
+        <ScanMemberQrModal onClose={() => setShowScanQr(false)} onResolved={handleScanResolved} />
       )}
 
       {logVisitBooking && (

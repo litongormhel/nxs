@@ -82,7 +82,17 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-01 — Member QR — Per-Account Token + Client-Facing QR Display
+1. **2026-09-01 — Member QR — Reception Scan + Prefill Into Log Visit /
+   Quick Walk-in (7B-2 of 2)** (`ohm#7q4d8vnw`). Plan + regression risk
+   assessment presented and approved before any code was written, per the
+   prompt's mandatory gate. Phase 7B (Member QR, 7B-1 + 7B-2) is now
+   complete end-to-end: reception scans a client's Member QR
+   (`resolveMemberQr()`, new `jsqr`-based scan modal), which hands off into
+   the existing `LogVisitModal`/`QuickWalkinModal` flows pre-filled and
+   client-locked — no new write logic, no changes to points/ledger. See
+   [[client_portal_state]] and `.ai/handoff.md` for full detail.
+
+2. **2026-09-01 — Member QR — Per-Account Token + Client-Facing QR Display
    (7B-1 of 2)** (`ohm#5t9k2mxr`). Plan + regression risk assessment
    presented and approved before any code/migration was written, per the
    prompt's mandatory gate. Discrepancy confirmed before planning:
@@ -90,22 +100,17 @@ Full invariant list: [[nxs-architecture-locks]].
    only generates/displays the QR, no scan/lookup logic (that's 7B-2). See
    [[client_portal_state]] and `.ai/handoff.md` for full detail.
 
-2. **2026-09-01 — Loyalty Points Formula — Wire Into Live Points-Award Flow
+3. **2026-09-01 — Loyalty Points Formula — Wire Into Live Points-Award Flow
    (Part 2 of 2)** (`ohm#2r8w5nfz`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. Points are now formula-driven end-to-end. See
    [[points_ledger_state]], [[settings_state]], and `.ai/handoff.md` for
    full detail.
 
-3. **2026-09-01 — Loyalty Points Formula — Settings Schema + Configuration
+4. **2026-09-01 — Loyalty Points Formula — Settings Schema + Configuration
    UI (Part 1 of 2)** (`ohm#9k3m7qxc`). Plan + regression risk assessment
    presented and approved before any code/migration was written, per the
    prompt's mandatory gate.
-
-4. **2026-09-01 — Points EARN/REDEEM Guard — Require Client Portal
-   Account** (`ohm#4x8k2p9d`). Plan + regression risk assessment presented
-   and approved before any code/migration was written, per the prompt's
-   mandatory gate.
    - **Live-schema + live-data check before any migration**: confirmed
      `point_transactions` triggers and `client_portal_accounts`'s zero RLS
      policies directly against project `zqwiqrvqyinacjozubtc`; found only
@@ -143,51 +148,11 @@ Full invariant list: [[nxs-architecture-locks]].
      and `tsc`/`eslint`. See [[points_ledger_state]] and
      [[client_portal_state]].
 
-5. **2026-08-31 — Analytics — 5-Tab Restructure + Top Thera → Commission
-   Deep Link** (`ohm#4k7n2wc9`). Plan + regression risk assessment
-   presented and approved before any code was written, per the prompt's
-   mandatory gate.
-   - **Discrepancy surfaced and resolved before coding**: the prompt
-     described building a net-new Commission tab computing commission as
-     `sales.amount × commission_rates.percent` (joined via
-     `sales.service_id`/`sales.created_at`), with "no admin UI for
-     `commission_rates`" as out of scope. Both were already false —
-     Commission (Rates + Report sub-tabs) shipped same-day in
-     `ohm#4k8t2wq9`/`ohm#8x2m4tqz`, and the live Report computes
-     commission from **`bookings`** (`Booked`/`Completed`,
-     `booking_date`-filtered) × `services.price` × `percent`, not from
-     `sales`. User decision: keep the shipped bookings-based formula
-     as-is; fold the existing Rates/Report Commission tab into the new
-     layout unchanged rather than rebuilding it. See [[commission_state]].
-   - **Pure refactor, no calc changes**: `components/analytics-browser.tsx`
-     kept its `useMemo` computation byte-for-byte identical — only the
-     render was split via a new `section` prop
-     (`"sales" | "most-availed" | "top-clients" | "top-thera"`) so each
-     top-level tab renders one existing block instead of all four
-     stacked. Sales tab keeps the Today/7-day/Month Sales + Client Visits
-     cards (Client Visits had no other named home in the prompt, so it
-     stayed with Sales) and gained a Per Day/Per Month toggle switching
-     between the already-computed `salesPerDay`/`salesPerMonth` tables
-     instead of showing both.
-   - `components/analytics-tabs.tsx`: top tabs became **Sales | Most
-     Availed Services | Top Clients | Top Thera | Commission** (was
-     Overview | Commission). Owner-only gate moved up to this component
-     (one blocking message for the page, not one per tab) — same
-     `useStaffSim`/`currentRole` check, just relocated.
-   - **Top Thera → Commission deep link**: each Top Thera row gained a
-     "View Commission →" button (needed `id` added to the existing
-     `therapistRanking` map entries, ranking order/values unchanged).
-     Click sets top tab → Commission, sub-tab → Report, and a
-     `filterTherapist` state passed into `CommissionReportBrowser`, which
-     auto-runs `getCommissionReport` for the current default range and
-     filters the already-returned rows to that therapist client-side — no
-     new query. A "Filtering: {name} ×" chip clears it back to the full
-     report. No route change, no new page, per the prompt.
-   - No migration, no RLS change, no changes to `getCommissionReport`,
-     `setCommissionRate`, or `commission_rates` — read-only tab-shell
-     work only.
-   - `npx tsc --noEmit` and `eslint` both clean on all changed files.
-   - **Not verified live in-browser this session** — no `.env.local`
-     present, same recurring credentials/env blocker as recent prior
-     tasks; verified via code review and `tsc`/`eslint`. See
-     [[analytics_state]].
+5. **2026-09-01 — Points EARN/REDEEM Guard — Require Client Portal
+   Account** (`ohm#4x8k2p9d`). Plan + regression risk assessment presented
+   and approved before any code/migration was written, per the prompt's
+   mandatory gate. New `BEFORE INSERT` trigger blocks EARN/REDEEM ledger
+   rows for clients with no `client_portal_accounts` row; app-level
+   pre-flight gating added to `client-browser.tsx`/`booking-browser.tsx`/
+   `log-visit-modal.tsx`. See [[points_ledger_state]] and
+   [[client_portal_state]] for full detail.

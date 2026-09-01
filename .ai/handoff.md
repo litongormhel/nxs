@@ -5,41 +5,68 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
-- **Member QR — Per-Account Token + Client-Facing QR Display (7B-1 of 2)**
-  (`ohm#5t9k2mxr`, 2026-09-01). Plan + regression risk assessment presented
-  and approved before any code/migration was written, per the prompt's
-  mandatory gate.
-  - **Discrepancy confirmed before planning**: `log_visit()` RPC is
-    confirmed dead code (`points_ledger_state.md`, no UI caller) — not
-    resurrected. This prompt only generates/displays the QR; no
-    scan/lookup logic.
-  - New migration `supabase/migrations/20260901150000_client_portal_accounts_qr_token.sql`:
-    `client_portal_accounts.qr_token uuid not null default gen_random_uuid()
-    unique`. Live row count confirmed at 1 before applying; the `default`
-    backfilled that row automatically (verified post-migration), no
-    separate `UPDATE` statement needed.
-  - **RLS check**: grepped every staff-facing `client_portal_accounts`
-    query (`app/(staff)/clients/page.tsx`, `app/(staff)/bookings/page.tsx`)
-    — both `select("client_id")` only, no `select("*")` anywhere. No
-    `qr_token` exposure found, nothing to flag, no policy change made.
-  - New route `app/portal/qr/page.tsx`: server component, reads the
-    caller's own session via `getPortalAccountId()` (no URL params/client
-    input accepted), renders the `qr_token` (only) via the existing
-    `qrcode` dependency, same visual pattern as Master QR. Linked from
-    `app/portal/confirmation/page.tsx` ("View my Member QR").
-  - `lib/types/database.ts` updated surgically (only the `qr_token` field
-    added to `client_portal_accounts`) — a full `generate_typescript_types`
-    regeneration pulled in unrelated nullability drift on `quick_walkin`'s
-    signature (Postgres introspection quirk, not a real schema change)
-    that broke `app/(staff)/bookings/actions.ts`, a do-not-touch file, so
-    the full regeneration was discarded in favor of a manual patch.
-  - **7B-2 still pending**: reception-side scan + prefill into
-    `logVisitBooking()`/`quick_walkin()`, scanning the live write paths
-    (not `log_visit()`).
+- **Member QR — Reception Scan + Prefill Into Log Visit / Quick Walk-in
+  (7B-2 of 2) — Phase 7B (Member QR) now complete end-to-end**
+  (`ohm#7q4d8vnw`, 2026-09-01). Plan + regression risk assessment presented
+  and approved before any code was written, per the prompt's mandatory gate.
+  - **Precondition check (mandatory before planning)**: confirmed live
+    against project `zqwiqrvqyinacjozubtc` that `client_portal_accounts.qr_token`
+    (uuid, not null) exists, is populated (1 row), and joins to a live
+    `clients` row — and that this is distinct from the unrelated,
+    pre-existing `clients.qr_token` (text, populated on all 78 rows,
+    different baseline column, not touched). `staff_select` RLS
+    (`ohm#4x8k2p9d`) on `client_portal_accounts` already covers the
+    `clients` join for a staff-authenticated caller — no new RLS needed.
+  - **New dependency**: `jsqr` (decode-only, no camera-lifecycle
+    abstraction) — camera capture driven by a plain `<video>`/hidden
+    `<canvas>` + `requestAnimationFrame` loop in the new
+    `components/scan-member-qr-modal.tsx`.
+  - **New server action** `resolveMemberQr(qrToken)`
+    (`app/(staff)/bookings/actions.ts`, alongside `logVisitBooking`/
+    `quickWalkin`, not a new top-level file): looks up
+    `client_portal_accounts` by `qr_token`, then `clients` by the linked
+    `client_id`. Returns `{ ok:false, reason:"not_found" }` for an unknown
+    token vs. `{ ok:false, reason:"orphaned" }` for a matched portal
+    account with no resolvable `clients` row (shouldn't happen given the
+    FK, handled explicitly per spec) — both surfaced as a clear staff-facing
+    message in the scan modal, never a silent no-op or raw error.
+  - **Reception UI**: new "Scan Member QR" button in
+    `components/booking-browser.tsx`'s header, next to Quick Walk-in/New
+    Booking (same trigger-row pattern). On a successful scan,
+    `handleScanResolved()` queries for an open (`Booked`/
+    `Needs Reassignment`) booking for that client — if found, opens the
+    existing `LogVisitModal` pre-linked to it (via its existing
+    `initialBooking` prop); otherwise opens the existing `QuickWalkinModal`
+    via a new `initialClientId` prop. On a failed/unrecognized scan: inline
+    error in the scan modal itself, camera stays live for retry, no other
+    modal opens.
+  - **Client field lock**: `LogVisitModal` already had no client `<select>`
+    at all when opened via `initialClientId`/`initialBooking` (confirmed by
+    inspection, pre-existing from `client-browser.tsx`'s usage) — nothing
+    to change there. `QuickWalkinModal` did NOT have this property (its
+    client-search input silently cleared the selection on any keystroke) —
+    added a `clientLocked` state (true when opened via `initialClientId`)
+    that renders a read-only "Scanned" display with an explicit "Change
+    client" button in place of the free-text search box, so a scan can't be
+    silently overridden.
+  - **`has_portal_account` gating untouched**: a scanned client always has
+    a portal account by construction (the resolve join requires a
+    `client_portal_accounts` row), so the existing gates in
+    `client-browser.tsx`/`booking-browser.tsx`/`log-visit-modal.tsx` pass
+    through as a no-op — confirmed by inspection, not duplicated.
+  - **Do-not-touch confirmed unmodified**: `log_visit()` RPC,
+    `logVisitBooking()`/`quick_walkin()`/`resolveEarnedPoints()`/
+    `computeLoyaltyPoints()` internals, points ledger/triggers, the
+    portal-account EARN/REDEEM guard, Master QR, the 7B-1 client-facing QR
+    display, and `clients.qr_token`.
+  - **No schema change** — read-only lookup against 7B-1's existing
+    `qr_token` column, DATABASE CHANGE SAFETY protocol not triggered.
   - `npx tsc --noEmit` and `eslint` both clean on all changed files.
-    `get_advisors` showed no new findings after the migration.
   - **Not verified live in-browser this session** — no `.env.local`
-    present, same recurring credentials/env blocker as recent prior tasks.
+    present, same recurring credentials/env blocker as recent prior tasks;
+    camera-based scanning also isn't exercisable outside a real browser
+    with camera access. Verified via the live-schema precondition check,
+    `tsc`/`eslint`, and inspection of every touched call site.
 
 - **Loyalty Points Formula — Wire Into Live Points-Award Flow (Part 2 of
   2) — complete** (`ohm#2r8w5nfz`, 2026-09-01). Plan + regression risk

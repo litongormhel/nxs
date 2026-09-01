@@ -171,11 +171,52 @@ scan/lookup yet — see roadmap below (7B-2).
   not resurrected. The 7B-2 scan target is `logVisitBooking()`/
   `quick_walkin()`, the live write paths.
 
+## Implemented (Member QR — reception scan + prefill, 7B-2, `ohm#7q4d8vnw`, 2026-09-01)
+
+Phase 7B (Member QR) is now complete end-to-end: 7B-1 generates/displays the
+QR client-side, this prompt lets reception scan it to skip manual name/phone
+search when starting a Log Visit or Quick Walk-in. Lookup-and-prefill only —
+zero changes to how points are computed or written.
+
+- **`resolveMemberQr(qrToken)`** (`app/(staff)/bookings/actions.ts`, next to
+  `logVisitBooking`/`quickWalkin`): looks up `client_portal_accounts` by
+  `qr_token`, then `clients` by the linked `client_id`. Runs through the
+  same RLS-bound `createClient()` every other action in that file uses (no
+  service-role client) — the existing `staff_select` policy
+  (`ohm#4x8k2p9d`) already covers both reads for an authenticated staff
+  session, confirmed live before planning. Returns `{ok:false,
+  reason:"not_found"}` for an unknown token vs. `{ok:false,
+  reason:"orphaned"}` for a portal account with no resolvable `clients` row
+  (shouldn't happen given the FK, handled explicitly rather than assumed
+  impossible) — both surfaced as a clear staff-facing message, never a
+  silent no-op or raw error.
+- **New dependency `jsqr`** (decode-only): `components/scan-member-qr-modal.tsx`
+  drives its own `<video>`/hidden `<canvas>` + `requestAnimationFrame` loop
+  rather than a heavier camera-lifecycle library.
+- **Entry point**: "Scan Member QR" button in `components/booking-browser.tsx`'s
+  header, next to Quick Walk-in / New Booking. On a successful scan, an
+  open (`Booked`/`Needs Reassignment`) booking for that client is queried
+  for — if found, opens the existing `LogVisitModal` pre-linked to it (its
+  existing `initialBooking` prop); otherwise opens the existing
+  `QuickWalkinModal` via a new `initialClientId` prop. A failed/unrecognized
+  scan shows an inline error in the scan modal itself; camera stays live
+  for retry, no other modal opens.
+- **Client field locked against silent override**: `LogVisitModal` already
+  had no client `<select>` at all when opened via `initialClientId`/
+  `initialBooking` (pre-existing from `client-browser.tsx`'s usage) — no
+  change needed. `QuickWalkinModal` gained a `clientLocked` state (true
+  when opened with `initialClientId`) that renders a read-only "Scanned"
+  display with an explicit "Change client" button in place of its
+  free-text search box, which previously cleared the selection on any
+  keystroke.
+- **`has_portal_account` gating unchanged**: a scanned client always has a
+  portal account by construction (the resolve join requires one), so the
+  existing gates pass through as a no-op.
+- **No schema change, no migration** — read-only lookup against 7B-1's
+  `qr_token` column.
+
 ## Not yet implemented — see roadmap
 
-- **7B-2**: reception-side Member QR scan + prefill into
-  `logVisitBooking()`/`quick_walkin()` (the live write paths, not
-  `log_visit()`).
 - Phone masking/reveal UI and the actual `phone_number_revealed` logging
   call site.
 - No INSERT/UPDATE RLS policy on `client_portal_accounts` yet (only the new

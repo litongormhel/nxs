@@ -336,6 +336,45 @@ export async function changeBookingTherapist(
   return { ok: true };
 }
 
+export type ResolveMemberQrResult =
+  | {
+      ok: true;
+      client: { id: string; codename: string; username: string; points_balance: number };
+    }
+  | { ok: false; reason: "not_found" | "orphaned" };
+
+/**
+ * Resolves a scanned Member QR token to a client for Log Visit / Quick
+ * Walk-in prefill. Lookup only — no ledger/booking writes. "orphaned"
+ * (portal account found, linked clients row missing) shouldn't happen given
+ * the FK, but is surfaced distinctly from "not_found" rather than a raw error.
+ */
+export async function resolveMemberQr(qrToken: string): Promise<ResolveMemberQrResult> {
+  const supabase = await createClient();
+
+  const { data: account } = await supabase
+    .from("client_portal_accounts")
+    .select("client_id")
+    .eq("qr_token", qrToken)
+    .maybeSingle();
+
+  if (!account) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  const { data: client } = await supabase
+    .from("clients")
+    .select("id, codename, username, points_balance")
+    .eq("id", account.client_id)
+    .maybeSingle();
+
+  if (!client) {
+    return { ok: false, reason: "orphaned" };
+  }
+
+  return { ok: true, client };
+}
+
 export type LogVisitBookingInput = {
   bookingId: string | null;
   clientId: string | null;
