@@ -54,6 +54,17 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
+  if (user && pathname !== "/my-profile") {
+    const { data: staffRow } = await supabase
+      .from("staff")
+      .select("must_change_password")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (staffRow?.must_change_password) {
+      return NextResponse.redirect(new URL("/my-profile", request.url));
+    }
+  }
+
   return response;
 }
 

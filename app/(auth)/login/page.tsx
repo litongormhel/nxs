@@ -12,6 +12,16 @@ export default async function LoginPage({
     data: { user },
   } = await supabase.auth.getUser();
 
+  let displayName = user?.email ?? "";
+  if (user) {
+    const { data: staffRow } = await supabase
+      .from("staff")
+      .select("username, name")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    displayName = staffRow?.username ?? staffRow?.name ?? displayName;
+  }
+
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-background text-foreground">
       <div className="w-full max-w-sm border border-border bg-surface rounded-lg p-8">
@@ -21,7 +31,7 @@ export default async function LoginPage({
         {user ? (
           <div className="space-y-4">
             <p className="text-sm">
-              Signed in as <span className="text-foreground">{user.email}</span>.
+              Signed in as <span className="text-foreground">{displayName}</span>.
             </p>
             <form action={logout}>
               <button
@@ -41,13 +51,13 @@ export default async function LoginPage({
               </p>
             )}
             <div>
-              <label htmlFor="email" className="block text-xs text-muted mb-1">
-                Email
+              <label htmlFor="username" className="block text-xs text-muted mb-1">
+                Username
               </label>
               <input
-                id="email"
-                name="email"
-                type="email"
+                id="username"
+                name="username"
+                type="text"
                 required
                 autoComplete="username"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-gold"

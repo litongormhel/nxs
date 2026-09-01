@@ -52,9 +52,14 @@ dropdown was — the policy stayed broad regardless, since the
 `sessionStaff` lookup and the other pages' name/role reads independently
 justify it.
 `staff_insert` — `is_owner()` (matches the Owner-gated Add Staff modal).
-No UPDATE/DELETE policy — no edit/archive/delete flow exists in the app
-for staff, and this also means `user_id` (the auth-linkage column, set
-only via `service_role` in 6A) can never be altered through app RLS.
+At the time of writing (6C-5) there was no UPDATE/DELETE policy — no
+edit/archive/delete flow existed in the app for staff. **Superseded by
+`ohm#uox20nff` (2026-09-01, see below)**: a `staff_update` policy
+(`is_owner()`) now exists for archive/restore/edit/username/password-flag
+writes; `user_id` itself is still only ever set via the service-role Admin
+API path (`addStaff`'s login-provisioning branch), never through
+client-facing RLS-governed writes. Still no DELETE policy — archive stays
+soft-delete only.
 
 ## Implemented (app level)
 
@@ -87,8 +92,9 @@ only via `service_role` in 6A) can never be altered through app RLS.
   (Name, Position select — Receptionist/Attendant/Supervisor/Others, no
   Owner in the add list — Comment field shown only for "Others").
   Owner-only: hidden from nav for non-Owner, and the page itself renders
-  a blocking message if visited directly by URL. **Add-only — no
-  edit/archive/delete UI exists**, confirmed in scope before building.
+  a blocking message if visited directly by URL. Was **add-only — no
+  edit/archive/delete UI** until `ohm#uox20nff` (2026-09-01) added
+  Edit/Archive/Restore/Reset-password — see below.
 - **`app/staff/actions.ts`** (`ohm#3z8k1p6d`): `addStaff(name, position,
   comment, actorStaffId)` — INSERT into `staff`, then an `action_logs`
   insert (`action = "staff_add"`). Ends with `revalidatePath("/staff")`,
@@ -153,6 +159,89 @@ originally-scoped Staff Auth phase (6A through 6C-6). Full-system
 regression pass (Front Desk/Supervisor/Owner, every phase) confirmed
 clean — see `.ai/handoff.md`.
 
+## Archive + login credentials (`ohm#uox20nff`, 2026-09-01)
+
+**Schema** (`20260901180000_staff_archive_and_login_credentials.sql`,
+`20260901181000_staff_self_clear_must_change_password.sql`): `staff` gained
+`username text` (nullable — only enforced not-null at the app level for
+login-capable positions; unique via `staff_username_key` on
+`lower(username)` where not null), `must_change_password boolean not null
+default false`, and `archived_reason text` / `archived_by uuid references
+staff(id)` / `archived_at timestamptz` — mirrors `therapists`' existing
+audit-field pattern exactly, confirmed live before writing the migration.
+`staff.active` (pre-existing, previously unused for gating) is now the real
+archive-gating flag: `false` = archived.
+
+**RLS**: new `staff_update` policy — `is_owner()` on both `USING` and `WITH
+CHECK` — is the first UPDATE policy `staff` has ever had (previously no
+UPDATE/DELETE policy existed at all). Covers archive/restore, username,
+`must_change_password`, and edit-details writes. A staff member cannot
+update their own row this way (Owner-only); self-clearing
+`must_change_password` after a password change instead goes through
+`clear_own_must_change_password()`, a `SECURITY DEFINER` RPC scoped to
+`auth.uid()`.
+
+**Guard**: `block_archive_last_owner()` trigger (`before update on staff`)
+raises if an UPDATE would set `active=false` on the last active `Owner`
+row. Independent of the RLS/UI Owner gate — runs for any caller, including
+the service-role Admin API path.
+
+**Auth linkage backfill (live data fix, not a migration — same one-off
+precedent as the original 6A account creation)**: switching login to
+username-based auth required updating the 8 existing accounts' `username`
+(lowercase first name: `ana`/`ben`/`cathy`/`essem`/`jeff`/`diego`/`elena`/
+`jcruz`) and their `auth.users.email` from `<firstname>@nxs.local` to
+`<username>@staff.nxsspa.internal` — done via direct SQL, confirmed live
+before this task assumed it was safe to proceed. Passwords unchanged.
+Skipping this would have locked out every current staff member, including
+the only Owner, on this task's first login-flow deploy.
+
+**Login (`app/(auth)/login/actions.ts`, `page.tsx`)**: accepts a username
+field, maps to `staffSyntheticEmail(username)` (`lib/staff/service-client.ts`
+— `<username>@staff.nxsspa.internal`) server-side, then
+`signInWithPassword()` as before. The "Signed in as …" line on `/login` now
+shows the staff member's username/name, never the synthetic email.
+`proxy.ts` gained a `must_change_password` check (queried alongside the
+existing session check) that redirects to `/my-profile` — independent of
+and in addition to the existing session-presence gate from 6C-1.
+
+**Provisioning + admin actions (`app/(staff)/staff/actions.ts`)**: all
+Owner-gated, each re-checking Owner status server-side via `requireOwner()`
+(same pattern as `app/(staff)/settings/actions.ts` — the client-passed
+`actorStaffId` is attribution-only, never trusted for authorization).
+- `addStaff` — extended: for Receptionist/Supervisor/Owner (`LOGIN_CAPABLE`
+  — Owner remains excluded from the addable-position list in the UI,
+  unchanged from before this task), creates the `auth.users` row via Admin
+  API `createUser` (service-role, `lib/staff/service-client.ts`
+  `createStaffServiceClient()`) using the synthetic email, then inserts the
+  `staff` row with `user_id`/`username`/`must_change_password`; rolls back
+  the orphan `auth.users` row if the `staff` insert fails.
+- `archiveStaff` / `restoreStaff` — pair the DB update (`active`,
+  `archived_reason`/`archived_by`/`archived_at`) with an Admin API
+  `updateUserById(user_id, { ban_duration })` flip (`"876000h"` to disable,
+  `"none"` to re-enable) when the staff row has a linked `user_id`.
+  Historical joins (sales, bookings, action_logs, `commission_rates
+  .created_by`, etc.) are untouched — no cascade, no FK changes.
+- `resetStaffPassword` — Admin API password update + re-arms
+  `must_change_password`.
+- `updateStaffDetails` — name/comment only (no position change UI).
+
+**Self password change**: `app/(staff)/my-profile/` (`page.tsx`,
+`actions.ts`) + `components/my-profile-form.tsx`, linked from the sidebar
+account block. Verifies the current password via
+`signInWithPassword()` before calling `auth.updateUser({ password })`
+(current-password verification is not skipped just because the session is
+already authenticated), then clears `must_change_password` via the RPC
+above.
+
+**UI (`components/staff-browser.tsx`)**: kebab menu per active staff card
+(Reset password — only shown for login-capable staff with a `username` set
+— / Edit details / Archive), a collapsed "Archived staff (N)" section with
+Restore, an Archive-confirm modal (signed-out warning for login-capable
+positions, optional reason), and an enhanced Add Staff modal
+(Username/Password/Generate/"require password change on first login",
+shown only for Receptionist/Supervisor).
+
 ## Not yet implemented — see roadmap
 
 - No role-based route restriction at the proxy/middleware level (e.g.
@@ -160,6 +249,9 @@ clean — see `.ai/handoff.md`.
   enforced only by the app-level `ownerOnly` pattern, per 6C-1's explicit
   scope. Not a gap in practice: nav hides the item and the page itself
   DB-blocks via RLS, so this is defense-in-depth only.
-- No edit, archive, or delete for staff records.
+- No in-app Owner-position signup — Owner is not in the Add Staff modal's
+  position list (unchanged from before this task).
+- Position cannot be changed via the new Edit Details modal (name/comment
+  only) — not in this task's scope.
 - See `docs/architecture/rbac.md` for the RBAC reference (update if it
   still describes deferred/placeholder auth).

@@ -5,6 +5,69 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Staff Archive + Owner-Managed Login Credentials — complete**
+  (`ohm#uox20nff`, 2026-09-01). Plan + regression risk assessment presented
+  and approved before any code/migration was written, per the prompt's
+  mandatory gate.
+  - **Critical discrepancy surfaced mid-implementation, not built over**:
+    switching login to username-based auth (mapped server-side to a
+    synthetic `@staff.nxsspa.internal` email) would have locked out all 8
+    existing staff accounts — including the only Owner (`J. Cruz`) — since
+    their live `auth.users.email` was still `<firstname>@nxs.local` (from
+    the 6A one-off script) and `username` was `null` for all of them.
+    Confirmed live via a direct query before touching login code; stopped
+    and asked Ohm rather than shipping a lockout. Chose: backfill
+    `username` = lowercase first name for all 8, and update their
+    `auth.users.email` to the new synthetic form directly via SQL (data-only
+    fix, not a migration file — same precedent as the original 6A one-off
+    account-creation script, not an in-app flow). Passwords untouched.
+    Verified post-backfill via a live join query.
+  - Migrations: `20260901180000_staff_archive_and_login_credentials.sql`
+    (`staff.username`/`must_change_password`/`archived_reason`/
+    `archived_by`/`archived_at`, `staff_update` RLS — Owner-only — and
+    `block_archive_last_owner()` trigger guarding the last active Owner);
+    `20260901181000_staff_self_clear_must_change_password.sql`
+    (`SECURITY DEFINER` RPC so a staff member can clear their own
+    `must_change_password` flag, since `staff_update` RLS is Owner-only).
+  - `lib/staff/service-client.ts` — new service-role client (mirrors
+    `lib/portal/service-client.ts`'s pattern but staff-owned/typed against
+    the main `Database`), plus `staffSyntheticEmail()`. Used only from
+    Owner-gated Server Actions (`app/(staff)/staff/actions.ts`:
+    `addStaff` extended to provision `auth.users` + `username` +
+    `must_change_password` for login-capable positions, `archiveStaff`/
+    `restoreStaff` pair the DB soft-archive with an Admin API
+    `ban_duration` flip, `resetStaffPassword`, `updateStaffDetails`). Every
+    action re-checks Owner server-side via `requireOwner()` (existing
+    pattern copied from `app/(staff)/settings/actions.ts`) — the
+    client-passed `actorStaffId` is attribution-only, never trusted for
+    authorization.
+  - Login (`app/(auth)/login/actions.ts`, `page.tsx`) now takes a username,
+    resolved server-side to the synthetic email before
+    `signInWithPassword`. `proxy.ts` gained a `must_change_password` check
+    (redirects to the new `/my-profile` route) alongside its existing
+    session gate.
+  - New self-service password-change view: `app/(staff)/my-profile/`
+    (`page.tsx`, `actions.ts`) + `components/my-profile-form.tsx` — verifies
+    current password via `signInWithPassword` before calling
+    `auth.updateUser({password})`, then clears `must_change_password` via
+    the new RPC. Linked from the sidebar account block.
+  - `components/staff-browser.tsx` — kebab menu (Reset password/Edit
+    details/Archive), collapsed "Archived staff (N)" section with Restore,
+    Archive-confirm modal (signed-out warning for login-capable positions +
+    optional reason), Add Staff modal gained Username/Password/Generate/
+    "require change on first login" for Receptionist/Supervisor (Owner
+    stays out of the addable-position list, unchanged from before this
+    task — no in-app Owner signup).
+  - Typecheck (`tsc --noEmit`) and `next build` both clean.
+  - Dev-server/browser verification: not completed — same Windows
+    preview-tool limitation already noted in `ohm#3n8y5w1q` ("Missing
+    script: dev" from the preview harness despite `npm run dev` working
+    directly); verified instead via `tsc`/`next build` plus direct
+    Supabase SQL checks (live backfill query, `get_advisors` showing no new
+    critical findings beyond the codebase's existing `search_path`-mutable
+    pattern already present on `block_void_by_non_owner`).
+  - See [[staff_state]] for the full per-column/policy detail.
+
 -## ohm#3n8y5w1q — Call sheet: re-add All tab
 Files: components/call-sheet-browser.tsx, app/(staff)/call-sheet/page.tsx
 - Re-added "All" as a pinned tab (outside the scrollable slot row), opt-in only — default state still resolves to nearestUpcomingSlot, never defaults to "all"

@@ -80,21 +80,30 @@ export function Sidebar() {
         </nav>
         <div className="border-t border-border px-5 py-4">
           {sessionStaff ? (
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="text-xs font-medium text-foreground truncate">
-                  {sessionStaff.name}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-foreground truncate">
+                    {sessionStaff.name}
+                  </div>
+                  <div className="text-[11px] text-muted truncate">{currentRole}</div>
                 </div>
-                <div className="text-[11px] text-muted truncate">{currentRole}</div>
+                <form action={logout}>
+                  <button
+                    type="submit"
+                    className="shrink-0 rounded-md border border-border px-2.5 py-2.5 sm:py-1.5 text-[11px] text-muted hover:text-foreground hover:bg-white/5"
+                  >
+                    Sign out
+                  </button>
+                </form>
               </div>
-              <form action={logout}>
-                <button
-                  type="submit"
-                  className="shrink-0 rounded-md border border-border px-2.5 py-2.5 sm:py-1.5 text-[11px] text-muted hover:text-foreground hover:bg-white/5"
-                >
-                  Sign out
-                </button>
-              </form>
+              <Link
+                href="/my-profile"
+                onClick={() => setIsOpen(false)}
+                className="block text-center rounded-md border border-border px-2.5 py-2 text-[11px] text-muted hover:text-foreground hover:bg-white/5"
+              >
+                My Profile
+              </Link>
             </div>
           ) : (
             <Link

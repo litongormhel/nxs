@@ -86,7 +86,21 @@ Full invariant list: [[nxs-architecture-locks]].
 - ohm#3n8y5w1q — Call sheet: re-added "All" tab (pinned, opt-in) for total-count/shift-overview visibility; footer label + canvas export branch on timeFilter === "all"; Download JPEG hidden in All view
 - ohm#7k2p9m4x — Call sheet: replaced "All Times" dropdown with data-driven scrollable time-slot tabs (sourced from availableSlots/sortSlotTimes, not hardcoded); added Thera column (Locker/Room/Service/Thera); default tab = nearest upcoming slot
 
-1. **2026-09-01 — Sale Void — Owner-Set 6-Digit Authorization Code**
+1. **2026-09-01 — Staff Archive + Owner-Managed Login Credentials**
+   (`ohm#uox20nff`). Plan + regression risk assessment presented and
+   approved before any code/migration was written, per the prompt's
+   mandatory gate. Mid-implementation, confirmed live that switching login
+   to username-based auth would have locked out all 8 existing staff
+   accounts (including the only Owner) — stopped and got explicit approval
+   before backfilling `username`/`auth.users.email` for those accounts
+   rather than silently building over the discrepancy. `staff.active` is
+   now the real archive-gating flag with audit columns mirroring
+   `therapists`; archive/restore pairs a DB update with a Supabase Admin
+   API `ban_duration` flip; Owner-set username+password provisioning via
+   Admin API `createUser`; new self-service password-change view. See
+   [[staff_state]] and `.ai/handoff.md` for full detail.
+
+3. **2026-09-01 — Sale Void — Owner-Set 6-Digit Authorization Code**
    (`ohm#6f3p8dxn`, supersedes `ohm#8m2k5vqz` — email+password step-up was
    drafted but never implemented). Plan + regression risk assessment
    presented and approved before any code/migration was written, per the
@@ -100,7 +114,7 @@ Full invariant list: [[nxs-architecture-locks]].
    [[settings_state]], `docs/architecture/rbac.md`, and `.ai/handoff.md`
    for full detail.
 
-2. **2026-09-01 — Promo Codes — Remove Hardcoded Fallback, Owner-Only
+4. **2026-09-01 — Promo Codes — Remove Hardcoded Fallback, Owner-Only
    Enforcement, Explicit Save** (`ohm#3n7x9kwp`). Plan + regression risk
    assessment presented and approved before any code/migration was
    written, per the prompt's mandatory gate. Hardcoded fallback promos
@@ -111,7 +125,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Save/Cancel instead of auto-save-on-blur. See [[settings_state]] and
    `.ai/handoff.md` for full detail.
 
-3. **2026-09-01 — Member QR — Reception Scan + Prefill Into Log Visit /
+5. **2026-09-01 — Member QR — Reception Scan + Prefill Into Log Visit /
    Quick Walk-in (7B-2 of 2)** (`ohm#7q4d8vnw`). Plan + regression risk
    assessment presented and approved before any code was written, per the
    prompt's mandatory gate. Phase 7B (Member QR, 7B-1 + 7B-2) is now
@@ -121,17 +135,3 @@ Full invariant list: [[nxs-architecture-locks]].
    client-locked — no new write logic, no changes to points/ledger. See
    [[client_portal_state]] and `.ai/handoff.md` for full detail.
 
-4. **2026-09-01 — Member QR — Per-Account Token + Client-Facing QR Display
-   (7B-1 of 2)** (`ohm#5t9k2mxr`). Plan + regression risk assessment
-   presented and approved before any code/migration was written, per the
-   prompt's mandatory gate. Discrepancy confirmed before planning:
-   `log_visit()` RPC is confirmed dead code, not resurrected — this prompt
-   only generates/displays the QR, no scan/lookup logic (that's 7B-2). See
-   [[client_portal_state]] and `.ai/handoff.md` for full detail.
-
-5. **2026-09-01 — Loyalty Points Formula — Wire Into Live Points-Award Flow
-   (Part 2 of 2)** (`ohm#2r8w5nfz`). Plan + regression risk assessment
-   presented and approved before any code was written, per the prompt's
-   mandatory gate. Points are now formula-driven end-to-end. See
-   [[points_ledger_state]], [[settings_state]], and `.ai/handoff.md` for
-   full detail.

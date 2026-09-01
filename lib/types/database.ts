@@ -839,32 +839,62 @@ export type Database = {
       staff: {
         Row: {
           active: boolean
+          archived_at: string | null
+          archived_by: string | null
+          archived_reason: string | null
           comment: string | null
           created_at: string
           id: string
+          must_change_password: boolean
           name: string
           position: Database["public"]["Enums"]["staff_position"]
           user_id: string | null
+          username: string | null
         }
         Insert: {
           active?: boolean
+          archived_at?: string | null
+          archived_by?: string | null
+          archived_reason?: string | null
           comment?: string | null
           created_at?: string
           id?: string
+          must_change_password?: boolean
           name: string
           position: Database["public"]["Enums"]["staff_position"]
           user_id?: string | null
+          username?: string | null
         }
         Update: {
           active?: boolean
+          archived_at?: string | null
+          archived_by?: string | null
+          archived_reason?: string | null
           comment?: string | null
           created_at?: string
           id?: string
+          must_change_password?: boolean
           name?: string
           position?: Database["public"]["Enums"]["staff_position"]
           user_id?: string | null
+          username?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "staff_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "loginable_staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       therapist_absence: {
         Row: {
@@ -1114,6 +1144,10 @@ export type Database = {
       }
     }
     Functions: {
+      clear_own_must_change_password: {
+        Args: never
+        Returns: undefined
+      }
       current_staff_position: {
         Args: never
         Returns: Database["public"]["Enums"]["staff_position"]

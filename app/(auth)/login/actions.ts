@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { staffSyntheticEmail } from "@/lib/staff/service-client";
 
 function safeNextPath(next: FormDataEntryValue | null): string {
   const value = String(next ?? "");
@@ -10,19 +11,22 @@ function safeNextPath(next: FormDataEntryValue | null): string {
 }
 
 export async function login(formData: FormData) {
-  const email = String(formData.get("email") ?? "").trim();
+  const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const next = safeNextPath(formData.get("next"));
 
-  if (!email || !password) {
-    redirect(`/login?error=${encodeURIComponent("Email and password are required.")}&next=${encodeURIComponent(next)}`);
+  if (!username || !password) {
+    redirect(`/login?error=${encodeURIComponent("Username and password are required.")}&next=${encodeURIComponent(next)}`);
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await supabase.auth.signInWithPassword({
+    email: staffSyntheticEmail(username),
+    password,
+  });
 
   if (error) {
-    redirect(`/login?error=${encodeURIComponent("Invalid email or password.")}&next=${encodeURIComponent(next)}`);
+    redirect(`/login?error=${encodeURIComponent("Invalid username or password.")}&next=${encodeURIComponent(next)}`);
   }
 
   redirect(next);
