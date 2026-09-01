@@ -5,6 +5,73 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Sale Void — Owner-Set 6-Digit Authorization Code — complete**
+  (`ohm#6f3p8dxn`, 2026-09-01, supersedes `ohm#8m2k5vqz` — email+password
+  step-up was drafted but never implemented; Ohm changed the design to a
+  shared 6-digit code instead). Plan + regression risk assessment presented
+  and approved before any code/migration was written, per the prompt's
+  mandatory gate.
+  - **Critical discrepancy surfaced before coding, not built over**: the
+    prompt's intended workflow has Supervisor void directly like Owner
+    ("their session already satisfies RLS"), but the live
+    `block_void_by_non_owner()` trigger only allowed `is_owner()` — a
+    Supervisor's direct UPDATE was rejected, confirmed via a live
+    rolled-back-transaction smoke test. Asked Ohm; chose to widen the
+    trigger to `is_supervisor_or_above()` (separate follow-up migration,
+    `20260901170500_sale_void_supervisor_direct.sql`) rather than route
+    Supervisor through the code modal too. Verified live: Supervisor direct
+    void now succeeds, Receptionist direct void still silently no-ops (0
+    rows, blocked by `staff_update` RLS), Owner direct void unaffected.
+  - **Second critical finding, also surfaced pre-code**: `SECURITY DEFINER`
+    bypasses RLS but not `auth.uid()` — `block_void_by_non_owner()` would
+    still have blocked the step-up function's own UPDATE for a non-Owner
+    initiator. Fixed with a transaction-local GUC (`app.void_via_code`),
+    set only from inside `void_sale_with_code()`, never client-settable —
+    additive, doesn't loosen the trigger for the direct-void path.
+  - **Hardening beyond the prompt's literal signature**: `p_initiating_staff_id`
+    was dropped from `void_sale_with_code()`'s parameters — deriving it
+    server-side from `auth.uid() → staff.id` instead (mirrors
+    `requireOwner()` already ignoring a client-supplied `staffId`), so a
+    caller can't dodge their own lockout or grief another staff member's
+    counter by passing an arbitrary id.
+  - New migrations: `20260901170000_sale_void_auth_code.sql` (
+    `app_settings.void_auth_code_hash`, `sale_void_attempts` table
+    (RLS-enabled/zero-policies), `set_void_auth_code()`,
+    `void_sale_with_code()`, both `SECURITY DEFINER`/`search_path=public`,
+    `REVOKE`d from `anon`/`public`) and
+    `20260901170500_sale_void_supervisor_direct.sql` (trigger widening,
+    above). `pgcrypto` was already enabled in the baseline — confirmed
+    live, not re-enabled.
+  - App layer: `voidSaleWithCode()` (`app/(staff)/sales/actions.ts`),
+    `updateVoidAuthCode()` (`app/(staff)/settings/actions.ts`, reuses the
+    existing `requireOwner()`), new `components/void-auth-code-settings.tsx`
+    (Owner-only, write-only input, gate banner when unset — mirrors the
+    Loyalty Formula settings pattern), `sales-browser.tsx`'s Void button now
+    visible to all roles, branching to the existing direct path for
+    Supervisor/Owner or a new step-up modal (Supervisor/Owner dropdown + 6-
+    digit input) for everyone else, surfacing `locked`/`not_configured`/
+    `invalid_code` (with `attempts_remaining`)/`invalid_authorizer` as
+    distinct messages.
+  - **Smoke-tested live** via rolled-back transactions (simulating each
+    role's `auth.uid()`/`request.jwt.claims`) against project
+    `zqwiqrvqyinacjozubtc` before writing any app code: not-configured,
+    wrong-code countdown, invalid authorizer, successful void with correct
+    `voided_by`/`action_logs` attribution, lockout after 3 fails,
+    per-initiator isolation (a different Receptionist unaffected), and both
+    trigger-widening regression checks above. `get_advisors` shows only the
+    expected/intentional `authenticated`-executable warnings on the two new
+    functions (by design — internal `is_owner()`/`is_staff()` checks are
+    the real gate) — no new anon-executable or missing-RLS findings.
+    `npx tsc --noEmit` and `eslint` both clean on all changed files.
+    Regenerated `lib/types/database.ts` via the Supabase MCP
+    `generate_typescript_types` tool; manually restored `quick_walkin`'s
+    nullable arg types where the regeneration dropped them — unrelated to
+    this prompt, would have been an out-of-scope typing regression.
+  - **Not verified live in-browser this session** — no `.env.local`
+    present, same recurring credentials/env blocker as recent prior
+    sessions. Verified via the live rolled-back-transaction smoke tests,
+    `get_advisors`, and `tsc`/`eslint`.
+
 - **Promo Codes — Remove Hardcoded Fallback, Owner-Only Enforcement,
   Explicit Save — complete** (`ohm#3n7x9kwp`, 2026-09-01). Plan + regression
   risk assessment presented and approved before any code/migration was

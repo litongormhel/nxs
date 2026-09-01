@@ -82,7 +82,21 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-01 — Promo Codes — Remove Hardcoded Fallback, Owner-Only
+1. **2026-09-01 — Sale Void — Owner-Set 6-Digit Authorization Code**
+   (`ohm#6f3p8dxn`, supersedes `ohm#8m2k5vqz` — email+password step-up was
+   drafted but never implemented). Plan + regression risk assessment
+   presented and approved before any code/migration was written, per the
+   prompt's mandatory gate. Two void paths now: Supervisor/Owner void
+   directly (no code, DB trigger widened this prompt from Owner-only to
+   Supervisor-or-above after a live discrepancy check); everyone else goes
+   through a shared Owner-set 6-digit code + Supervisor/Owner-authorizer
+   step-up (`void_sale_with_code()`, `SECURITY DEFINER`, 3-fail/5-minute
+   per-initiator lockout). Two critical DB-interaction findings surfaced
+   and resolved before/during coding — see [[sales_state]],
+   [[settings_state]], `docs/architecture/rbac.md`, and `.ai/handoff.md`
+   for full detail.
+
+2. **2026-09-01 — Promo Codes — Remove Hardcoded Fallback, Owner-Only
    Enforcement, Explicit Save** (`ohm#3n7x9kwp`). Plan + regression risk
    assessment presented and approved before any code/migration was
    written, per the prompt's mandatory gate. Hardcoded fallback promos
@@ -93,7 +107,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Save/Cancel instead of auto-save-on-blur. See [[settings_state]] and
    `.ai/handoff.md` for full detail.
 
-2. **2026-09-01 — Member QR — Reception Scan + Prefill Into Log Visit /
+3. **2026-09-01 — Member QR — Reception Scan + Prefill Into Log Visit /
    Quick Walk-in (7B-2 of 2)** (`ohm#7q4d8vnw`). Plan + regression risk
    assessment presented and approved before any code was written, per the
    prompt's mandatory gate. Phase 7B (Member QR, 7B-1 + 7B-2) is now
@@ -103,7 +117,7 @@ Full invariant list: [[nxs-architecture-locks]].
    client-locked — no new write logic, no changes to points/ledger. See
    [[client_portal_state]] and `.ai/handoff.md` for full detail.
 
-3. **2026-09-01 — Member QR — Per-Account Token + Client-Facing QR Display
+4. **2026-09-01 — Member QR — Per-Account Token + Client-Facing QR Display
    (7B-1 of 2)** (`ohm#5t9k2mxr`). Plan + regression risk assessment
    presented and approved before any code/migration was written, per the
    prompt's mandatory gate. Discrepancy confirmed before planning:
@@ -111,50 +125,9 @@ Full invariant list: [[nxs-architecture-locks]].
    only generates/displays the QR, no scan/lookup logic (that's 7B-2). See
    [[client_portal_state]] and `.ai/handoff.md` for full detail.
 
-4. **2026-09-01 — Loyalty Points Formula — Wire Into Live Points-Award Flow
+5. **2026-09-01 — Loyalty Points Formula — Wire Into Live Points-Award Flow
    (Part 2 of 2)** (`ohm#2r8w5nfz`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. Points are now formula-driven end-to-end. See
    [[points_ledger_state]], [[settings_state]], and `.ai/handoff.md` for
    full detail.
-
-5. **2026-09-01 — Loyalty Points Formula — Settings Schema + Configuration
-   UI (Part 1 of 2)** (`ohm#9k3m7qxc`). Plan + regression risk assessment
-   presented and approved before any code/migration was written, per the
-   prompt's mandatory gate.
-   - **Live-schema + live-data check before any migration**: confirmed
-     `point_transactions` triggers and `client_portal_accounts`'s zero RLS
-     policies directly against project `zqwiqrvqyinacjozubtc`; found only
-     1 of 78 `clients` rows has a linked `client_portal_accounts` row — the
-     immediate blast radius (77 clients losing EARN/REDEEM until portal
-     registration), surfaced and accepted before coding, shipped live with
-     no feature flag.
-   - New migration `20260901090000_point_transactions_portal_guard.sql`:
-     `BEFORE INSERT` trigger `trg_require_portal_account_for_earn_redeem`
-     on `point_transactions` blocks `EARN`/`REDEEM` rows for a `client_id`
-     with no `client_portal_accounts` row (`ADJUSTMENT` exempt); plus one
-     additive `staff_select` RLS policy on `client_portal_accounts` so the
-     app can read portal-registration status. Covers all three existing
-     write paths into the ledger (`log_visit()` RPC, `quick_walkin()` RPC,
-     and `logVisitBooking()`'s direct insert) since it fires on every
-     INSERT regardless of caller.
-   - **App-level gating is a hard pre-flight block, not a catch of the DB
-     exception** — `logVisitBooking()`'s linked-booking branch does
-     booking-update → sale-insert → ledger-insert → locker-insert as
-     separate non-atomic calls, so relying on the trigger alone would leave
-     a booking marked `Completed`/sale recorded with no ledger entry or
-     locker on rejection. `app/(staff)/clients/page.tsx` and
-     `app/(staff)/bookings/page.tsx` now pass a `has_portal_account` flag
-     per client; `client-browser.tsx`, `booking-browser.tsx`, and
-     `log-visit-modal.tsx` all disable their Log Visit triggers (with an
-     inline Tagalog note) before ever calling into the ledger. Guests/
-     walk-ins with no `client_id` are unaffected.
-   - Left untouched per instruction: the dead "Redeem" button in
-     `client-browser.tsx` (no `onClick`, not wired to anything).
-   - `get_advisors` showed no new findings after applying the migration.
-     `npx tsc --noEmit` and `eslint` both clean on all changed files.
-   - **Not verified live in-browser this session** — no `.env.local`
-     present, same recurring credentials/env blocker as recent prior
-     tasks; verified via the live-schema/live-data checks, `get_advisors`,
-     and `tsc`/`eslint`. See [[points_ledger_state]] and
-     [[client_portal_state]].

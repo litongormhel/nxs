@@ -40,7 +40,7 @@ export default async function SettingsPage() {
       .eq("active", true),
     supabase
       .from("app_settings")
-      .select("loyalty_formula_mode, peso_per_point")
+      .select("loyalty_formula_mode, peso_per_point, void_auth_code_hash")
       .eq("id", true)
       .single(),
   ]);
@@ -76,6 +76,7 @@ export default async function SettingsPage() {
           (appSettings?.loyalty_formula_mode as "uniform" | "proportional" | null) ?? null
         }
         initialPesoPerPoint={appSettings?.peso_per_point ?? null}
+        initialVoidAuthCodeConfigured={!!appSettings?.void_auth_code_hash}
       />
     </div>
   );

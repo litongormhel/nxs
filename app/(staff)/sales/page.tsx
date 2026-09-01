@@ -4,7 +4,7 @@ import { SalesBrowser } from "@/components/sales-browser";
 export default async function SalesPage() {
   const supabase = await createClient();
 
-  const [{ data: sales }, { data: therapists }, { data: staff }] = await Promise.all([
+  const [{ data: sales }, { data: therapists }, { data: staff }, { data: authorizers }] = await Promise.all([
     supabase
       .from("sales")
       .select(
@@ -13,6 +13,11 @@ export default async function SalesPage() {
       .order("created_at", { ascending: false }),
     supabase.from("therapists").select("id, name").eq("archived", false).order("name", { ascending: true }),
     supabase.from("staff").select("id, name"),
+    supabase
+      .from("staff")
+      .select("id, name")
+      .in("position", ["Supervisor", "Owner"])
+      .order("name", { ascending: true }),
   ]);
 
   const staffNameById = new Map((staff ?? []).map((s) => [s.id, s.name]));
@@ -40,6 +45,7 @@ export default async function SalesPage() {
           created_at: s.created_at,
         }))}
         therapists={therapists ?? []}
+        authorizers={authorizers ?? []}
       />
     </div>
   );

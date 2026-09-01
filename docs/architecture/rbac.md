@@ -43,6 +43,8 @@ exist yet.
 | Feature | Front Desk (Receptionist) | Supervisor | Owner |
 |---|---|---|---|
 | Promo Codes — create/edit/delete (`ohm#3n7x9kwp`, 2026-09-01) | Read-only | Read-only | Full (UI + `requireOwner()` app check + `is_owner()` RLS on `promos` INSERT/UPDATE) |
+| Sales — Void (`ohm#6f3p8dxn`, 2026-09-01) | Step-up only: picks a Supervisor/Owner authorizer + shared 6-digit code, via `void_sale_with_code()` (`SECURITY DEFINER`); 3 wrong attempts locks that staff member for 5 minutes | Direct, no code — `voidSale()` (DB floor: `is_supervisor_or_above()` in `block_void_by_non_owner()`, widened from Owner-only this prompt) | Direct, no code — same as Supervisor |
+| Sales — Void auth code setup (`ohm#6f3p8dxn`, 2026-09-01) | No access | No access | Full — `updateVoidAuthCode()` (`requireOwner()` app check) → `set_void_auth_code()` RPC (internal `is_owner()` check, hashes via pgcrypto) |
 
 ## History note
 

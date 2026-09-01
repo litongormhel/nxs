@@ -80,18 +80,21 @@ export type Database = {
           id: boolean
           loyalty_formula_mode: string | null
           peso_per_point: number | null
+          void_auth_code_hash: string | null
         }
         Insert: {
           allow_receptionist_manual_points?: boolean
           id?: boolean
           loyalty_formula_mode?: string | null
           peso_per_point?: number | null
+          void_auth_code_hash?: string | null
         }
         Update: {
           allow_receptionist_manual_points?: boolean
           id?: boolean
           loyalty_formula_mode?: string | null
           peso_per_point?: number | null
+          void_auth_code_hash?: string | null
         }
         Relationships: []
       }
@@ -623,6 +626,42 @@ export type Database = {
           },
         ]
       }
+      sale_void_attempts: {
+        Row: {
+          failed_count: number
+          locked_until: string | null
+          staff_id: string
+          updated_at: string
+        }
+        Insert: {
+          failed_count?: number
+          locked_until?: string | null
+          staff_id: string
+          updated_at?: string
+        }
+        Update: {
+          failed_count?: number
+          locked_until?: string | null
+          staff_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_void_attempts_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: true
+            referencedRelation: "loginable_staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_void_attempts_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: true
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sales: {
         Row: {
           amount: number
@@ -707,6 +746,13 @@ export type Database = {
             columns: ["edited_by"]
             isOneToOne: false
             referencedRelation: "loginable_staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_edited_by_fkey"
+            columns: ["edited_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
             referencedColumns: ["id"]
           },
           {
@@ -1102,6 +1148,7 @@ export type Database = {
           p_manual_discount_value: number | null
           p_payment_method: string
           p_payment_ref: string | null
+          p_points_earned?: number | null
           p_promo_id: string | null
           p_room_number: number | null
           p_service_id: string
@@ -1114,6 +1161,15 @@ export type Database = {
           ledger_id: string
           sale_id: string
         }[]
+      }
+      set_void_auth_code: { Args: { p_code: string }; Returns: undefined }
+      void_sale_with_code: {
+        Args: {
+          p_authorizing_staff_id: string
+          p_code: string
+          p_sale_id: string
+        }
+        Returns: Json
       }
     }
     Enums: {

@@ -70,12 +70,55 @@
   therapist. Sets `edited_by`/`edited_at`; UI shows an "Edited by
   [staff]" tag. Enabled for Supervisor/Owner only (`currentRole` from
   `useStaffSim()`), matching ADR-001 "Supervisor can edit."
-- **Void** (`app/sales/actions.ts::voidSale`, `window.confirm()` — same
-  established pattern as Settings' delete buttons, not a new one): sets
-  `voided`/`voided_at`/`voided_by`. **Never a hard delete** — the row
-  stays visible, tagged "VOIDED", and is excluded from the running total,
-  matching ADR-001 "Owner-only can void, never hard delete." Enabled for
-  Owner only.
+- **Void** (`ohm#6f3p8dxn`, 2026-09-01 — now two paths, both landing on
+  `voided`/`voided_at`/`voided_by`, never a hard delete):
+  - **Direct** (`app/(staff)/sales/actions.ts::voidSale`,
+    `window.confirm()`): Supervisor or Owner's own session voids
+    immediately, no code. DB floor widened this prompt —
+    `block_void_by_non_owner()` (the `BEFORE UPDATE` trigger layered on top
+    of `staff_update` RLS) now checks `is_supervisor_or_above()`, was
+    `is_owner()` only. Confirmed live via a rolled-back-transaction smoke
+    test before and after the change (Supervisor direct void now succeeds;
+    Receptionist direct void still silently no-ops, 0 rows, blocked by
+    `staff_update` RLS regardless of the trigger).
+  - **Step-up** (`app/(staff)/sales/actions.ts::voidSaleWithCode`, new
+    `sales-browser.tsx` modal): for any other role (in practice,
+    Receptionist — Attendant/Others can't log in). Picks a Supervisor/Owner
+    from a dropdown (`authorizers` prop, `staff` filtered to those two
+    positions) plus a shared 6-digit code, both sent to the new
+    `void_sale_with_code(p_sale_id, p_code, p_authorizing_staff_id)`
+    `SECURITY DEFINER` RPC (`supabase/migrations/20260901170000_sale_void_auth_code.sql`).
+    The void is attributed to the selected Supervisor/Owner (`voided_by`);
+    the actual initiating staff member (derived server-side from
+    `auth.uid()`, never trusted from a client param) is recorded separately
+    in the `action_logs` detail (`authorized_by=… initiated_by=…`), not
+    collapsed into one field. Inside the transaction, a transaction-local
+    GUC (`app.void_via_code`) lets this one call flip `voided` past the
+    `is_supervisor_or_above()` trigger check without changing that check
+    for any other UPDATE path.
+    - **Code setup**: `app_settings.void_auth_code_hash` (nullable =
+      "not yet configured," same gate-banner pattern as the Loyalty
+      Formula). Owner sets/changes it in Settings
+      (`updateVoidAuthCode()` → `set_void_auth_code()` RPC, hashed via
+      `pgcrypto`'s `crypt()`/`gen_salt('bf')` inside Postgres, never in
+      Node). Front Desk sees a plain "ask the Owner to set it up" message
+      if unset, not the underlying RLS reason.
+    - **Rate limiting**: `sale_void_attempts` (RLS enabled, zero
+      policies — default-deny, touched only by `void_sale_with_code()`),
+      keyed by the *initiating* staff member. 3 wrong codes locks that one
+      staff member for 5 minutes (`locked_until`); a different Receptionist
+      is unaffected. Checked before the code is even looked at.
+    - Both `set_void_auth_code`/`void_sale_with_code` are `REVOKE`d from
+      `anon`/`public` and `GRANT`ed to `authenticated` only, plus their own
+      internal `is_owner()`/`is_staff()` checks — narrowest scope that
+      still lets Reception call the void function and only Owner call the
+      code-setter.
+  - Smoke-tested live via rolled-back transactions covering: not-configured,
+    wrong-code with `attempts_remaining` countdown, invalid authorizer
+    (server re-verifies `staff.position`, doesn't trust the dropdown),
+    successful void with correct `voided_by`, lockout after 3 fails,
+    per-initiator isolation, and the Owner/Supervisor direct-path
+    regression checks above.
 - Both mutations end with an `action_logs` insert (`sale_edit` /
   `sale_void`), attributed to the real session, and `revalidatePath("/sales")`.
 - **Role gating reuses the existing `lib/staff-context.tsx`

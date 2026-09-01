@@ -269,6 +269,22 @@ export async function updateLoyaltyFormula(
   return { ok: true };
 }
 
+// ---------- Void Authorization Code ----------
+
+export async function updateVoidAuthCode(code: string, staffId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const ownerCheck = await requireOwner(supabase);
+  if (ownerCheck) return ownerCheck;
+  if (!/^\d{6}$/.test(code)) {
+    return { ok: false, error: "Code must be exactly 6 digits." };
+  }
+  const { error } = await supabase.rpc("set_void_auth_code", { p_code: code });
+  if (error) return fail(error);
+  await logAction(supabase, staffId, "settings_update_void_auth_code", "void authorization code updated");
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
 // ---------- Capacity ----------
 
 export async function addLockerBatch(staffId: string): Promise<ActionResult & { added?: number[] }> {

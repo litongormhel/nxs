@@ -23,6 +23,7 @@ import { compareSlotTimes } from "@/lib/bookings/slots";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useTheme } from "@/lib/theme-context";
 import { LoyaltyFormulaSettings } from "@/components/loyalty-formula-settings";
+import { VoidAuthCodeSettings } from "@/components/void-auth-code-settings";
 
 export type Service = {
   id: string;
@@ -65,6 +66,7 @@ export function SettingsBrowser({
   initialRoomsCount,
   initialLoyaltyFormulaMode,
   initialPesoPerPoint,
+  initialVoidAuthCodeConfigured,
 }: {
   initialServices: Service[];
   initialPromos: Promo[];
@@ -75,6 +77,7 @@ export function SettingsBrowser({
   initialRoomsCount: number;
   initialLoyaltyFormulaMode: "uniform" | "proportional" | null;
   initialPesoPerPoint: number | null;
+  initialVoidAuthCodeConfigured: boolean;
 }) {
   const router = useRouter();
 
@@ -90,6 +93,7 @@ export function SettingsBrowser({
   const canEditCatalog =
     currentRole === "Supervisor" || currentRole === "Owner";
   const canEditLoyaltyFormula = currentRole === "Owner";
+  const canEditVoidAuthCode = currentRole === "Owner";
 
   // Data states
   const [services, setServices] = useState<Service[]>(() => {
@@ -619,6 +623,13 @@ export function SettingsBrowser({
         initialPesoPerPoint={initialPesoPerPoint}
         services={services}
         canEdit={canEditLoyaltyFormula}
+        staffId={selectedStaffId}
+      />
+
+      {/* SECTION: Void Authorization Code */}
+      <VoidAuthCodeSettings
+        initialConfigured={initialVoidAuthCodeConfigured}
+        canEdit={canEditVoidAuthCode}
         staffId={selectedStaffId}
       />
 

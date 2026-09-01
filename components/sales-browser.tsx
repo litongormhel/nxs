@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStaffSim } from "@/lib/staff-context";
-import { editSale, voidSale } from "@/app/(staff)/sales/actions";
+import { editSale, voidSale, voidSaleWithCode } from "@/app/(staff)/sales/actions";
 
 export type Sale = {
   id: string;
@@ -23,6 +23,7 @@ export type Sale = {
 };
 
 type Therapist = { id: string; name: string };
+type Authorizer = { id: string; name: string };
 
 const PAYMENT_METHODS = ["Cash", "GCash", "Card", "Points"] as const;
 
@@ -39,9 +40,11 @@ const GRID_COLS = "1fr 1fr 1fr .8fr 1.1fr .9fr 1fr 1.6fr";
 export function SalesBrowser({
   initialSales,
   therapists,
+  authorizers,
 }: {
   initialSales: Sale[];
   therapists: Therapist[];
+  authorizers: Authorizer[];
 }) {
   const router = useRouter();
   const { currentRole, sessionStaff } = useStaffSim();
@@ -56,8 +59,14 @@ export function SalesBrowser({
   const [editError, setEditError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [voidStepUp, setVoidStepUp] = useState<Sale | null>(null);
+  const [voidAuthorizerId, setVoidAuthorizerId] = useState("");
+  const [voidCode, setVoidCode] = useState("");
+  const [voidError, setVoidError] = useState<string | null>(null);
+  const [voidBusy, setVoidBusy] = useState(false);
+
   const editAllowed = currentRole === "Supervisor" || currentRole === "Owner";
-  const voidAllowed = currentRole === "Owner";
+  const directVoidAllowed = currentRole === "Supervisor" || currentRole === "Owner";
 
   const total = useMemo(
     () => sales.reduce((sum, s) => (s.voided ? sum : sum + s.amount), 0),
@@ -129,17 +138,78 @@ export function SalesBrowser({
   };
 
   const handleVoid = async (sale: Sale) => {
-    if (!window.confirm("Void this sale? It stays on record but is excluded from totals.")) {
+    if (directVoidAllowed) {
+      if (!window.confirm("Void this sale? It stays on record but is excluded from totals.")) {
+        return;
+      }
+      const res = await voidSale(sale.id, sessionStaff?.id ?? "");
+      if (!res.ok) {
+        showToast(res.error);
+        return;
+      }
+      setSales((prev) =>
+        prev.map((s) => (s.id === sale.id ? { ...s, voided: true } : s))
+      );
+      showToast("Sale voided");
+      router.refresh();
       return;
     }
-    const res = await voidSale(sale.id, sessionStaff?.id ?? "");
+
+    setVoidStepUp(sale);
+    setVoidAuthorizerId("");
+    setVoidCode("");
+    setVoidError(null);
+  };
+
+  const closeVoidStepUp = () => setVoidStepUp(null);
+
+  const confirmVoidStepUp = async () => {
+    if (!voidStepUp) return;
+    if (!voidAuthorizerId) {
+      setVoidError("Select who is authorizing this void.");
+      return;
+    }
+    if (!/^\d{6}$/.test(voidCode)) {
+      setVoidError("Enter the 6-digit authorization code.");
+      return;
+    }
+    setVoidBusy(true);
+    const res = await voidSaleWithCode(voidStepUp.id, voidCode, voidAuthorizerId);
+    setVoidBusy(false);
+
     if (!res.ok) {
-      showToast(res.error);
+      switch (res.reason) {
+        case "locked": {
+          const retry = new Date(res.retryAfter).toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+          });
+          setVoidError(`Too many failed attempts. Try again after ${retry}.`);
+          break;
+        }
+        case "not_configured":
+          setVoidError("Void code isn't set up yet. Ask the Owner to configure it in Settings.");
+          break;
+        case "invalid_code":
+          setVoidError(`Incorrect code. ${res.attemptsRemaining} attempt(s) remaining.`);
+          break;
+        case "invalid_authorizer":
+          setVoidError("Selected staff member can't authorize a void.");
+          break;
+        default:
+          setVoidError(res.error);
+      }
       return;
     }
+
+    const saleId = voidStepUp.id;
+    const authorizerName = authorizers.find((a) => a.id === voidAuthorizerId)?.name ?? "—";
     setSales((prev) =>
-      prev.map((s) => (s.id === sale.id ? { ...s, voided: true } : s))
+      prev.map((s) =>
+        s.id === saleId ? { ...s, voided: true, voided_by_name: authorizerName } : s
+      )
     );
+    setVoidStepUp(null);
     showToast("Sale voided");
     router.refresh();
   };
@@ -213,10 +283,8 @@ export function SalesBrowser({
                       Edit
                     </button>
                     <button
-                      disabled={!voidAllowed}
-                      title={voidAllowed ? undefined : "Owner only"}
-                      onClick={() => voidAllowed && handleVoid(s)}
-                      className="rounded-md border border-[#6b2b2b] px-2 py-1 text-[10.5px] font-semibold text-accent-red hover:bg-accent-red/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                      onClick={() => handleVoid(s)}
+                      className="rounded-md border border-[#6b2b2b] px-2 py-1 text-[10.5px] font-semibold text-accent-red hover:bg-accent-red/10"
                     >
                       Void
                     </button>
@@ -318,6 +386,72 @@ export function SalesBrowser({
                 className="flex-1 rounded-lg bg-gold py-2 text-xs font-bold text-black hover:brightness-110 disabled:opacity-50"
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {voidStepUp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4">
+            <div>
+              <h3 className="text-base font-bold text-foreground">Void Sale — Authorization Required</h3>
+              <p className="text-[11px] text-muted mt-1">
+                {voidStepUp.client_name} · {voidStepUp.service_name} · ₱{voidStepUp.amount.toLocaleString()}
+              </p>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
+                  Authorizing Supervisor / Owner
+                </label>
+                <select
+                  value={voidAuthorizerId}
+                  onChange={(e) => setVoidAuthorizerId(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                >
+                  <option value="">— Select —</option>
+                  {authorizers.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
+                  6-Digit Authorization Code
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={voidCode}
+                  onChange={(e) => setVoidCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-sm tracking-[0.3em] text-foreground outline-none focus:border-gold"
+                  placeholder="••••••"
+                />
+              </div>
+              {voidError && (
+                <div className="text-[11px] font-semibold text-accent-red">{voidError}</div>
+              )}
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={closeVoidStepUp}
+                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={voidBusy}
+                onClick={confirmVoidStepUp}
+                className="flex-1 rounded-lg bg-accent-red py-2 text-xs font-bold text-black hover:brightness-110 disabled:opacity-50"
+              >
+                Void Sale
               </button>
             </div>
           </div>
