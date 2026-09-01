@@ -4,9 +4,9 @@ import { cookies } from "next/headers";
 export const PORTAL_SESSION_COOKIE = "nxs_portal_session";
 
 function sessionSecret(): string {
-  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const secret = process.env.PORTAL_SESSION_SECRET;
   if (!secret) {
-    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY. Required to sign portal sessions.");
+    throw new Error("Missing PORTAL_SESSION_SECRET. Required to sign portal sessions.");
   }
   return secret;
 }

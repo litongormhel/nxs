@@ -215,6 +215,38 @@ zero changes to how points are computed or written.
 - **No schema change, no migration** — read-only lookup against 7B-1's
   `qr_token` column.
 
+## Implemented (Auth Hardening — Rate Limiting + Session Secret Separation,
+`ohm#5t2m8qz1`, 2026-09-01)
+
+Addresses two findings from the deployment-readiness audit (`ohm#9k3v7bx2`):
+High #1 (no brute-force protection on `/portal/api/login`) and High #2
+(portal session HMAC secret was `SUPABASE_SERVICE_ROLE_KEY` reused directly).
+
+- **New `portal_login_attempts` table**
+  (`supabase/migrations/20260901220000_portal_login_attempts.sql`): one
+  generic `attempt_key text primary key` / `failed_count` / `locked_until`
+  counter-lockout table, namespaced by key prefix. RLS enabled, zero
+  policies — default-deny, exact mirror of the `sale_void_attempts`
+  convention; touched only via the service-role client these three route
+  handlers already used.
+- **`lib/portal/rate-limit.ts`** (new): `clientIp()`, `checkLockout()`,
+  `recordFailure()`, `recordSuccess()` — reusable across all three routes.
+- **Login** (`app/portal/api/login/route.ts`): dual-key lockout checked
+  before password verification — `ident:<lowercased identifier>` (5 fails →
+  15 min lock) and `ip:<ip>` (20 fails → 15 min lock). Both reset on
+  success.
+- **`check-username` / `register`**: lighter, IP-only throttling
+  (`checkuser-ip:`/`register-ip:`, 30 calls → 2 min cooldown).
+- **`lib/portal/session.ts`**: `sessionSecret()` now reads a dedicated
+  `PORTAL_SESSION_SECRET` env var instead of `SUPABASE_SERVICE_ROLE_KEY`.
+  Confirmed via repo-wide grep no other file reuses the service-role key
+  for non-DB purposes.
+- **Known, accepted regression**: the HMAC key change invalidates every
+  currently-active portal session (live row count was 1 at the time).
+- **Outstanding manual step**: `PORTAL_SESSION_SECRET` must be set in
+  Vercel (Production + Preview) before this is live — not done as part of
+  this task (no Vercel env-write tool available).
+
 ## Not yet implemented — see roadmap
 
 - Phone masking/reveal UI and the actual `phone_number_revealed` logging

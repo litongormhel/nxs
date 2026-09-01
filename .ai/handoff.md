@@ -5,6 +5,74 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Client Portal — Auth Hardening: Rate Limiting + Session Secret
+  Separation — complete** (`ohm#5t2m8qz1`, 2026-09-01). Addresses two
+  findings from the deployment-readiness audit (`ohm#9k3v7bx2`): High #1
+  (no brute-force protection on `/portal/api/login`) and High #2 (portal
+  session HMAC secret was `SUPABASE_SERVICE_ROLE_KEY` reused directly).
+  Plan + regression risk assessment presented and approved (thresholds
+  approved as proposed) before any code/migration was written, per the
+  prompt's mandatory gate.
+  - **New table `portal_login_attempts`**
+    (`supabase/migrations/20260901220000_portal_login_attempts.sql`): one
+    generic `attempt_key text primary key` / `failed_count` / `locked_until`
+    counter-lockout table, namespaced by key prefix rather than one table
+    per route. RLS enabled, zero policies — default-deny, exact mirror of
+    the `sale_void_attempts` convention (touched only via the service-role
+    client these three route handlers already used pre-existing; no new
+    RLS bypass introduced, since none of the three ever went through the
+    anon-key/RLS path).
+  - **New `lib/portal/rate-limit.ts`**: `clientIp()` (reads
+    `x-forwarded-for`, falls back to `"unknown"` for non-proxied local dev
+    traffic — flagged and accepted, since Vercel always sets this header in
+    production), `checkLockout()`, `recordFailure()` (increments; at
+    `maxAttempts` locks for `lockoutMinutes` and resets the counter — same
+    upsert shape as `void_sale_with_code()`'s `sale_void_attempts`
+    handling), `recordSuccess()`.
+  - **`app/portal/api/login/route.ts`**: dual-key lockout, checked before
+    any password verification (so a locked-out attempt never even reaches
+    `verifyPassword`/scrypt) — `ident:<lowercased identifier>` (5 fails →
+    15 min lock, protects one account) **and** `ip:<ip>` (20 fails → 15 min
+    lock, catches distributed credential stuffing across many identifiers
+    from one source). Both keys reset to 0 on a successful login.
+  - **`app/portal/api/check-username/route.ts`** /
+    **`app/portal/api/register/route.ts`**: lighter, IP-only throttling
+    (`checkuser-ip:<ip>` / `register-ip:<ip>`, 30 calls → 2 min cooldown) —
+    every call counts (not just failures), no reset-on-success concept
+    since repeat calls from one IP have no legitimate high-frequency case.
+  - **`lib/portal/session.ts`**: `sessionSecret()` now reads
+    `process.env.PORTAL_SESSION_SECRET` instead of
+    `SUPABASE_SERVICE_ROLE_KEY`. Confirmed via repo-wide grep that no other
+    file reused the service-role key for non-DB purposes — the only two
+    remaining references are `lib/portal/service-client.ts` and
+    `lib/staff/service-client.ts`, both legitimate Supabase client
+    construction.
+  - **`lib/types/database.ts`**: added the `portal_login_attempts` table
+    shape by hand (alphabetically between `point_transactions` and
+    `promos`, matching the file's existing sort order) — not regenerated
+    via the Supabase CLI, since no CLI/codegen step is wired into this
+    repo's workflow.
+  - **Known, accepted regression**: switching the HMAC key invalidates
+    every currently-active portal session cookie (signed with the old
+    secret) — any already-logged-in portal client is signed out on next
+    request and must log in again. Live `client_portal_accounts` row count
+    was 1 at audit time; accepted as a one-time, unavoidable cost of the
+    fix, confirmed with the user before implementation.
+  - **Outstanding manual step — `PORTAL_SESSION_SECRET` must be set in
+    Vercel (Production + Preview) before this deploys**, since no
+    Vercel env-var-write tool was available in this session to do it
+    directly. Until set, the portal login/register routes will throw
+    `Missing PORTAL_SESSION_SECRET` on first call. See the prompt reply
+    for the exact command.
+  - Typecheck (`tsc --noEmit`) and lint (`eslint`) both clean on every
+    touched file. No UI/browser verification performed — this is
+    server-side rate-limiting logic with no visually observable surface;
+    the request/response shape of all three routes is unchanged for the
+    success path, only new 429 branches were added.
+  - **Untouched, confirmed**: staff auth flow, `sale_void_attempts` (read
+    as reference only), points ledger, booking/RLS logic outside the
+    portal login path.
+
 - **Therapists — Services Offered RLS + Wiring — complete** (`ohm#9q4x1mwr`,
   2026-09-01, Prompt 3 of 3, closing the "Therapist Roster — Investigate &
   Wire" sequence started at `ohm#7m2w9dxk`). Investigation phase (no code)

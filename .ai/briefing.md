@@ -82,7 +82,27 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-01 — Therapists — Services Offered RLS + Wiring**
+1. **2026-09-01 — Client Portal — Auth Hardening: Rate Limiting + Session
+   Secret Separation** (`ohm#5t2m8qz1`). Addresses audit `ohm#9k3v7bx2`'s
+   High #1 (no brute-force protection on `/portal/api/login`) and High #2
+   (portal session HMAC secret reused `SUPABASE_SERVICE_ROLE_KEY`). Plan +
+   regression risk assessment presented and approved (thresholds approved
+   as proposed) before any code/migration was written, per the prompt's
+   mandatory gate. New `portal_login_attempts` table (generic
+   counter/lockout, mirrors `sale_void_attempts`'s RLS-enabled-zero-policy
+   convention) backs dual-key lockout on login (`ident:` 5/15min, `ip:`
+   20/15min, checked before password verification) and lighter IP-only
+   throttling on `check-username`/`register` (30 calls/2min cooldown).
+   `lib/portal/session.ts` now signs with a dedicated `PORTAL_SESSION_SECRET`
+   env var instead of the service-role key — confirmed via repo-wide grep
+   no other file reused the service-role key for non-DB purposes. **Known
+   accepted regression**: all currently-active portal sessions are
+   invalidated by the key change (live row count was 1). **Outstanding**:
+   `PORTAL_SESSION_SECRET` must still be set in Vercel Production + Preview
+   manually — no Vercel env-write tool was available this session. See
+   [[client_portal_state]] and `.ai/handoff.md`.
+
+2. **2026-09-01 — Therapists — Services Offered RLS + Wiring**
    (`ohm#9q4x1mwr`, Prompt 3 of 3, closes the "Therapist Roster —
    Investigate & Wire" sequence). Investigation surfaced that the prompt's
    premise didn't match live code: `handleToggleService` was genuinely
@@ -102,7 +122,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `therapist_services` join, resolved through a `serviceIdMap` in the
    component. See [[therapists_state]] and `.ai/handoff.md`.
 
-2. **2026-09-01 — Therapists — Add + Edit (Rename) RLS + Wiring**
+3. **2026-09-01 — Therapists — Add + Edit (Rename) RLS + Wiring**
    (`ohm#5v8n3ptc`, Prompt 2 of 3). Investigation phase re-confirmed live
    (not from the prompt's snapshot) that `therapists` still had exactly
    `public_select` + `staff_update` (no INSERT/DELETE), that
@@ -121,7 +141,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `updateTherapistName(therapistId, name, staffId)` server action now backs
    the Edit Name modal. See [[therapists_state]] and `.ai/handoff.md`.
 
-3. **2026-09-01 — Therapists — Archive/Unarchive RLS + Real Persistence**
+4. **2026-09-01 — Therapists — Archive/Unarchive RLS + Real Persistence**
    (`ohm#7m2w9dxk`, Prompt 1 of 3). Investigation phase confirmed live
    (not from the prompt's snapshot) that `therapists` had no INSERT/
    UPDATE/DELETE RLS policy at all, and separately surfaced that Add
@@ -139,7 +159,7 @@ Full invariant list: [[nxs-architecture-locks]].
    rows are untouched by archive/unarchive. See [[therapists_state]] and
    `.ai/handoff.md`.
 
-4. **2026-09-01 — Docs Sync: Correct Stale Call Sheet Status** (`ohm#3k9r7fq2`).
+5. **2026-09-01 — Docs Sync: Correct Stale Call Sheet Status** (`ohm#3k9r7fq2`).
    Documentation-only fix. `docs/state/bookings_state.md`'s "Not yet
    implemented" list claimed `app/call-sheet/page.tsx` was still an 8-line
    "Coming soon." stub — false and stale (also stale path; actual path is
@@ -149,17 +169,4 @@ Full invariant list: [[nxs-architecture-locks]].
    `components/call-sheet-browser.tsx`), matching what
    `docs/state/operations_state.md` already documented. Removed the stale
    bullet; no other bullet touched. No code, schema, or migration changed.
-
-5. **2026-09-01 — Settings — 4-Tab Restructure + Capacity Stepper + Add-ons
-   Save Button** (`ohm#9x3f7mq2`). Plan + regression risk assessment
-   presented and approved before any code was written, per the prompt's
-   mandatory gate. Two discrepancies caught by the mandatory investigate-first
-   step: Lockers has no RLS UPDATE policy (add-only), so the `[−]` stepper
-   button is disabled/grayed rather than wired to a new decrement path;
-   Services (onBlur) and Promos (draft+Save) don't share one save pattern,
-   so Add-ons was built to match Promos' explicit draft+Save since the
-   prompt asked for a Save button. Settings restructured into 4 tabs
-   (General / Services & Loyalty / Promos & Security / Scheduling &
-   Capacity) using the tab-state pattern from `analytics-tabs.tsx`. No RBAC
-   change, no migrations. See [[settings_state]] and `.ai/handoff.md`.
 

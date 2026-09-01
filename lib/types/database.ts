@@ -554,6 +554,27 @@ export type Database = {
           },
         ]
       }
+      portal_login_attempts: {
+        Row: {
+          attempt_key: string
+          failed_count: number
+          locked_until: string | null
+          updated_at: string
+        }
+        Insert: {
+          attempt_key: string
+          failed_count?: number
+          locked_until?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attempt_key?: string
+          failed_count?: number
+          locked_until?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       promos: {
         Row: {
           active: boolean

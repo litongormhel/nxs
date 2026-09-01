@@ -4,14 +4,29 @@ import { hashPassword, MIN_PASSWORD_LENGTH } from "@/lib/portal/password";
 import { generateMemberCode, generateClientUsername } from "@/lib/portal/codes";
 import { isUsernameTaken, isValidUsername } from "@/lib/portal/username";
 import { setPortalSession } from "@/lib/portal/session";
+import { checkLockout, clientIp, recordFailure } from "@/lib/portal/rate-limit";
 
 const MAX_CODE_ATTEMPTS = 5;
+const IP_MAX_CALLS = 30;
+const IP_COOLDOWN_MINUTES = 2;
 
 function normalizePhone(raw: string): string {
   return raw.trim();
 }
 
 export async function POST(request: Request) {
+  const supabase = createServiceClient();
+  const ipKey = `register-ip:${clientIp(request)}`;
+
+  const { locked } = await checkLockout(supabase, ipKey);
+  if (locked) {
+    return NextResponse.json(
+      { error: "Too many attempts. Please wait a moment and try again." },
+      { status: 429 },
+    );
+  }
+  await recordFailure(supabase, ipKey, { maxAttempts: IP_MAX_CALLS, lockoutMinutes: IP_COOLDOWN_MINUTES });
+
   const body = await request.json().catch(() => null);
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   const username = typeof body?.username === "string" ? body.username.trim() : "";
@@ -33,8 +48,6 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-
-  const supabase = createServiceClient();
 
   if (await isUsernameTaken(supabase, username)) {
     return NextResponse.json(
