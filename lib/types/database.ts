@@ -212,6 +212,7 @@ export type Database = {
           id: string
           password_hash: string
           phone: string
+          qr_token: string
           username: string
         }
         Insert: {
@@ -220,6 +221,7 @@ export type Database = {
           id?: string
           password_hash: string
           phone: string
+          qr_token?: string
           username: string
         }
         Update: {
@@ -228,6 +230,7 @@ export type Database = {
           id?: string
           password_hash?: string
           phone?: string
+          qr_token?: string
           username?: string
         }
         Relationships: [

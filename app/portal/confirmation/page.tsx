@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { getPortalAccountId } from "@/lib/portal/session";
 import { createServiceClient } from "@/lib/portal/service-client";
 
@@ -35,6 +36,9 @@ export default async function PortalConfirmationPage() {
         <p className="text-xs text-muted mb-1">Your member username</p>
         <p className="text-foreground font-medium">{account.username}</p>
       </div>
+      <Link href="/portal/qr" className="block mt-4 text-sm text-gold hover:underline">
+        View my Member QR &rarr;
+      </Link>
     </div>
   );
 }

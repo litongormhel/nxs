@@ -82,19 +82,27 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-01 — Loyalty Points Formula — Wire Into Live Points-Award Flow
+1. **2026-09-01 — Member QR — Per-Account Token + Client-Facing QR Display
+   (7B-1 of 2)** (`ohm#5t9k2mxr`). Plan + regression risk assessment
+   presented and approved before any code/migration was written, per the
+   prompt's mandatory gate. Discrepancy confirmed before planning:
+   `log_visit()` RPC is confirmed dead code, not resurrected — this prompt
+   only generates/displays the QR, no scan/lookup logic (that's 7B-2). See
+   [[client_portal_state]] and `.ai/handoff.md` for full detail.
+
+2. **2026-09-01 — Loyalty Points Formula — Wire Into Live Points-Award Flow
    (Part 2 of 2)** (`ohm#2r8w5nfz`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. Points are now formula-driven end-to-end. See
    [[points_ledger_state]], [[settings_state]], and `.ai/handoff.md` for
    full detail.
 
-2. **2026-09-01 — Loyalty Points Formula — Settings Schema + Configuration
+3. **2026-09-01 — Loyalty Points Formula — Settings Schema + Configuration
    UI (Part 1 of 2)** (`ohm#9k3m7qxc`). Plan + regression risk assessment
    presented and approved before any code/migration was written, per the
    prompt's mandatory gate.
 
-3. **2026-09-01 — Points EARN/REDEEM Guard — Require Client Portal
+4. **2026-09-01 — Points EARN/REDEEM Guard — Require Client Portal
    Account** (`ohm#4x8k2p9d`). Plan + regression risk assessment presented
    and approved before any code/migration was written, per the prompt's
    mandatory gate.
@@ -135,7 +143,7 @@ Full invariant list: [[nxs-architecture-locks]].
      and `tsc`/`eslint`. See [[points_ledger_state]] and
      [[client_portal_state]].
 
-4. **2026-08-31 — Analytics — 5-Tab Restructure + Top Thera → Commission
+5. **2026-08-31 — Analytics — 5-Tab Restructure + Top Thera → Commission
    Deep Link** (`ohm#4k7n2wc9`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate.
@@ -183,37 +191,3 @@ Full invariant list: [[nxs-architecture-locks]].
      present, same recurring credentials/env blocker as recent prior
      tasks; verified via code review and `tsc`/`eslint`. See
      [[analytics_state]].
-
-5. **2026-08-31 — Commission Module — Report UI (Analytics > Commission >
-   Report)** (`ohm#8x2m4tqz`). Plan + regression risk assessment presented
-   and approved before any code was written, per the prompt's mandatory
-   gate. Report sub-tab, sibling to the already-shipped Rates tab.
-   - **Live-schema check**: confirmed live column types (`bookings.booking_date`
-     is `date`, `commission_rates.effective_from`/`effective_to` are
-     `timestamptz`) and no supporting indexes exist — no migration needed,
-     left as-is per user decision (matches Overview's existing unpaginated
-     pattern).
-   - Two design ambiguities decided before coding: (1) report counts only
-     `Booked`/`Completed` bookings, matching Overview's Therapist Ranking
-     filter; (2) historical-rate lookup buckets both
-     `commission_rates.effective_from`/`effective_to` and
-     `bookings.booking_date` to spa-day via the existing `toSpaDay()`
-     helper before comparing, avoiding an 8-hour timezone-cast landmine at
-     rate-change boundaries.
-   - New `getCommissionReport()` server action
-     (`app/(staff)/analytics/actions.ts`) aggregates per-therapist
-     bookings/breakdown/total/commission for a date range; a service with
-     no configured rate still counts toward bookings/total with commission
-     0 and a visible "(Not set)" flag, never silently dropped or defaulted.
-   - New `components/commission-report-browser.tsx`: date-range + cutoff
-     presets (1–15/16–EOM/Custom), Generate action, ledger table with
-     grand-total footer, same Owner-only gate and design tokens as the
-     Rates tab. Wired into `components/analytics-tabs.tsx` as a new
-     Rates/Report sub-tab strip.
-   - Untouched: Rates tab, `setCommissionRate`, booking form, Call Sheet,
-     Wet Area flow, CSV/PDF export.
-   - `npx tsc --noEmit` and `eslint` both clean on all changed/new files.
-   - **Not verified live in-browser this session** — no `.env.local`
-     present, same recurring credentials/env blocker as recent prior
-     tasks; verified via code review, `tsc`/`eslint`, and the live-schema
-     check. See [[commission_state]].

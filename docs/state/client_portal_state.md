@@ -142,11 +142,40 @@ system-generated.
   rule at the DB level, and for the app-level gating built on top of this
   policy.
 
+## Implemented (Member QR — token + display, 7B-1, `ohm#5t9k2mxr`, 2026-09-01)
+
+Generates and displays the permanent per-account QR only. No reception-side
+scan/lookup yet — see roadmap below (7B-2).
+
+- **`client_portal_accounts.qr_token`**: new `uuid not null default
+  gen_random_uuid() unique` column, migration
+  `20260901150000_client_portal_accounts_qr_token.sql`. One token per
+  portal account. Live row count was 1 before applying — the column
+  `default` backfilled that row automatically (verified post-migration),
+  no separate `UPDATE` statement was needed.
+- **No RLS policy change**: grepped every staff-facing
+  `client_portal_accounts` query (`app/(staff)/clients/page.tsx`,
+  `app/(staff)/bookings/page.tsx`, added in `ohm#4x8k2p9d`'s
+  `staff_select` policy) — both only `select("client_id")`, never `select("*")`.
+  No `qr_token` exposure found.
+- **`app/portal/qr/page.tsx`** (new route): server component, reads the
+  caller's own session via `getPortalAccountId()` (`lib/portal/session.ts`)
+  — never accepts a token/account id from URL params or client input.
+  Renders the QR via the existing `qrcode` dependency (same dark/light
+  color scheme as Master QR), encoding the opaque `qr_token` only — no
+  Name, phone, or username on the image. Linked from
+  `app/portal/confirmation/page.tsx`.
+- **Discrepancy confirmed before this prompt's plan**: the roadmap phrase
+  "Member QR + `log_visit` lookup integration" was stale — `log_visit()`
+  RPC is confirmed dead code (see [[points_ledger_state]], no UI caller),
+  not resurrected. The 7B-2 scan target is `logVisitBooking()`/
+  `quick_walkin()`, the live write paths.
+
 ## Not yet implemented — see roadmap
 
-- Member QR (per-account, permanent, client-side) and its `log_visit` RPC
-  lookup path — additive only, the existing RPC contract/atomicity/ledger
-  triggers are untouched so far.
+- **7B-2**: reception-side Member QR scan + prefill into
+  `logVisitBooking()`/`quick_walkin()` (the live write paths, not
+  `log_visit()`).
 - Phone masking/reveal UI and the actual `phone_number_revealed` logging
   call site.
 - No INSERT/UPDATE RLS policy on `client_portal_accounts` yet (only the new

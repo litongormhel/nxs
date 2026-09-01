@@ -5,6 +5,42 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Member QR — Per-Account Token + Client-Facing QR Display (7B-1 of 2)**
+  (`ohm#5t9k2mxr`, 2026-09-01). Plan + regression risk assessment presented
+  and approved before any code/migration was written, per the prompt's
+  mandatory gate.
+  - **Discrepancy confirmed before planning**: `log_visit()` RPC is
+    confirmed dead code (`points_ledger_state.md`, no UI caller) — not
+    resurrected. This prompt only generates/displays the QR; no
+    scan/lookup logic.
+  - New migration `supabase/migrations/20260901150000_client_portal_accounts_qr_token.sql`:
+    `client_portal_accounts.qr_token uuid not null default gen_random_uuid()
+    unique`. Live row count confirmed at 1 before applying; the `default`
+    backfilled that row automatically (verified post-migration), no
+    separate `UPDATE` statement needed.
+  - **RLS check**: grepped every staff-facing `client_portal_accounts`
+    query (`app/(staff)/clients/page.tsx`, `app/(staff)/bookings/page.tsx`)
+    — both `select("client_id")` only, no `select("*")` anywhere. No
+    `qr_token` exposure found, nothing to flag, no policy change made.
+  - New route `app/portal/qr/page.tsx`: server component, reads the
+    caller's own session via `getPortalAccountId()` (no URL params/client
+    input accepted), renders the `qr_token` (only) via the existing
+    `qrcode` dependency, same visual pattern as Master QR. Linked from
+    `app/portal/confirmation/page.tsx` ("View my Member QR").
+  - `lib/types/database.ts` updated surgically (only the `qr_token` field
+    added to `client_portal_accounts`) — a full `generate_typescript_types`
+    regeneration pulled in unrelated nullability drift on `quick_walkin`'s
+    signature (Postgres introspection quirk, not a real schema change)
+    that broke `app/(staff)/bookings/actions.ts`, a do-not-touch file, so
+    the full regeneration was discarded in favor of a manual patch.
+  - **7B-2 still pending**: reception-side scan + prefill into
+    `logVisitBooking()`/`quick_walkin()`, scanning the live write paths
+    (not `log_visit()`).
+  - `npx tsc --noEmit` and `eslint` both clean on all changed files.
+    `get_advisors` showed no new findings after the migration.
+  - **Not verified live in-browser this session** — no `.env.local`
+    present, same recurring credentials/env blocker as recent prior tasks.
+
 - **Loyalty Points Formula — Wire Into Live Points-Award Flow (Part 2 of
   2) — complete** (`ohm#2r8w5nfz`, 2026-09-01). Plan + regression risk
   assessment presented and approved before any code was written, per the
