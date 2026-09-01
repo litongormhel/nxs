@@ -5,6 +5,37 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Settings — 4-Tab Restructure + Capacity Stepper + Add-ons Save — complete**
+  (`ohm#9x3f7mq2`, 2026-09-01). Plan + regression risk assessment presented
+  and approved before any code was written, per the prompt's mandatory gate.
+  - **Two discrepancies surfaced during the mandatory investigate-first
+    step, not built over**:
+    1. The prompt's stepper spec (`[count] [−] [+] [Save]`) assumed Lockers
+       and Rooms/Beds share the same backend model. They don't: Rooms/Beds
+       (`updateRoomCount`) already supports real ±1 via insert/soft-deactivate.
+       Lockers (`addLockerBatch`) was add-only in fixed batches of 10, with
+       **no RLS UPDATE policy on `lockers` at all** — a symmetric `−` would
+       have needed a schema/RLS change the prompt said wasn't expected.
+       Flagged to Ohm; chose **increment-only** for Lockers: `+`/Save now
+       call a new parameterized `addLockers(count, staffId)` (replaces
+       `addLockerBatch`, same INSERT-only shape, no RLS change), `−` is
+       disabled/grayed with a tooltip.
+    2. The prompt assumed Services & Pricing and Promo Codes already shared
+       one save pattern to copy for Add-ons. They don't: Services is still
+       auto-save-on-blur (no Save button), Promos was converted to explicit
+       per-row draft+Save by `ohm#3n7x9kwp` earlier the same day. Since the
+       prompt explicitly asked for a Save button, Add-ons now mirrors the
+       Promos draft+Save pattern (new `addonDrafts` state, dirty check,
+       Save/Cancel), not the Services onBlur pattern.
+  - Tab shell: local `useState<SettingsTab>` + a local `TabButton` inside
+    `SettingsBrowser` (pattern taken from `components/analytics-tabs.tsx`,
+    since the tab-state logic actually lives there, not in
+    `analytics-browser.tsx` itself as the prompt assumed). 4 tabs — General;
+    Services & Loyalty; Promos & Security; Scheduling & Capacity — each
+    wrapping existing section JSX unchanged. No RBAC/role-gating logic
+    touched; every `canEdit*` flag stays exactly where it was.
+  - No migrations, no RLS changes. See [[settings_state]] for full detail.
+
 - **Staff Archive + Owner-Managed Login Credentials — complete**
   (`ohm#uox20nff`, 2026-09-01). Plan + regression risk assessment presented
   and approved before any code/migration was written, per the prompt's

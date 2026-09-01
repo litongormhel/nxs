@@ -287,7 +287,8 @@ export async function updateVoidAuthCode(code: string, staffId: string): Promise
 
 // ---------- Capacity ----------
 
-export async function addLockerBatch(staffId: string): Promise<ActionResult & { added?: number[] }> {
+export async function addLockers(count: number, staffId: string): Promise<ActionResult & { added?: number[] }> {
+  if (count <= 0) return { ok: false, error: "Count must be at least 1." };
   const supabase = await createClient();
   const { data: maxRow, error: maxErr } = await supabase
     .from("lockers")
@@ -298,7 +299,7 @@ export async function addLockerBatch(staffId: string): Promise<ActionResult & { 
   if (maxErr) return fail(maxErr);
 
   const start = (maxRow?.number ?? 0) + 1;
-  const newNumbers = Array.from({ length: 10 }, (_, i) => start + i);
+  const newNumbers = Array.from({ length: count }, (_, i) => start + i);
   const { error } = await supabase
     .from("lockers")
     .insert(newNumbers.map((number) => ({ number, active: true })));

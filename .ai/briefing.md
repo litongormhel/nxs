@@ -82,11 +82,20 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-## Last Completed Tasks
-- ohm#3n8y5w1q — Call sheet: re-added "All" tab (pinned, opt-in) for total-count/shift-overview visibility; footer label + canvas export branch on timeFilter === "all"; Download JPEG hidden in All view
-- ohm#7k2p9m4x — Call sheet: replaced "All Times" dropdown with data-driven scrollable time-slot tabs (sourced from availableSlots/sortSlotTimes, not hardcoded); added Thera column (Locker/Room/Service/Thera); default tab = nearest upcoming slot
+1. **2026-09-01 — Settings — 4-Tab Restructure + Capacity Stepper + Add-ons
+   Save Button** (`ohm#9x3f7mq2`). Plan + regression risk assessment
+   presented and approved before any code was written, per the prompt's
+   mandatory gate. Two discrepancies caught by the mandatory investigate-first
+   step: Lockers has no RLS UPDATE policy (add-only), so the `[−]` stepper
+   button is disabled/grayed rather than wired to a new decrement path;
+   Services (onBlur) and Promos (draft+Save) don't share one save pattern,
+   so Add-ons was built to match Promos' explicit draft+Save since the
+   prompt asked for a Save button. Settings restructured into 4 tabs
+   (General / Services & Loyalty / Promos & Security / Scheduling &
+   Capacity) using the tab-state pattern from `analytics-tabs.tsx`. No RBAC
+   change, no migrations. See [[settings_state]] and `.ai/handoff.md`.
 
-1. **2026-09-01 — Staff Archive + Owner-Managed Login Credentials**
+2. **2026-09-01 — Staff Archive + Owner-Managed Login Credentials**
    (`ohm#uox20nff`). Plan + regression risk assessment presented and
    approved before any code/migration was written, per the prompt's
    mandatory gate. Mid-implementation, confirmed live that switching login

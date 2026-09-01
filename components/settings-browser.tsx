@@ -16,7 +16,7 @@ import {
   addAddon,
   updateAddonPrice,
   deleteAddon,
-  addLockerBatch,
+  addLockers,
   updateRoomCount,
 } from "@/app/(staff)/settings/actions";
 import { compareSlotTimes } from "@/lib/bookings/slots";
@@ -56,6 +56,31 @@ function fmtTime(t: string): string {
   return `${hr}:${m} ${+h < 12 ? "AM" : "PM"}`;
 }
 
+type SettingsTab = "general" | "services-loyalty" | "promos-security" | "scheduling-capacity";
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition ${
+        active
+          ? "border border-[#a97e2e] bg-surface text-accent-gold"
+          : "border border-transparent text-muted hover:text-fg"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function SettingsBrowser({
   initialServices,
   initialPromos,
@@ -80,6 +105,8 @@ export function SettingsBrowser({
   initialVoidAuthCodeConfigured: boolean;
 }) {
   const router = useRouter();
+
+  const [tab, setTab] = useState<SettingsTab>("general");
 
   // Theme state (global, see lib/theme-context.tsx)
   const { isLightMode, setIsLightMode } = useTheme();
@@ -117,13 +144,15 @@ export function SettingsBrowser({
     if (initialAddons && initialAddons.length > 0) return initialAddons;
     return [{ id: "1", name: "Towel", price: 50 }];
   });
+  const [addonDrafts, setAddonDrafts] = useState<Record<string, string>>({});
 
   const [lockerCount, setLockerCount] = useState<number>(
     initialLockersCount || 100
   );
+  const [lockerAddDraft, setLockerAddDraft] = useState<number>(0);
   const [roomCount, setRoomCount] = useState<number>(initialRoomsCount || 18);
-  const [roomCountDraft, setRoomCountDraft] = useState<string>(
-    String(initialRoomsCount || 18)
+  const [roomCountDraft, setRoomCountDraft] = useState<number>(
+    initialRoomsCount || 18
   );
 
   // Toast state
@@ -373,19 +402,35 @@ export function SettingsBrowser({
   };
 
   // Handlers for Add-ons
-  const handleUpdateAddonPrice = async (index: number, val: string) => {
-    const num = parseInt(val, 10) || 0;
-    const addon = addons[index];
-    const updated = [...addons];
-    updated[index] = { ...updated[index], price: num };
-    setAddons(updated);
+  const handleAddonDraftChange = (addonId: string, val: string) => {
+    setAddonDrafts((prev) => ({ ...prev, [addonId]: val }));
+  };
+
+  const handleSaveAddonPrice = async (addon: Addon) => {
+    const draft = addonDrafts[addon.id];
+    if (draft === undefined) return;
+    const num = parseInt(draft, 10) || 0;
     const res = await updateAddonPrice(addon.id, num, selectedStaffId);
     if (!res.ok) {
       showToast(`Failed to update ${addon.name} price: ${res.error}`);
       return;
     }
+    setAddons((prev) => prev.map((a) => (a.id === addon.id ? { ...a, price: num } : a)));
+    setAddonDrafts((prev) => {
+      const next = { ...prev };
+      delete next[addon.id];
+      return next;
+    });
     showToast(`${addon.name} price updated to ₱${num}`);
     router.refresh();
+  };
+
+  const handleCancelAddonDraft = (addonId: string) => {
+    setAddonDrafts((prev) => {
+      const next = { ...prev };
+      delete next[addonId];
+      return next;
+    });
   };
 
   const handleAddAddon = () => {
@@ -441,34 +486,61 @@ export function SettingsBrowser({
   };
 
   // Handlers for Capacity
-  const handleAddLockers = async () => {
-    const res = await addLockerBatch(selectedStaffId);
+  const handleSaveLockers = async () => {
+    if (lockerAddDraft <= 0) return;
+    const res = await addLockers(lockerAddDraft, selectedStaffId);
     if (!res.ok) {
       showToast(`Failed to add lockers: ${res.error}`);
       return;
     }
-    const updated = lockerCount + 10;
+    const updated = lockerCount + lockerAddDraft;
     setLockerCount(updated);
+    setLockerAddDraft(0);
     showToast(`Locker count increased to ${updated}`);
     router.refresh();
   };
 
-  const handleUpdateRoomCount = async (val: string) => {
-    const num = parseInt(val, 10) || 18;
-    if (num === roomCount) return;
-    const res = await updateRoomCount(num, selectedStaffId);
+  const handleSaveRoomCount = async () => {
+    if (roomCountDraft === roomCount) return;
+    const res = await updateRoomCount(roomCountDraft, selectedStaffId);
     if (!res.ok) {
       showToast(`Failed to update room count: ${res.error}`);
-      setRoomCountDraft(String(roomCount));
+      setRoomCountDraft(roomCount);
       return;
     }
-    setRoomCount(num);
-    showToast(`Room/bed count set to ${num}`);
+    setRoomCount(roomCountDraft);
+    showToast(`Room/bed count set to ${roomCountDraft}`);
     router.refresh();
   };
 
   return (
     <div className="max-w-4xl space-y-6">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <TabButton active={tab === "general"} onClick={() => setTab("general")}>
+          General
+        </TabButton>
+        <TabButton
+          active={tab === "services-loyalty"}
+          onClick={() => setTab("services-loyalty")}
+        >
+          Services & Loyalty
+        </TabButton>
+        <TabButton
+          active={tab === "promos-security"}
+          onClick={() => setTab("promos-security")}
+        >
+          Promos & Security
+        </TabButton>
+        <TabButton
+          active={tab === "scheduling-capacity"}
+          onClick={() => setTab("scheduling-capacity")}
+        >
+          Scheduling & Capacity
+        </TabButton>
+      </div>
+
+      {tab === "general" && (
+      <div className="space-y-6">
       {/* SECTION: Display */}
       <div>
         <div className="text-[10.5px] font-bold tracking-[0.13em] uppercase text-muted mb-2.5">
@@ -552,7 +624,11 @@ export function SettingsBrowser({
           </div>
         </div>
       </div>
+      </div>
+      )}
 
+      {tab === "services-loyalty" && (
+      <div className="space-y-6">
       {/* SECTION: Services & Pricing */}
       <div>
         <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2.5">
@@ -625,7 +701,11 @@ export function SettingsBrowser({
         canEdit={canEditLoyaltyFormula}
         staffId={selectedStaffId}
       />
+      </div>
+      )}
 
+      {tab === "promos-security" && (
+      <div className="space-y-6">
       {/* SECTION: Void Authorization Code */}
       <VoidAuthCodeSettings
         initialConfigured={initialVoidAuthCodeConfigured}
@@ -716,7 +796,11 @@ export function SettingsBrowser({
           </div>
         )}
       </div>
+      </div>
+      )}
 
+      {tab === "scheduling-capacity" && (
+      <div className="space-y-6">
       {/* SECTION: Weekend Fixed Time Slots */}
       <div>
         <div className="flex items-center justify-between mb-2.5 flex-wrap gap-2.5">
@@ -780,35 +864,54 @@ export function SettingsBrowser({
           </div>
         )}
         <div className="space-y-2">
-          {addons.map((a, idx) => (
-            <div
-              key={a.id || idx}
-              className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3"
-            >
-              <div className="flex-1 text-[12.5px] font-bold text-foreground">
-                {a.name}
+          {addons.map((a, idx) => {
+            const draft = addonDrafts[a.id];
+            const isDirty = draft !== undefined && (parseInt(draft, 10) || 0) !== a.price;
+            return (
+              <div
+                key={a.id || idx}
+                className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3"
+              >
+                <div className="flex-1 text-[12.5px] font-bold text-foreground">
+                  {a.name}
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] text-muted">₱</span>
+                  <input
+                    type="number"
+                    disabled={!canEditCatalog}
+                    value={draft ?? String(a.price)}
+                    onChange={(e) => handleAddonDraftChange(a.id, e.target.value)}
+                    className="w-[70px] rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none disabled:opacity-50 focus:border-gold"
+                  />
+                </div>
+                {canEditCatalog && isDirty && (
+                  <>
+                    <button
+                      onClick={() => handleCancelAddonDraft(a.id)}
+                      className="rounded-lg border border-border px-2 py-1 text-[10px] font-bold text-muted hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleSaveAddonPrice(a)}
+                      className="rounded-lg bg-gold px-2 py-1 text-[10px] font-bold text-black hover:brightness-110"
+                    >
+                      Save
+                    </button>
+                  </>
+                )}
+                {canEditCatalog && (
+                  <button
+                    onClick={() => handleDeleteAddon(idx)}
+                    className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-accent-red hover:brightness-125"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
-              <div className="flex items-center gap-1">
-                <span className="text-[11px] text-muted">₱</span>
-                <input
-                  type="number"
-                  defaultValue={a.price}
-                  key={`${a.id}-price-${a.price}`}
-                  onBlur={(e) => handleUpdateAddonPrice(idx, e.target.value)}
-                  disabled={!canEditCatalog}
-                  className="w-[70px] rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none focus:border-gold disabled:opacity-50"
-                />
-              </div>
-              {canEditCatalog && (
-                <button
-                  onClick={() => handleDeleteAddon(idx)}
-                  className="rounded-lg border border-[#5e3c3c] px-2 py-1 text-[10px] font-bold text-accent-red hover:brightness-125"
-                >
-                  Delete
-                </button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -826,15 +929,37 @@ export function SettingsBrowser({
           <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-4 flex-wrap gap-2.5">
             <div>
               <div className="text-[13px] font-bold text-foreground">Lockers</div>
-              <div className="text-[11px] text-muted mt-0.5">{lockerCount} total</div>
+              <div className="text-[11px] text-muted mt-0.5">
+                {lockerCount} total — lockers can only be added, not removed
+              </div>
             </div>
             {canEditCatalog && (
-              <button
-                onClick={handleAddLockers}
-                className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold transition hover:bg-[#c89b3c]/10"
-              >
-                + Add 10 Lockers
-              </button>
+              <div className="flex items-center gap-2">
+                <span className="w-10 text-center font-mono text-xs text-foreground">
+                  +{lockerAddDraft}
+                </span>
+                <button
+                  onClick={() => setLockerAddDraft((n) => Math.max(0, n - 1))}
+                  disabled={lockerAddDraft === 0}
+                  title="Lockers can only be added, not removed"
+                  className="w-7 h-7 rounded-lg border border-border text-sm font-bold text-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  −
+                </button>
+                <button
+                  onClick={() => setLockerAddDraft((n) => n + 1)}
+                  className="w-7 h-7 rounded-lg border border-border text-sm font-bold text-foreground hover:border-gold"
+                >
+                  +
+                </button>
+                <button
+                  onClick={handleSaveLockers}
+                  disabled={lockerAddDraft === 0}
+                  className="rounded-lg bg-gold px-3 py-1.5 text-[11px] font-bold text-black hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Save
+                </button>
+              </div>
             )}
           </div>
 
@@ -844,20 +969,43 @@ export function SettingsBrowser({
                 Rooms / Beds
               </div>
               <div className="text-[11px] text-muted mt-0.5">
-                Editable — e.g. after a renovation
+                {roomCount} total — editable, e.g. after a renovation
               </div>
             </div>
-            <input
-              type="number"
-              value={roomCountDraft}
-              onChange={(e) => setRoomCountDraft(e.target.value)}
-              onBlur={(e) => handleUpdateRoomCount(e.target.value)}
-              disabled={!canEditCatalog}
-              className="w-20 rounded-lg border border-border bg-surface px-2.5 py-2 font-mono text-xs text-foreground outline-none focus:border-gold disabled:opacity-50"
-            />
+            {canEditCatalog ? (
+              <div className="flex items-center gap-2">
+                <span className="w-10 text-center font-mono text-xs text-foreground">
+                  {roomCountDraft}
+                </span>
+                <button
+                  onClick={() => setRoomCountDraft((n) => Math.max(0, n - 1))}
+                  disabled={roomCountDraft === 0}
+                  className="w-7 h-7 rounded-lg border border-border text-sm font-bold text-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  −
+                </button>
+                <button
+                  onClick={() => setRoomCountDraft((n) => n + 1)}
+                  className="w-7 h-7 rounded-lg border border-border text-sm font-bold text-foreground hover:border-gold"
+                >
+                  +
+                </button>
+                <button
+                  onClick={handleSaveRoomCount}
+                  disabled={roomCountDraft === roomCount}
+                  className="rounded-lg bg-gold px-3 py-1.5 text-[11px] font-bold text-black hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Save
+                </button>
+              </div>
+            ) : (
+              <span className="font-mono text-xs text-muted">{roomCount}</span>
+            )}
           </div>
         </div>
       </div>
+      </div>
+      )}
 
       {/* Prompt / Modal Dialog */}
       {promptDialog && (

@@ -1,5 +1,20 @@
 # Settings — Current State
 
+## Tab structure (`ohm#9x3f7mq2`, 2026-09-01)
+
+`SettingsBrowser` is one component with internal tab state
+(`useState<SettingsTab>`) and a local `TabButton`, mirroring the pattern in
+`components/analytics-tabs.tsx` (the tab-state logic actually lives there,
+not in `analytics-browser.tsx` itself — the source prompt assumed the
+latter). No new routes, no RBAC/visibility changes — every section's
+existing `canEdit*` gate stays exactly where it was, just re-parented under
+a tab:
+
+- **General** — Display (Appearance/theme toggle), Account
+- **Services & Loyalty** — Services & Pricing, Loyalty Points Formula
+- **Promos & Security** — Void Authorization Code, Promo Codes
+- **Scheduling & Capacity** — Weekend Fixed Time Slots, Add-ons, Capacity
+
 ## Implemented (UI + real Supabase persistence)
 
 `app/settings/page.tsx` fetches current data from Supabase (`services`,
@@ -83,10 +98,15 @@ just local React state.
   table via FK, so no soft-delete flag needed). Seeded with the 7 default
   times the UI already showed (`16:00`–`01:00`) so the switch to
   persistence didn't visually empty the list.
-- **Add-ons**: editable price per add-on → `updateAddonPrice`. `+ Add
-  Add-on` → `addAddon`. Delete → `deleteAddon` (**soft delete**; the
-  "minimum 1 active add-on" safeguard is now enforced **server-side**,
-  not just via a disabled button).
+- **Add-ons**: price editing switched from auto-save-on-blur to **per-row
+  draft state with explicit Save/Cancel** (`ohm#9x3f7mq2`, 2026-09-01),
+  matching the Promo Codes pattern below (Services & Pricing still uses
+  onBlur — the two didn't actually share one pattern, so Add-ons was built
+  to match whichever one had a Save button) → `updateAddonPrice` (action
+  unchanged, only the UI trigger changed). `+ Add Add-on` → `addAddon`.
+  Delete → `deleteAddon` (**soft delete**; the "minimum 1 active add-on"
+  safeguard is now enforced **server-side**, not just via a disabled
+  button).
 - **Delete confirmation** (`ohm#4k9p2xq7`, 2026-08-29): all 4 delete flows
   above (Service/Promo/Weekend Slot/Add-on) go through a shared
   `components/confirm-dialog.tsx` (`ConfirmDialog`) instead of the native
@@ -102,15 +122,22 @@ just local React state.
   filtering, FK-joined historical display, no `ON DELETE CASCADE` risk)
   were all already satisfied by `ohm#5x1p8m3v`/6C-4 (see the bullets
   above and the RLS section below). No migration or code change was made.
-- **Capacity**:
-  - **Lockers**: `+ Add 10 Lockers` → `addLockerBatch`, inserts 10 new
-    rows at `max(number)+1 .. +10`, `active = true`. Never updates or
-    removes existing rows.
-  - **Rooms/Beds**: a single editable count →`updateRoomCount`. Increasing
-    the count inserts new sequential `rooms` rows. **Decreasing the count
-    deactivates** (`active = false`) the highest-numbered active rooms
-    down to the target — never a hard delete, since `bookings.room_number`
-    FKs to `rooms`. Commits on blur, not per keystroke.
+- **Capacity** (stepper UX as of `ohm#9x3f7mq2`, 2026-09-01 — both rows now
+  `[count] [−] [+] [Save]`, draft-then-Save instead of committing on blur):
+  - **Lockers**: **increment-only** — `lockers` has no RLS UPDATE policy
+    at all (confirmed live before coding), so there is no decrement path
+    to wire up. `[+]` bumps a local add-count draft, `[−]` is
+    disabled/grayed with a tooltip ("Lockers can only be added, not
+    removed"), Save calls `addLockers(count, staffId)` — a new
+    parameterized action (replaces the old hardcoded-10 `addLockerBatch`,
+    same INSERT-only shape/RLS, just takes the draft count instead of a
+    fixed 10). Never updates or removes existing rows.
+  - **Rooms/Beds**: real ±1 stepper — `[−]`/`[+]` adjust a local draft
+    int, Save calls the existing `updateRoomCount(target, staffId)`
+    unchanged. Increasing inserts new sequential `rooms` rows;
+    **decreasing deactivates** (`active = false`) the highest-numbered
+    active rooms down to the target — never a hard delete, since
+    `bookings.room_number` FKs to `rooms`.
 - Toast feedback (bottom-center, auto-fade) on every mutation above —
   now reflects the actual server-action result (shows the real error on
   failure, not a blind "updated" message).
