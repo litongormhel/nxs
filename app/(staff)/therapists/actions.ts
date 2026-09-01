@@ -182,6 +182,24 @@ export async function unarchiveTherapist(
   return { ok: true };
 }
 
+export async function updateTherapistName(
+  therapistId: string,
+  name: string,
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("therapists")
+    .update({ name })
+    .eq("id", therapistId);
+  if (error) return fail(error);
+
+  await logAction(supabase, staffId, "therapist_rename", `therapist=${therapistId} name=${name}`);
+  revalidatePath("/therapists");
+  return { ok: true };
+}
+
 export async function toggleDayOff(
   therapistId: string,
   weekday: number,

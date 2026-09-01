@@ -5,6 +5,57 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Therapists — Add + Edit (Rename) RLS + Wiring — complete**
+  (`ohm#5v8n3ptc`, 2026-09-01, Prompt 2 of 3 in the "Therapist Roster —
+  Investigate & Wire" sequence). Investigation phase (no code) re-confirmed
+  live rather than trusting the prompt's snapshot: `therapists` RLS was
+  still exactly `public_select` + `staff_update` (no INSERT/DELETE);
+  `createTherapistAction`/`createTherapist()` still existed and was still
+  silently RLS-rejected; `handleConfirmEdit` was still local-state-only and
+  touched only the `name` field (no position/comment exposed in the Edit
+  Name modal). Plan + regression risk assessment presented and approved
+  before any code/migration was written, per the prompt's mandatory gate.
+  - **Checked before assuming, not built over**: queried live schema for a
+    unique constraint on `therapists.name` — none exists (only the `id`
+    PK), so no server-side uniqueness check was added; the client's
+    existing duplicate-name guard is unchanged. Also confirmed
+    `staff_update`'s `WITH CHECK` didn't need column-level narrowing to
+    exclude `archived*` columns from a rename-only caller — that pattern
+    isn't used anywhere else in this schema, and the same actor tier
+    (`is_supervisor_or_above()`) already writes those columns via Archive
+    regardless.
+  - `supabase/migrations/20260901200000_therapists_insert_rls.sql`: adds
+    `staff_insert` (`is_supervisor_or_above()`) to `therapists`. This alone
+    fixed the pre-existing `createTherapist()` insert — no client-side code
+    change was needed for Add itself.
+  - `app/(staff)/therapists/actions.ts`: new `updateTherapistName(
+    therapistId, name, staffId)` — `UPDATE therapists SET name = … WHERE
+    id = …`, one `action_logs` row (`therapist_rename`),
+    `revalidatePath("/therapists")`. Reuses the existing `staff_update`
+    policy from Prompt 1 (`ohm#7m2w9dxk`) — no new RLS policy for rename.
+  - `components/therapist-browser.tsx`: `handleConfirmEdit` is now async
+    and calls `updateTherapistNameAction` before updating local state
+    (`therapists`/`therapistMeta`/`therapistIds`/`bookings`), then
+    `router.refresh()` on success.
+  - **Regression check**: grepped the rest of the codebase (e.g.
+    `app/(staff)/bookings/actions.ts`) for anything keying off
+    `therapists.name` as an identifier rather than `id` — found none;
+    `name` is only ever used for human-readable log strings, always looked
+    up *by* `id` first. The component's own name-keyed
+    `therapistIds`/`therapistMeta` maps are local to
+    `therapist-browser.tsx` and already update together on rename (this was
+    true before this prompt too, for the Day Off feature).
+  - Verification: `tsc --noEmit` clean (after clearing a stale,
+    unrelated `.next/dev/types/routes.d.ts` generated-file parse error —
+    `.next/` is gitignored, unaffected by this change). Migration applied
+    directly to the live Supabase project via `apply_migration`. Same
+    pre-existing environment gap as Prompt 1 — no `.env.local` in this
+    sandbox — so no live browser smoke test; not caught up in this specific
+    change since it isn't new to this prompt.
+  - Still local-state-only: Services Offered (`therapist_services`) —
+    explicitly out of scope for this prompt (Prompt 3). See
+    [[therapists_state]] for the per-affordance RLS table.
+
 - **Therapists — Archive/Unarchive RLS + Real Persistence — complete**
   (`ohm#7m2w9dxk`, 2026-09-01, Prompt 1 of 3 in the "Therapist Roster —
   Investigate & Wire" sequence). Investigation phase (no code) presented an

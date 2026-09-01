@@ -10,6 +10,7 @@ import {
   markOnLeave as markOnLeaveAction,
   archiveTherapist as archiveTherapistAction,
   unarchiveTherapist as unarchiveTherapistAction,
+  updateTherapistName as updateTherapistNameAction,
 } from "@/app/(staff)/therapists/actions";
 
 const DEFAULT_THERAPISTS = [
@@ -589,8 +590,8 @@ export function TherapistBrowser({
     router.refresh();
   };
 
-  // Confirm edit therapist name
-  const handleConfirmEdit = () => {
+  // Confirm edit therapist name — writes through to therapists.name.
+  const handleConfirmEdit = async () => {
     if (!editTherapist) return;
     const newName = editName.trim();
     const oldName = editTherapist;
@@ -603,6 +604,17 @@ export function TherapistBrowser({
       return;
     }
     if (newName !== oldName) {
+      const therapistId = therapistIds[oldName];
+      if (!therapistId || !sessionStaff) {
+        setEditError("No staff session found.");
+        return;
+      }
+      const res = await updateTherapistNameAction(therapistId, newName, sessionStaff.id);
+      if (!res.ok) {
+        setEditError(`Couldn't rename ${oldName} — ${res.error}`);
+        return;
+      }
+
       setTherapists((prev) => prev.map((t) => (t === oldName ? newName : t)));
       setTherapistMeta((prev) => {
         const copy = { ...prev };
@@ -622,6 +634,7 @@ export function TherapistBrowser({
         )
       );
       showToast(`Renamed to ${newName}`);
+      router.refresh();
     }
     setEditTherapist(null);
   };

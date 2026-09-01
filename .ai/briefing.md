@@ -82,7 +82,26 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-01 — Therapists — Archive/Unarchive RLS + Real Persistence**
+1. **2026-09-01 — Therapists — Add + Edit (Rename) RLS + Wiring**
+   (`ohm#5v8n3ptc`, Prompt 2 of 3). Investigation phase re-confirmed live
+   (not from the prompt's snapshot) that `therapists` still had exactly
+   `public_select` + `staff_update` (no INSERT/DELETE), that
+   `createTherapistAction`/`createTherapist()` still existed and was still
+   silently RLS-rejected, and that `handleConfirmEdit` was still
+   local-state-only, touching only the `name` field. Plan + regression risk
+   assessment presented and approved before any code/migration was written,
+   per the prompt's mandatory gate. Added `staff_insert`
+   (`is_supervisor_or_above()`) to `therapists` — this alone fixes the
+   already-broken `createTherapist()` insert, no client-side change needed
+   for Add. Reused the existing `staff_update` policy (from Prompt 1) for
+   rename, no new policy or column-level narrowing needed — confirmed no
+   unique constraint on `therapists.name` (only the `id` PK) and confirmed
+   the component's name-keyed `therapistIds`/`therapistMeta` maps aren't
+   used as an identifier anywhere outside `therapist-browser.tsx`. New
+   `updateTherapistName(therapistId, name, staffId)` server action now backs
+   the Edit Name modal. See [[therapists_state]] and `.ai/handoff.md`.
+
+2. **2026-09-01 — Therapists — Archive/Unarchive RLS + Real Persistence**
    (`ohm#7m2w9dxk`, Prompt 1 of 3). Investigation phase confirmed live
    (not from the prompt's snapshot) that `therapists` had no INSERT/
    UPDATE/DELETE RLS policy at all, and separately surfaced that Add
@@ -100,7 +119,7 @@ Full invariant list: [[nxs-architecture-locks]].
    rows are untouched by archive/unarchive. See [[therapists_state]] and
    `.ai/handoff.md`.
 
-2. **2026-09-01 — Docs Sync: Correct Stale Call Sheet Status** (`ohm#3k9r7fq2`).
+3. **2026-09-01 — Docs Sync: Correct Stale Call Sheet Status** (`ohm#3k9r7fq2`).
    Documentation-only fix. `docs/state/bookings_state.md`'s "Not yet
    implemented" list claimed `app/call-sheet/page.tsx` was still an 8-line
    "Coming soon." stub — false and stale (also stale path; actual path is
@@ -111,7 +130,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `docs/state/operations_state.md` already documented. Removed the stale
    bullet; no other bullet touched. No code, schema, or migration changed.
 
-3. **2026-09-01 — Settings — 4-Tab Restructure + Capacity Stepper + Add-ons
+4. **2026-09-01 — Settings — 4-Tab Restructure + Capacity Stepper + Add-ons
    Save Button** (`ohm#9x3f7mq2`). Plan + regression risk assessment
    presented and approved before any code was written, per the prompt's
    mandatory gate. Two discrepancies caught by the mandatory investigate-first
@@ -124,7 +143,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Capacity) using the tab-state pattern from `analytics-tabs.tsx`. No RBAC
    change, no migrations. See [[settings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-01 — Staff Archive + Owner-Managed Login Credentials**
+5. **2026-09-01 — Staff Archive + Owner-Managed Login Credentials**
    (`ohm#uox20nff`). Plan + regression risk assessment presented and
    approved before any code/migration was written, per the prompt's
    mandatory gate. Mid-implementation, confirmed live that switching login
@@ -137,18 +156,4 @@ Full invariant list: [[nxs-architecture-locks]].
    API `ban_duration` flip; Owner-set username+password provisioning via
    Admin API `createUser`; new self-service password-change view. See
    [[staff_state]] and `.ai/handoff.md` for full detail.
-
-5. **2026-09-01 — Sale Void — Owner-Set 6-Digit Authorization Code**
-   (`ohm#6f3p8dxn`, supersedes `ohm#8m2k5vqz` — email+password step-up was
-   drafted but never implemented). Plan + regression risk assessment
-   presented and approved before any code/migration was written, per the
-   prompt's mandatory gate. Two void paths now: Supervisor/Owner void
-   directly (no code, DB trigger widened this prompt from Owner-only to
-   Supervisor-or-above after a live discrepancy check); everyone else goes
-   through a shared Owner-set 6-digit code + Supervisor/Owner-authorizer
-   step-up (`void_sale_with_code()`, `SECURITY DEFINER`, 3-fail/5-minute
-   per-initiator lockout). Two critical DB-interaction findings surfaced
-   and resolved before/during coding — see [[sales_state]],
-   [[settings_state]], `docs/architecture/rbac.md`, and `.ai/handoff.md`
-   for full detail.
 
