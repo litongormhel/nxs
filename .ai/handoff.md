@@ -5,6 +5,89 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Activity Logs — Human-Readable Detail Formatting — complete**
+  (`ohm#i35wdbgr`, 2026-09-02). Read-only, display-layer only — no writer,
+  schema, migration, or RLS changes (DATABASE CHANGE SAFETY RULES did not
+  apply). Plan + regression risk assessment presented and approved before
+  any code was written, per the prompt's mandatory gate.
+  - **New `lib/logs/format-detail.ts`**: `formatLogDetail(action, detail,
+    lookups)` — a pure function returning `{ sentence, technicalIds }`.
+    `parseDetail()` splits `detail` on **key boundaries** (`/(?:^|\s)([a-z_]+)=/g`),
+    not spaces — caught by a real bug during verification: a naive
+    space-split truncates any multi-word value (`service=Combi Massage`,
+    `position=Front Desk`), which is common in this table's live data, not
+    a hypothetical edge case.
+  - **19 action types now have real sentence templates** — the prompt's
+    17 confirmed-live actions plus two more found live in the DB during
+    verification that weren't in the prompt's snapshot
+    (`therapist_toggle_service`, `staff_archive`) — added since they fit
+    the identical pattern at zero extra risk. Any action not in the map
+    (e.g. `therapist_create`, `staff_edit`, `sale_void` — writers that
+    exist but had 0 live rows at verification time) falls back to
+    rendering the raw `detail` string unchanged — today's behavior,
+    never a crash or `undefined`.
+  - **`settings_update_room_count` semantics — read the writer before
+    templating, per the prompt's explicit instruction**: confirmed at
+    [actions.ts:312-355](<app/(staff)/settings/actions.ts>:312) the
+    sample's `added=19,20 target=18` is not inconsistent — `target` is
+    the new *total* active room count, `added`/`deactivated` are the
+    actual room numbers touched (room numbers keep incrementing from the
+    historical max independent of the target). Two sub-templates share
+    one action name, keyed off which of `added=`/`deactivated=` is present.
+  - **`log_visit` dual-shape, only found by reading both writers**: the
+    RPC path (`log_visit()`, baseline migration) always has `client=<uuid>`
+    + `redemption=`; the direct-insert path
+    ([bookings/actions.ts:632](<app/(staff)/bookings/actions.ts>:632))
+    never has `redemption=` and its `client=` can be **either a client
+    UUID or a raw guest-label string** (`input.clientId ?? input.guestLabel`).
+    `clientLabel()` UUID-pattern-tests before attempting the `clients`
+    join; a non-UUID value is rendered as-is. Verified against a live
+    `quick_walkin` row where `client=` was a real UUID (not always empty
+    as the prompt's single sample implied) — already handled correctly
+    since it reuses the same `clientLabel()` helper.
+  - **`change_therapist` is conditional, not fixed-shape**: the writer
+    only logs fields that actually changed
+    ([bookings/actions.ts:309-324](<app/(staff)/bookings/actions.ts>:309)),
+    so `old_therapist`/`new_therapist` and `old_time`/`new_time` pairs
+    may each be absent. The template renders only the parts present. One
+    live row also has a legacy `time=` field (pre-dating the current
+    old/new pair convention) that no current writer produces — silently
+    ignored, not shown as `undefined`.
+  - **Fallback copy** for a dangling join (deleted service/addon/therapist/
+    client/occupancy row) — e.g. "a service that was later deleted". In
+    practice `deleteService`/`deleteAddon` only soft-delete (`active =
+    false`), so the row/name is normally still resolvable; the fallback
+    exists for genuine orphans (a hard-deleted row, or an id not in the
+    batch fetch).
+  - **`app/(staff)/logs/page.tsx`**: after the existing `logs`/`staff`
+    fetch, scans the fetched rows' `detail` strings once to collect the
+    distinct ids each action type actually references, then issues up to
+    5 batched `.in("id", […])` queries (`therapists`, `services`,
+    `addons`, `clients`, `locker_occupancy`) — skipped entirely when a
+    given id set is empty. Not per-row; same one-time-per-page-load shape
+    as the existing `staffNameById` map.
+  - **`components/logs-browser.tsx`**: Detail column now renders the
+    formatted sentence as the primary line and any `technicalIds`
+    (`sale_id`/`booking_id`/`occupancy_id`) as a small monospace secondary
+    line, for audit trace. Filter logic (`distinctActions`/`distinctStaff`/
+    `actionFilter`/`staffFilter`/`dateFilter`) is completely untouched —
+    still operates on raw `action`/`staff_name`/`created_at`.
+  - **Verification**: `npx tsc --noEmit` clean. Pulled the full live
+    `action_logs` table (95 rows, 19 distinct actions — more than the
+    prompt's "~85"/17 snapshot) via Supabase MCP and dry-ran
+    `formatLogDetail` against one representative row per action: zero
+    `undefined`/`NaN`/`[object Object]` outputs. This is also what caught
+    the multi-word-value parser bug above — a synthetic first-pass test
+    with single-word sample values didn't surface it; the real data did.
+  - **Not verified live in-browser** — the preview tool's `npm run dev`
+    fails with "Missing script: dev" even with the correct `nxs-dev`
+    config name, while `npm run dev` works cleanly from a direct terminal
+    in the same directory — same recurring Windows preview-harness
+    working-directory gap noted in the prior `ohm#9d4k7m2x` entry, not
+    caused by this change.
+  - **Untouched, confirmed**: all writers, `action_logs` schema/RLS,
+    `LIMIT 500`, filter logic, Owner-only gate. See [[logs_state]].
+
 - **Dashboard — Add Cancel Action to Needs Reassignment Cards — complete**
   (`ohm#9d4k7m2x`, 2026-09-02, closed out by follow-up `ohm#3p8v6k1r`).
   Plan + regression risk assessment presented and approved before any

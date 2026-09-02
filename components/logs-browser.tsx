@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useStaffSim } from "@/lib/staff-context";
+import { formatLogDetail, type Lookups } from "@/lib/logs/format-detail";
 
 export type LogEntry = {
   id: string;
@@ -19,7 +20,13 @@ function fmtWhen(iso: string): string {
   )}`;
 }
 
-export function LogsBrowser({ initialLogs }: { initialLogs: LogEntry[] }) {
+export function LogsBrowser({
+  initialLogs,
+  lookups,
+}: {
+  initialLogs: LogEntry[];
+  lookups: Lookups;
+}) {
   const { currentRole } = useStaffSim();
 
   const [actionFilter, setActionFilter] = useState("all");
@@ -99,18 +106,28 @@ export function LogsBrowser({ initialLogs }: { initialLogs: LogEntry[] }) {
         {filtered.length === 0 ? (
           <div className="px-4 py-4 text-sm text-muted">No matching log entries.</div>
         ) : (
-          filtered.map((l) => (
-            <div
-              key={l.id}
-              className="grid gap-3 border-b border-border px-4 py-3 text-[12px] last:border-b-0"
-              style={{ gridTemplateColumns: "1.3fr .9fr 1.1fr 1.7fr" }}
-            >
-              <div className="text-muted">{fmtWhen(l.created_at)}</div>
-              <div className="text-foreground">{l.staff_name}</div>
-              <div className="font-semibold text-accent-gold">{l.action}</div>
-              <div className="text-muted">{l.detail}</div>
-            </div>
-          ))
+          filtered.map((l) => {
+            const { sentence, technicalIds } = formatLogDetail(l.action, l.detail, lookups);
+            return (
+              <div
+                key={l.id}
+                className="grid gap-3 border-b border-border px-4 py-3 text-[12px] last:border-b-0"
+                style={{ gridTemplateColumns: "1.3fr .9fr 1.1fr 1.7fr" }}
+              >
+                <div className="text-muted">{fmtWhen(l.created_at)}</div>
+                <div className="text-foreground">{l.staff_name}</div>
+                <div className="font-semibold text-accent-gold">{l.action}</div>
+                <div>
+                  <div className="text-muted">{sentence}</div>
+                  {technicalIds.length > 0 && (
+                    <div className="mt-0.5 font-mono text-[10px] text-muted/60">
+                      {technicalIds.join(" ")}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
     </div>

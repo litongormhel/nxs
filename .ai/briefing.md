@@ -82,7 +82,33 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-02 — Dashboard — Add Cancel Action to Needs Reassignment
+1. **2026-09-02 — Activity Logs — Human-Readable Detail Formatting**
+   (`ohm#i35wdbgr`). Display-layer only — no writer/schema/RLS changes.
+   New `lib/logs/format-detail.ts` (`formatLogDetail`) turns each row's
+   raw `key=value` `detail` text into a human sentence, keyed off
+   `action`; templates for 19 action types (the prompt's 17 confirmed-live
+   plus 2 more found live during verification — `therapist_toggle_service`,
+   `staff_archive`); any unmapped action falls back to the raw string
+   (today's behavior), never a crash. Batched one-time-per-page-load joins
+   (`therapists`/`services`/`addons`/`clients`/`locker_occupancy`) in
+   `app/(staff)/logs/page.tsx`, with graceful fallback text for dangling
+   ids. Two real bugs caught only by testing against live data (not the
+   prompt's samples): (1) a naive space-split parser truncates multi-word
+   values like "Combi Massage" — fixed to split on key boundaries instead;
+   (2) `log_visit`'s direct-insert writer can put a raw guest-label string
+   (not a UUID) in its `client=` field — detected via UUID-pattern test
+   before attempting the join. `settings_update_room_count`'s
+   `added=.../target=` semantics confirmed by reading the writer per the
+   prompt's explicit instruction, not guessed from the sample. Filters
+   (Action/Date/Staff) untouched — still operate on raw fields.
+   `npx tsc --noEmit` clean; dry-run against the full live 95-row/19-action
+   table via Supabase MCP showed zero bad output. **Not verified live
+   in-browser** — same recurring Windows preview-harness
+   working-directory bug as the prior entry (confirmed unrelated to this
+   change: `npm run dev` runs cleanly from a direct terminal). See
+   [[logs_state]] and `.ai/handoff.md`.
+
+2. **2026-09-02 — Dashboard — Add Cancel Action to Needs Reassignment
    Cards** (`ohm#9d4k7m2x`). Plan + regression risk assessment presented
    and approved before any code was written, per the prompt's mandatory
    gate. Investigation surfaced the prompt's notes-append requirement
@@ -118,7 +144,7 @@ Full invariant list: [[nxs-architecture-locks]].
    of recurring Windows preview-tooling gap noted in prior entries). See
    [[dashboard_state]] and `.ai/handoff.md`.
 
-2. **2026-09-01 — RLS & Grant Tightening — sale_addons Insert Policy +
+3. **2026-09-01 — RLS & Grant Tightening — sale_addons Insert Policy +
    apply_points_delta REST Exposure** (`ohm#7n4c1wp6`). Addresses audit
    `ohm#9k3v7bx2`'s Medium #3 (`sale_addons.public_insert` let any anon-key
    holder insert arbitrary rows via public REST) and Medium #6
@@ -138,7 +164,7 @@ Full invariant list: [[nxs-architecture-locks]].
    left untouched, as scoped. Re-ran Supabase security advisors — both
    findings clear. See [[bookings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-01 — Client Portal — Auth Hardening: Rate Limiting + Session
+4. **2026-09-01 — Client Portal — Auth Hardening: Rate Limiting + Session
    Secret Separation** (`ohm#5t2m8qz1`). Addresses audit `ohm#9k3v7bx2`'s
    High #1 (no brute-force protection on `/portal/api/login`) and High #2
    (portal session HMAC secret reused `SUPABASE_SERVICE_ROLE_KEY`). Plan +
@@ -158,7 +184,7 @@ Full invariant list: [[nxs-architecture-locks]].
    manually — no Vercel env-write tool was available this session. See
    [[client_portal_state]] and `.ai/handoff.md`.
 
-4. **2026-09-01 — Therapists — Services Offered RLS + Wiring**
+5. **2026-09-01 — Therapists — Services Offered RLS + Wiring**
    (`ohm#9q4x1mwr`, Prompt 3 of 3, closes the "Therapist Roster —
    Investigate & Wire" sequence). Investigation surfaced that the prompt's
    premise didn't match live code: `handleToggleService` was genuinely
@@ -177,23 +203,4 @@ Full invariant list: [[nxs-architecture-locks]].
    Page fetch now seeds initial services state via a new `services`/
    `therapist_services` join, resolved through a `serviceIdMap` in the
    component. See [[therapists_state]] and `.ai/handoff.md`.
-
-5. **2026-09-01 — Therapists — Add + Edit (Rename) RLS + Wiring**
-   (`ohm#5v8n3ptc`, Prompt 2 of 3). Investigation phase re-confirmed live
-   (not from the prompt's snapshot) that `therapists` still had exactly
-   `public_select` + `staff_update` (no INSERT/DELETE), that
-   `createTherapistAction`/`createTherapist()` still existed and was still
-   silently RLS-rejected, and that `handleConfirmEdit` was still
-   local-state-only, touching only the `name` field. Plan + regression risk
-   assessment presented and approved before any code/migration was written,
-   per the prompt's mandatory gate. Added `staff_insert`
-   (`is_supervisor_or_above()`) to `therapists` — this alone fixes the
-   already-broken `createTherapist()` insert, no client-side change needed
-   for Add. Reused the existing `staff_update` policy (from Prompt 1) for
-   rename, no new policy or column-level narrowing needed — confirmed no
-   unique constraint on `therapists.name` (only the `id` PK) and confirmed
-   the component's name-keyed `therapistIds`/`therapistMeta` maps aren't
-   used as an identifier anywhere outside `therapist-browser.tsx`. New
-   `updateTherapistName(therapistId, name, staffId)` server action now backs
-   the Edit Name modal. See [[therapists_state]] and `.ai/handoff.md`.
 
