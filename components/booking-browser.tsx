@@ -412,7 +412,7 @@ export function BookingBrowser({
               setShowWalkin(true);
             }}
             disabled={services.length === 0 || rooms.length === 0 || staff.length === 0}
-            className="rounded-md border border-emerald-800/60 bg-emerald-950/20 px-4 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-accent-green bg-accent-green/10 px-4 py-2 text-sm font-medium text-accent-green hover:bg-accent-green/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Quick Walk-in
           </button>
