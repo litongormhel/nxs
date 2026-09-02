@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { LockerBoard } from "@/components/locker-board";
+import { toSpaDay, spaDayNow } from "@/lib/analytics/spa-day";
 
 export default async function LockersPage() {
   const supabase = await createClient();
@@ -16,6 +17,8 @@ export default async function LockersPage() {
       .is("checked_out_at", null),
   ]);
 
+  const today = spaDayNow();
+
   const occupancyByLocker = new Map(
     (occupancy ?? []).map((o) => [
       o.locker_number,
@@ -23,6 +26,7 @@ export default async function LockersPage() {
         occupancyId: o.id,
         label: o.clients?.codename ?? o.guest_label ?? "Occupied",
         checkedInAt: o.checked_in_at,
+        stale: toSpaDay(o.checked_in_at) !== today,
       },
     ])
   );

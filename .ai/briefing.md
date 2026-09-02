@@ -82,7 +82,54 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-02 — Quick Walk-in — Live Time-Slot Greying by Therapist**
+1. **2026-09-02 — Call Sheet / Lockers — Stale Occupancy Filter + Nudge**
+   (`ohm#3n8w5tqf`, implements approaches A + C from audit `ohm#7q2m9xk4`;
+   approach B, auto-checkout, stays explicitly out of scope pending its own
+   future prompt). UI/display-layer only — no schema, RLS, writer, trigger,
+   or cron changes; `checkOutLocker`, `quick_walkin`, `logVisitBooking`, and
+   every `locker_occupancy` insert path are untouched. Mockup presented and
+   plan + regression risk assessment approved before any code was written,
+   per the prompt's mandatory gate.
+   - **Staleness definition reused, not reinvented**: a `locker_occupancy`
+     row is stale when `toSpaDay(checked_in_at) !== spaDayNow()` — the
+     existing canonical Analytics-phase helper
+     (`lib/analytics/spa-day.ts`), not new date math and not
+     `lib/bookings/slots.ts` (that file's `toMinutesSinceOpen` only handles
+     intra-day `HH:MM` slot strings, not timestamps — confirmed wrong tool
+     before ruling it out).
+   - **Call Sheet** (`app/(staff)/call-sheet/page.tsx`,
+     `components/call-sheet-browser.tsx`): the `locker_occupancy` select
+     now also fetches `client_id, guest_label, clients(codename)`. Entries
+     split into `inProgress` (fresh) / `needsCheckout` (stale); all
+     existing time-slot filtering, the "Total: X massages…" count, and the
+     JPEG export are unchanged and now scoped to `inProgress` only. New
+     read-only "Needs checkout — N from a prior spa-day" section renders
+     below the existing table (locker, room, service, guest/client,
+     checked-in-at) — no action buttons, matching the prompt's spec;
+     checkout stays exclusively on the Lockers page.
+   - **Lockers page** (`app/(staff)/lockers/page.tsx`,
+     `components/locker-board.tsx`): each occupancy entry gains a `stale`
+     boolean (same `toSpaDay` check). Locker Board tiles for stale
+     occupants get a dashed rust border + red label + "Since yesterday"
+     tag instead of the normal gold-solid-border styling — still blocked
+     from reassignment and still use the same unmodified `checkOutLocker`
+     Check-Out button. New "`N` lockers need checkout" badge next to the
+     existing "`X / Y` occupied" count.
+   - **Known residual gap, explicitly not fixed here (do-not-touch scope)**:
+     `components/booking-browser.tsx`'s Check-in/Check-out tab derivation
+     (keyed off `bookings.status` + `occupancyOf()`) still shows a stale
+     row stuck in "Check-in" for that booking's date indefinitely — a
+     separate read path from Call Sheet/Lockers, untouched by this prompt.
+   - `npx tsc --noEmit` clean. **Not verified live in-browser** — no
+     `.env.local`/Supabase env vars configured in this sandbox (confirmed
+     `next dev` itself starts and compiles cleanly under Turbopack; the
+     500 is `proxy.ts` throwing on missing
+     `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`) — same
+     recurring environment gap as every other session this week. Verified
+     instead via `tsc` and direct trace of the render logic. See
+     [[operations_state]].
+
+2. **2026-09-02 — Quick Walk-in — Live Time-Slot Greying by Therapist**
    (`ohm#9x4k2wr7`). UI-only — no schema/writer/RLS changes. Plan +
    regression risk assessment presented and approved before any code was
    written, per the prompt's mandatory gate. Reference implementation was
@@ -104,7 +151,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `booking-form-modal.tsx`. `npx tsc --noEmit` clean. See
    [[bookings_state]] and `.ai/handoff.md`.
 
-2. **2026-09-02 — Log Visit — Conditional Therapist Field** (`ohm#7n4k9wx3`).
+3. **2026-09-02 — Log Visit — Conditional Therapist Field** (`ohm#7n4k9wx3`).
    UI-only — no schema/writer/RLS changes. Plan + regression risk
    assessment presented and approved before any code was written, per the
    prompt's mandatory gate. `LogVisitModal`'s Therapist field reused the
@@ -123,7 +170,7 @@ Full invariant list: [[nxs-architecture-locks]].
    working-directory bug noted in prior entries (unrelated to this
    change). See [[bookings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-02 — Activity Logs — Human-Readable Detail Formatting**
+4. **2026-09-02 — Activity Logs — Human-Readable Detail Formatting**
    (`ohm#i35wdbgr`). Display-layer only — no writer/schema/RLS changes.
    New `lib/logs/format-detail.ts` (`formatLogDetail`) turns each row's
    raw `key=value` `detail` text into a human sentence, keyed off
@@ -149,7 +196,7 @@ Full invariant list: [[nxs-architecture-locks]].
    change: `npm run dev` runs cleanly from a direct terminal). See
    [[logs_state]] and `.ai/handoff.md`.
 
-4. **2026-09-02 — Dashboard — Add Cancel Action to Needs Reassignment
+5. **2026-09-02 — Dashboard — Add Cancel Action to Needs Reassignment
    Cards** (`ohm#9d4k7m2x`). Plan + regression risk assessment presented
    and approved before any code was written, per the prompt's mandatory
    gate. Investigation surfaced the prompt's notes-append requirement
@@ -184,24 +231,4 @@ Full invariant list: [[nxs-architecture-locks]].
    in the preview harness itself, not caused by this change (same class
    of recurring Windows preview-tooling gap noted in prior entries). See
    [[dashboard_state]] and `.ai/handoff.md`.
-
-5. **2026-09-01 — RLS & Grant Tightening — sale_addons Insert Policy +
-   apply_points_delta REST Exposure** (`ohm#7n4c1wp6`). Addresses audit
-   `ohm#9k3v7bx2`'s Medium #3 (`sale_addons.public_insert` let any anon-key
-   holder insert arbitrary rows via public REST) and Medium #6
-   (trigger-only `apply_points_delta()` directly callable via
-   `/rest/v1/rpc`). Plan + regression risk assessment presented and
-   approved before any migration was written, per the prompt's mandatory
-   gate — including the required check of `quick_walkin()`'s security
-   context: confirmed live via `pg_proc` it is `SECURITY INVOKER`, but
-   since its only caller always runs through the authenticated
-   `@supabase/ssr` client, narrowing `sale_addons` to `is_staff()` doesn't
-   break it (no "flag back" needed; verified end-to-end under an
-   impersonated staff role). Replaced `sale_addons.public_insert` with
-   `staff_insert`/`is_staff()` (matches `locker_occupancy`'s existing
-   pattern); revoked `EXECUTE` on `apply_points_delta()` from `public,
-   anon, authenticated` (trigger firing confirmed unaffected).
-   `clear_own_must_change_password()`/`current_staff_position()` grants
-   left untouched, as scoped. Re-ran Supabase security advisors — both
-   findings clear. See [[bookings_state]] and `.ai/handoff.md`.
 

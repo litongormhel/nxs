@@ -5,6 +5,69 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Call Sheet / Lockers — Stale Occupancy Filter + Nudge — complete**
+  (`ohm#3n8w5tqf`, 2026-09-02, implements approaches A + C from audit
+  `ohm#7q2m9xk4`). UI/display-layer only — no schema, RLS, writer, trigger,
+  or cron changes. Mockup presented and plan + regression risk assessment
+  approved before any code was written, per the prompt's mandatory gate.
+  Approach B (auto-checkout) is explicitly out of scope, pending its own
+  future prompt.
+  - **Problem** (from audit `ohm#7q2m9xk4`): a `locker_occupancy` row with
+    `checked_out_at IS NULL` that was checked in on a prior spa-day was
+    being counted as "in progress" on Call Sheet and shown as a normal
+    occupied locker on the Lockers page, indistinguishable from a live
+    guest — live query found 1 currently-stale row plus 16/77 historical
+    rows that took >12h to close, several spanning 1-2+ full days.
+  - **Staleness definition — reused the existing canonical helper, not
+    new math**: a row is stale when `toSpaDay(checked_in_at) !==
+    spaDayNow()` (`lib/analytics/spa-day.ts`, Analytics phase) — this
+    already encodes the 4PM–1AM spa-day boundary and the Manila UTC+8
+    offset correctly. Confirmed `lib/bookings/slots.ts`'s
+    `toMinutesSinceOpen` was the wrong tool (it only operates on intra-day
+    `HH:MM` slot strings, not timestamps) before ruling it out — no
+    changes made to that file.
+  - **Call Sheet** (`app/(staff)/call-sheet/page.tsx`,
+    `components/call-sheet-browser.tsx`): `locker_occupancy` select
+    extended with `client_id, guest_label, clients(codename)`. Entries
+    split server-side into `inProgress`/`needsCheckout`; `CallSheetBrowser`
+    now takes both as separate props. All existing time-slot filtering,
+    the "Total: X massages…" count, and the JPEG download are unchanged
+    and scoped to `inProgress` only — a stale row disappearing from that
+    count is the fix, not a side effect. New read-only "Needs checkout —
+    N from a prior spa-day" section renders below the existing table
+    (locker, room, service, guest/client, checked-in-at) — no action
+    buttons, per spec; checkout stays exclusively on the Lockers page.
+  - **Lockers page** (`app/(staff)/lockers/page.tsx`,
+    `components/locker-board.tsx`): each occupancy entry gains a `stale`
+    boolean (same `toSpaDay` check). `Occupancy` type in `locker-board.tsx`
+    extended accordingly. Stale tiles render with a dashed rust
+    (`#a45a3f`) border, red label text, and a "Since yesterday" tag
+    instead of the normal solid-gold-border styling — still fully blocked
+    from reassignment (unchanged capacity behavior) and still use the
+    exact same unmodified `checkOutLocker` Check-Out button/handler. New
+    "`N` lockers need checkout" badge (red dot + count) rendered next to
+    the existing "`X / Y` occupied" line, computed client-side from the
+    `stale` flags already passed in as props — no new fetch.
+  - **Untouched, confirmed by scope**: `checkOutLocker` action logic,
+    `quick_walkin` RPC, `logVisitBooking`, all booking status transitions,
+    every `locker_occupancy` insert path, schema, RLS, triggers, cron (no
+    DB writes at all in this prompt — the mandatory DB-change-safety block
+    didn't apply).
+  - **Known residual gap, explicitly not fixed here (do-not-touch scope,
+    flagged for a future prompt)**: `components/booking-browser.tsx`'s
+    Check-in/Check-out tab derivation (keyed off `bookings.status` +
+    `occupancyOf()`) still leaves a stale row stuck in that date's
+    "Check-in" tab indefinitely — a separate read path from Call
+    Sheet/Lockers, not touched by this prompt's scope.
+  - `npx tsc --noEmit` clean. **Not verified live in-browser** — no
+    `.env.local`/Supabase env vars configured in this sandbox (confirmed
+    `next dev` itself starts and compiles cleanly under Turbopack from a
+    direct terminal; the request 500s on `proxy.ts` throwing on missing
+    `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`) — same
+    recurring environment gap noted in every other session this week.
+    Verified instead via `tsc` and direct trace of the render/filter
+    logic. See [[operations_state]].
+
 - **Quick Walk-in — Live Time-Slot Greying by Therapist — complete**
   (`ohm#9x4k2wr7`, 2026-09-02). UI-only, pre-check parity fix — no schema,
   writer, or RLS changes. Plan + regression risk assessment presented and
