@@ -27,6 +27,23 @@ component `components/reassignment-panel.tsx` (`ReassignmentPanel`).
   (`app/(staff)/bookings/actions.ts`) with the booking's unchanged
   `start_time` — no time-change UI here, deliberately narrower than the
   Bookings tab's Change/Reassign modal (out of this task's scope).
+- **Cancel** (`ohm#9d4k7m2x`, 2026-09-02) — a second button next to
+  Transfer, with its own confirm dialog (client, service, room, time)
+  before committing. Calls new `cancelReassignmentBooking(bookingId,
+  staffId)` (`app/(staff)/bookings/actions.ts`): rejects unless the
+  booking is currently `Needs Reassignment`, sets `status = 'Cancelled'`
+  (existing enum value, no schema change), logs one `action_logs` row
+  (`cancel_reassignment_booking`, `reason=Client decided not to pursue`
+  in the detail string — there is no `notes` column on `bookings` to
+  append to, confirmed during investigation; the prompt's intent is
+  captured in the audit log instead). Fully independent state/handler
+  from Transfer. No dashboard-query change needed — cancelling flips
+  `status` away from `Needs Reassignment`, so the row drops out of this
+  panel on the next fetch via the same mechanism a successful Transfer
+  already relies on. Verified (`ohm#3p8v6k1r`) that the Call Sheet
+  (driven off `locker_occupancy` check-in state, never `bookings.status`)
+  has no dependency on `Needs Reassignment` rows, so cancelling one has
+  no call-sheet side effect.
 - **Correctness fix inside `changeBookingTherapist()`**: the UPDATE now
   also sets `status: 'Booked'` when the booking's current status is
   `Needs Reassignment`, alongside the existing `therapist_id`/

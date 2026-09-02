@@ -5,6 +5,80 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Dashboard — Add Cancel Action to Needs Reassignment Cards — complete**
+  (`ohm#9d4k7m2x`, 2026-09-02, closed out by follow-up `ohm#3p8v6k1r`).
+  Plan + regression risk assessment presented and approved before any
+  code was written, per the prompt's mandatory gate.
+  - **Discrepancy surfaced during investigation, not built over**: the
+    prompt asked to "auto-append 'Client decided not to pursue' to the
+    booking's notes field (reuse the existing notes-flagging pattern,
+    e.g. 'No QR presented')." A full repo search found no such
+    notes-append pattern anywhere, and `bookings` has **no `notes`
+    column at all** (confirmed against `lib/types/database.ts` — only
+    `point_transactions` has a `notes` field, and it's a freshly-built
+    string, not an append target). Flagged to Ohm with three options
+    (drop the requirement / add a `notes` column via migration / log to
+    `action_logs` instead); Ohm chose to **drop the notes-append
+    requirement entirely** rather than touch schema, consistent with the
+    prompt's own "do not touch booking/points ledger schema" rule.
+  - **New server action** `cancelReassignmentBooking(bookingId, staffId)`
+    (`app/(staff)/bookings/actions.ts`, alongside `changeBookingTherapist`):
+    re-fetches the booking, rejects unless `status === "Needs
+    Reassignment"` (same defensive-guard shape as
+    `changeBookingTherapist`'s Completed/Cancelled check — prevents a
+    race where Transfer already resolved the booking before Cancel is
+    confirmed), then `UPDATE bookings SET status = 'Cancelled'`
+    (pre-existing enum value, no schema/enum change). Logs one
+    `action_logs` row (`cancel_reassignment_booking`, detail includes
+    `reason=Client decided not to pursue` — carries the prompt's intent
+    into the audit trail instead of a booking-level note).
+    `revalidatePath("/bookings")`/`"/dashboard"`/`"/call-sheet"`, same
+    footprint as `changeBookingTherapist`.
+  - **UI**: `components/reassignment-panel.tsx` — new "Cancel" button
+    next to "Transfer" on each Needs Reassignment card, its own
+    `cancelBooking`/`cancelError`/`cancelSaving` state (fully separate
+    from `transferBooking`'s), and a confirm dialog showing client,
+    service, room, and time before committing (no silent cancel). No
+    changes to `transferBooking` state, `handleConfirmTransfer`, or the
+    Transfer modal JSX.
+  - **Dashboard query untouched, confirmed correct as-is**: the Needs
+    Reassignment panel already queries `status = 'Needs Reassignment'`
+    (a distinct enum value, not derived from `'Booked'`), so a cancelled
+    row disappears on the next fetch/`router.refresh()` the same way a
+    successfully-transferred row already does — no new filter logic was
+    needed or added.
+  - **Follow-up verification (`ohm#3p8v6k1r`, same day)** — call sheet
+    query/component checked for any assumption of linear status
+    progression or special-casing of `Needs Reassignment`: **none
+    found, no bug**. `app/(staff)/call-sheet/page.tsx` is driven
+    entirely off `locker_occupancy` rows with `checked_out_at is null`
+    (check-in state), joined to `bookings`/`services`/`therapists` for
+    display fields only — it never reads or filters on `bookings.status`
+    at all. A `Needs Reassignment` booking is, by construction, one that
+    was never checked in (no `locker_occupancy` row exists for it yet),
+    so it was never represented on the call sheet before cancellation
+    either — cancelling it removes nothing the call sheet was showing.
+  - **Branch hygiene**: no branch was created for `ohm#9d4k7m2x` — work
+    was done directly on `main` (uncommitted at close-out). No merge/
+    delete needed. Note: the close-out prompt's "run flutter analyze"
+    step doesn't apply to this repo (Next.js/TypeScript, not Flutter) —
+    used `npx tsc --noEmit` instead, consistent with every other
+    close-out in this log.
+  - `npx tsc --noEmit` clean on both touched files.
+  - **Not verified live in-browser** — the preview tool's `npm run dev`
+    fails with "Missing script: dev" even though `.claude/launch.json`
+    points at the correct `nxs-dev` config and `npm run dev`/`npm run`
+    both work cleanly from a direct terminal in this same directory;
+    looks like a working-directory mismatch inside the preview harness
+    itself, not something this change introduced (recurring
+    environment-tooling gap, same class as the missing-`.env.local`
+    issues noted in several earlier entries below). Verified instead via
+    `tsc` and direct code/schema inspection.
+  - **Untouched, confirmed**: Transfer button/flow, booking creation,
+    points ledger, call sheet (read-only verification only, no edits),
+    Total Services/Rooms/Lockers cards, other dashboard cards, schema/
+    enums. See [[dashboard_state]].
+
 - **RLS & Grant Tightening — sale_addons Insert Policy +
   apply_points_delta REST Exposure — complete** (`ohm#7n4c1wp6`,
   2026-09-01). Addresses two findings from audit `ohm#9k3v7bx2`: Medium #3

@@ -82,7 +82,43 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-01 — RLS & Grant Tightening — sale_addons Insert Policy +
+1. **2026-09-02 — Dashboard — Add Cancel Action to Needs Reassignment
+   Cards** (`ohm#9d4k7m2x`). Plan + regression risk assessment presented
+   and approved before any code was written, per the prompt's mandatory
+   gate. Investigation surfaced the prompt's notes-append requirement
+   ("reuse the existing notes-flagging pattern, e.g. 'No QR presented'")
+   didn't match live code — `bookings` has no `notes` column at all, and
+   no such append pattern exists anywhere in the repo. Flagged to Ohm;
+   chose to drop the notes requirement entirely rather than add a `notes`
+   column (would have violated the prompt's own "do not touch schema"
+   rule). New `cancelReassignmentBooking(bookingId, staffId)` server
+   action (`app/(staff)/bookings/actions.ts`), mirroring
+   `changeBookingTherapist`'s guard/logging shape: rejects unless the
+   booking is currently `Needs Reassignment`, updates `status =
+   'Cancelled'` (existing enum value, no schema/enum change), logs one
+   `action_logs` row (`cancel_reassignment_booking`, detail includes
+   `reason=Client decided not to pursue`), revalidates `/bookings`,
+   `/dashboard`, `/call-sheet`. `components/reassignment-panel.tsx` gained
+   a "Cancel" button next to "Transfer" on each card plus its own confirm
+   dialog (client/service/room/time) and state, fully independent of the
+   Transfer button's state/handler/modal. No dashboard query change
+   needed — it already filters on `status = 'Needs Reassignment'`, so a
+   cancelled row disappears on the next fetch the same way a
+   successfully-transferred one does. Follow-up prompt (`ohm#3p8v6k1r`)
+   verified the Call Sheet page (`locker_occupancy`-driven, keyed off
+   check-in state, never reads `bookings.status`) has no dependency on
+   `Needs Reassignment` at all — a booking in that status was never
+   check-in'd, so it was never on the call sheet to begin with; no bug,
+   no change needed. `npx tsc --noEmit` clean. No branch was created (work
+   done directly on `main`, uncommitted). **Not verified live in-browser**
+   — the preview tool's `npm run dev` fails with "Missing script: dev"
+   despite the script existing and running cleanly via a direct terminal
+   `npm run dev`/`npm run` check; looks like a working-directory mismatch
+   in the preview harness itself, not caused by this change (same class
+   of recurring Windows preview-tooling gap noted in prior entries). See
+   [[dashboard_state]] and `.ai/handoff.md`.
+
+2. **2026-09-01 — RLS & Grant Tightening — sale_addons Insert Policy +
    apply_points_delta REST Exposure** (`ohm#7n4c1wp6`). Addresses audit
    `ohm#9k3v7bx2`'s Medium #3 (`sale_addons.public_insert` let any anon-key
    holder insert arbitrary rows via public REST) and Medium #6
@@ -102,7 +138,7 @@ Full invariant list: [[nxs-architecture-locks]].
    left untouched, as scoped. Re-ran Supabase security advisors — both
    findings clear. See [[bookings_state]] and `.ai/handoff.md`.
 
-2. **2026-09-01 — Client Portal — Auth Hardening: Rate Limiting + Session
+3. **2026-09-01 — Client Portal — Auth Hardening: Rate Limiting + Session
    Secret Separation** (`ohm#5t2m8qz1`). Addresses audit `ohm#9k3v7bx2`'s
    High #1 (no brute-force protection on `/portal/api/login`) and High #2
    (portal session HMAC secret reused `SUPABASE_SERVICE_ROLE_KEY`). Plan +
@@ -122,7 +158,7 @@ Full invariant list: [[nxs-architecture-locks]].
    manually — no Vercel env-write tool was available this session. See
    [[client_portal_state]] and `.ai/handoff.md`.
 
-3. **2026-09-01 — Therapists — Services Offered RLS + Wiring**
+4. **2026-09-01 — Therapists — Services Offered RLS + Wiring**
    (`ohm#9q4x1mwr`, Prompt 3 of 3, closes the "Therapist Roster —
    Investigate & Wire" sequence). Investigation surfaced that the prompt's
    premise didn't match live code: `handleToggleService` was genuinely
@@ -142,7 +178,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `therapist_services` join, resolved through a `serviceIdMap` in the
    component. See [[therapists_state]] and `.ai/handoff.md`.
 
-4. **2026-09-01 — Therapists — Add + Edit (Rename) RLS + Wiring**
+5. **2026-09-01 — Therapists — Add + Edit (Rename) RLS + Wiring**
    (`ohm#5v8n3ptc`, Prompt 2 of 3). Investigation phase re-confirmed live
    (not from the prompt's snapshot) that `therapists` still had exactly
    `public_select` + `staff_update` (no INSERT/DELETE), that
@@ -160,22 +196,4 @@ Full invariant list: [[nxs-architecture-locks]].
    used as an identifier anywhere outside `therapist-browser.tsx`. New
    `updateTherapistName(therapistId, name, staffId)` server action now backs
    the Edit Name modal. See [[therapists_state]] and `.ai/handoff.md`.
-
-5. **2026-09-01 — Therapists — Archive/Unarchive RLS + Real Persistence**
-   (`ohm#7m2w9dxk`, Prompt 1 of 3). Investigation phase confirmed live
-   (not from the prompt's snapshot) that `therapists` had no INSERT/
-   UPDATE/DELETE RLS policy at all, and separately surfaced that Add
-   Therapist was *not* the local-only stub the docs claimed — it already
-   called a real `createTherapist()` insert that RLS was silently
-   rejecting (a bug, deferred to Prompt 2). Plan + regression risk
-   assessment presented and approved before any code/migration was
-   written, per the prompt's mandatory gate — this prompt itself also
-   got its own pre-implementation gate. Added `staff_update`
-   (`is_supervisor_or_above()`) to `therapists`, no DELETE policy.
-   `archiveTherapist()`/`unarchiveTherapist()` server actions now back
-   the kebab menu's Archive/Unarchive; Archive's booking-flagging reuses
-   `markAbsentToday`'s exact UPDATE shape with no date filter (permanent,
-   unlike a one-day absence). `therapist_day_off`/`therapist_services`
-   rows are untouched by archive/unarchive. See [[therapists_state]] and
-   `.ai/handoff.md`.
 

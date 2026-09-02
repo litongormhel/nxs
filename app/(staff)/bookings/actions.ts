@@ -336,6 +336,55 @@ export async function changeBookingTherapist(
   return { ok: true };
 }
 
+export type CancelReassignmentResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function cancelReassignmentBooking(
+  bookingId: string,
+  staffId: string
+): Promise<CancelReassignmentResult> {
+  const supabase = await createClient();
+
+  const { data: booking, error: fetchErr } = await supabase
+    .from("bookings")
+    .select("status, booking_date")
+    .eq("id", bookingId)
+    .single();
+
+  if (fetchErr || !booking) {
+    return { ok: false, error: fetchErr?.message ?? "Booking not found." };
+  }
+
+  if (booking.status !== "Needs Reassignment") {
+    return {
+      ok: false,
+      error: "Only bookings awaiting reassignment can be cancelled this way.",
+    };
+  }
+
+  const { error: updateErr } = await supabase
+    .from("bookings")
+    .update({ status: "Cancelled" })
+    .eq("id", bookingId);
+
+  if (updateErr) {
+    return { ok: false, error: updateErr.message };
+  }
+
+  await supabase.from("action_logs").insert({
+    staff_id: staffId,
+    action: "cancel_reassignment_booking",
+    detail: `booking_id=${bookingId} date=${booking.booking_date} reason=Client decided not to pursue`,
+  });
+
+  revalidatePath("/bookings");
+  revalidatePath("/dashboard");
+  revalidatePath("/call-sheet");
+
+  return { ok: true };
+}
+
 export type ResolveMemberQrResult =
   | {
       ok: true;
