@@ -5,6 +5,60 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **toggleDayOff Missing Bulk-Reassignment Step + Manual Cleanup — complete**
+  (`ohm#9x4r7b2q`, 2026-09-02). Diff + exact UPDATE statements presented and
+  approved before any code/SQL was executed, per the prompt's mandatory gate.
+  - **Problem**: `toggleDayOff()` in
+    [app/(staff)/therapists/actions.ts](app/(staff)/therapists/actions.ts:203)
+    wrote/deleted the `therapist_day_off` row but, unlike `markAbsentToday`,
+    `markOnLeave`, and `archiveTherapist`, never bulk-flagged already-`Booked`
+    rows to `Needs Reassignment` when a recurring day-off was added — so a
+    booking under a therapist who then got a day-off stayed silently `Booked`
+    forever. Confirmed by direct read of all four functions.
+  - **Fix**: when a day-off is added (`turningOff === true`), fetch the
+    therapist's `Booked` rows with `booking_date >= today`, filter in JS by
+    `new Date(`${booking_date}T00:00:00`).getDay() === weekday` (same
+    convention already used in
+    [booking-form-modal.tsx:109](components/booking-form-modal.tsx:109), since
+    Postgres `extract(dow ...)` isn't expressible via the supabase-js query
+    builder without an RPC), then bulk-update matching IDs to `Needs
+    Reassignment` and log `flagged=N` in `action_logs`, mirroring the other
+    three functions' pattern exactly. Removing a day-off does **not** auto-
+    revert any `Needs Reassignment` rows — matches existing behavior of the
+    other three functions, no new reversal logic introduced. Also added
+    `revalidatePath("/dashboard")` for consistency with the other three
+    mutators (dashboard reflects `Needs Reassignment` counts).
+  - **Manual data cleanup**: 2 confirmed-stale live `Booked` rows corrected
+    to `Needs Reassignment` via direct SQL, both under Akio:
+    - `1dd3c92a-2f8f-4eeb-9b5d-a9fdf923db63` (2026-08-27, 00:30) — verified
+      2026-08-27 is `dow=4` = Thursday = Akio's recurring day-off weekday
+      (`therapist_day_off.weekday = 4`). Classic `toggleDayOff` gap, closed
+      going forward by this fix.
+    - `db719df2-0db7-4c16-8a2d-7bab69110d61` (2026-09-02, 17:30) — Akio has
+      a `therapist_absence` row for 2026-09-02 (today), so this booking
+      should have been flagged by `markAbsentToday`'s existing bulk-update.
+      **Unresolved**: the corresponding `action_logs` entry (if any) needs a
+      follow-up audit-trail check — why `markAbsentToday`'s bulk `UPDATE ...
+      WHERE status = 'Booked'` didn't catch this row is not yet explained.
+      Do not assume `toggleDayOff` is the cause here — it isn't; the weekday
+      doesn't match a day-off, only the absence date does.
+    - No `action_logs` entry was written for this manual correction: no
+      `staff` row corresponds to an actual operator performing this fix
+      (searched for "ohm"/"admin"/"litong" — no match), and `staff_id` is a
+      required FK, so per the task's own fallback instruction the correction
+      is documented here instead.
+    - Out of scope, untouched per instruction: the other ~38 pre-existing
+      stale rows from the known ~40-row gap noted in
+      [bookings_state.md](docs/state/bookings_state.md:349) (22 `Completed`,
+      not actionable; 5 `Cancelled`, terminal/harmless).
+  - **Note on prompt sourcing**: the prompt cited prior audits
+    `ohm#7f2k9m3x`/`ohm#3n8v5k1p` as the source of this finding; neither ID
+    appears anywhere in this file or `.ai/briefing.md` (the real ID history
+    uses `ohm#7q2m9xk4`, `ohm#j4m8v2xq`, etc.). The root cause and both
+    stale rows were independently re-verified directly against the code and
+    live DB before any change was made — the finding itself holds up, only
+    the citation doesn't.
+
 - **New Booking — Status-Aware Therapist Dropdown + DB-Level Availability
   Gate — complete** (`ohm#j4m8v2xq`, 2026-09-02). Schema findings + plan +
   regression risk assessment presented and approved before any code/

@@ -217,13 +217,41 @@ export async function toggleDayOff(
         .eq("therapist_id", therapistId)
         .eq("weekday", weekday);
   if (error) return fail(error);
+
+  let flaggedCount = 0;
+  if (turningOff) {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: candidates, error: candError } = await supabase
+      .from("bookings")
+      .select("id, booking_date")
+      .eq("therapist_id", therapistId)
+      .eq("status", "Booked")
+      .gte("booking_date", today);
+    if (candError) return fail(candError);
+
+    const matchingIds = (candidates ?? [])
+      .filter((b) => new Date(`${b.booking_date}T00:00:00`).getDay() === weekday)
+      .map((b) => b.id);
+
+    if (matchingIds.length > 0) {
+      const { data: flagged, error: flagError } = await supabase
+        .from("bookings")
+        .update({ status: "Needs Reassignment" })
+        .in("id", matchingIds)
+        .select("id");
+      if (flagError) return fail(flagError);
+      flaggedCount = flagged?.length ?? 0;
+    }
+  }
+
   await logAction(
     supabase,
     staffId,
     "therapist_toggle_day_off",
-    `therapist=${therapistId} weekday=${weekday} off=${turningOff}`
+    `therapist=${therapistId} weekday=${weekday} off=${turningOff} flagged=${flaggedCount}`
   );
   revalidatePath("/therapists");
+  revalidatePath("/dashboard");
   return { ok: true };
 }
 

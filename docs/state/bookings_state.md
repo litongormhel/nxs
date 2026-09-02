@@ -352,6 +352,19 @@ Day-Off therapist (Leo) could be saved from New Booking.
   this fix). The trigger's column scoping means these are never touched
   unless someone actually reassigns/reschedules them, at which point the
   new check correctly applies. No backfill/cleanup was done.
+  - **Update (`ohm#9x4r7b2q`, 2026-09-02)**: 2 of these rows manually
+    corrected `Booked` → `Needs Reassignment` (both under Akio — one a
+    genuine `toggleDayOff` gap, now closed going forward; one an
+    unresolved `markAbsentToday` discrepancy, follow-up needed). ~38 rows
+    remain untouched (22 `Completed`, not actionable; 5 `Cancelled`,
+    terminal/harmless; rest out of scope for this pass). See
+    `.ai/handoff.md` for details.
+  - **`toggleDayOff` gap closed going forward**: `toggleDayOff()` in
+    [app/(staff)/therapists/actions.ts](../../app/(staff)/therapists/actions.ts:203)
+    now bulk-flags current/future `Booked` rows to `Needs Reassignment`
+    when a recurring day-off is added, matching `markAbsentToday`/
+    `markOnLeave`/`archiveTherapist`. New day-offs no longer silently leave
+    stale `Booked` rows.
 - `app/(staff)/bookings/actions.ts`: new `therapistUnavailableError()`
   helper parses the trigger's message; wired into `createBooking`,
   `quickWalkin`, and `changeBookingTherapist`'s existing error-mapping

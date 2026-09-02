@@ -82,7 +82,33 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-02 — New Booking — Status-Aware Therapist Dropdown + DB-Level
+1. **2026-09-02 — toggleDayOff Missing Bulk-Reassignment Step + Manual
+   Cleanup** (`ohm#9x4r7b2q`). Diff + exact UPDATE statements presented and
+   approved before any code/SQL was executed, per the prompt's mandatory
+   gate. `toggleDayOff()` in `app/(staff)/therapists/actions.ts` wrote/
+   deleted the `therapist_day_off` row but, unlike `markAbsentToday`,
+   `markOnLeave`, and `archiveTherapist`, never bulk-flagged already-
+   `Booked` rows to `Needs Reassignment` when a recurring day-off was
+   added — confirmed by direct read of all four functions. Fix: when a
+   day-off is added, fetch the therapist's `Booked` rows with
+   `booking_date >= today`, filter in JS by `getDay() === weekday` (same
+   convention as `booking-form-modal.tsx:109`, since Postgres
+   `extract(dow ...)` isn't reachable via the supabase-js query builder
+   without an RPC), bulk-update matches to `Needs Reassignment`, log
+   `flagged=N` — mirrors the other three functions exactly. Removing a
+   day-off does not auto-revert existing `Needs Reassignment` rows,
+   matching current behavior. Manually corrected 2 confirmed-stale live
+   `Booked` rows to `Needs Reassignment` (both under Akio: one a genuine
+   `toggleDayOff` gap, one an unresolved `markAbsentToday` discrepancy
+   flagged for follow-up) — the other ~38 rows in the known ~40-row gap
+   are untouched (22 `Completed`, 5 `Cancelled`, out of scope). The
+   prompt's cited prior-audit IDs (`ohm#7f2k9m3x`/`ohm#3n8v5k1p`) don't
+   appear anywhere in this repo's tracking files — re-verified the finding
+   independently against code and live DB before proceeding; the finding
+   held up, only the citation didn't. See [[bookings_state]] and
+   `.ai/handoff.md`.
+
+2. **2026-09-02 — New Booking — Status-Aware Therapist Dropdown + DB-Level
    Availability Gate** (`ohm#j4m8v2xq`). Fixes a bug where a Day-Off
    therapist (Leo) could be saved on a booking — the therapist dropdown had
    no availability awareness at all beyond live time/room conflicts, and
@@ -110,7 +136,7 @@ Full invariant list: [[nxs-architecture-locks]].
    hit the same recurring Windows working-directory bug as every other
    session this week. See [[bookings_state]] and [[therapists_state]].
 
-2. **2026-09-02 — Call Sheet / Lockers — Stale Occupancy Filter + Nudge**
+3. **2026-09-02 — Call Sheet / Lockers — Stale Occupancy Filter + Nudge**
    (`ohm#3n8w5tqf`, implements approaches A + C from audit `ohm#7q2m9xk4`;
    approach B, auto-checkout, stays explicitly out of scope pending its own
    future prompt). UI/display-layer only — no schema, RLS, writer, trigger,
@@ -157,7 +183,7 @@ Full invariant list: [[nxs-architecture-locks]].
      instead via `tsc` and direct trace of the render logic. See
      [[operations_state]].
 
-3. **2026-09-02 — Quick Walk-in — Live Time-Slot Greying by Therapist**
+4. **2026-09-02 — Quick Walk-in — Live Time-Slot Greying by Therapist**
    (`ohm#9x4k2wr7`). UI-only — no schema/writer/RLS changes. Plan +
    regression risk assessment presented and approved before any code was
    written, per the prompt's mandatory gate. Reference implementation was
@@ -179,7 +205,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `booking-form-modal.tsx`. `npx tsc --noEmit` clean. See
    [[bookings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-02 — Log Visit — Conditional Therapist Field** (`ohm#7n4k9wx3`).
+5. **2026-09-02 — Log Visit — Conditional Therapist Field** (`ohm#7n4k9wx3`).
    UI-only — no schema/writer/RLS changes. Plan + regression risk
    assessment presented and approved before any code was written, per the
    prompt's mandatory gate. `LogVisitModal`'s Therapist field reused the
@@ -197,30 +223,4 @@ Full invariant list: [[nxs-architecture-locks]].
    in-browser** — same recurring Windows preview-harness
    working-directory bug noted in prior entries (unrelated to this
    change). See [[bookings_state]] and `.ai/handoff.md`.
-
-5. **2026-09-02 — Activity Logs — Human-Readable Detail Formatting**
-   (`ohm#i35wdbgr`). Display-layer only — no writer/schema/RLS changes.
-   New `lib/logs/format-detail.ts` (`formatLogDetail`) turns each row's
-   raw `key=value` `detail` text into a human sentence, keyed off
-   `action`; templates for 19 action types (the prompt's 17 confirmed-live
-   plus 2 more found live during verification — `therapist_toggle_service`,
-   `staff_archive`); any unmapped action falls back to the raw string
-   (today's behavior), never a crash. Batched one-time-per-page-load joins
-   (`therapists`/`services`/`addons`/`clients`/`locker_occupancy`) in
-   `app/(staff)/logs/page.tsx`, with graceful fallback text for dangling
-   ids. Two real bugs caught only by testing against live data (not the
-   prompt's samples): (1) a naive space-split parser truncates multi-word
-   values like "Combi Massage" — fixed to split on key boundaries instead;
-   (2) `log_visit`'s direct-insert writer can put a raw guest-label string
-   (not a UUID) in its `client=` field — detected via UUID-pattern test
-   before attempting the join. `settings_update_room_count`'s
-   `added=.../target=` semantics confirmed by reading the writer per the
-   prompt's explicit instruction, not guessed from the sample. Filters
-   (Action/Date/Staff) untouched — still operate on raw fields.
-   `npx tsc --noEmit` clean; dry-run against the full live 95-row/19-action
-   table via Supabase MCP showed zero bad output. **Not verified live
-   in-browser** — same recurring Windows preview-harness
-   working-directory bug as the prior entry (confirmed unrelated to this
-   change: `npm run dev` runs cleanly from a direct terminal). See
-   [[logs_state]] and `.ai/handoff.md`.
 
