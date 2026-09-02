@@ -146,6 +146,34 @@ export function QuickWalkinModal({
     return taken;
   }, [conflicts, time, duration]);
 
+  // Taken slots in the slot grid (therapist busy or no rooms available)
+  const takenSlots = useMemo(() => {
+    const taken = new Set<string>();
+    for (const slot of timeSlots) {
+      const therapistBusy =
+        !!therapistId &&
+        conflicts.some(
+          (c) =>
+            c.therapist_id === therapistId &&
+            slotsOverlap(slot, duration, c.start_time, c.duration_minutes ?? 0)
+        );
+
+      const takenRooms = new Set<number>();
+      for (const row of conflicts) {
+        if (row.room_number == null) continue;
+        if (slotsOverlap(slot, duration, row.start_time, row.duration_minutes ?? 0)) {
+          takenRooms.add(row.room_number);
+        }
+      }
+      const freeRoomCount = rooms.filter((r) => !takenRooms.has(r)).length;
+
+      if (therapistBusy || freeRoomCount === 0) {
+        taken.add(slot);
+      }
+    }
+    return taken;
+  }, [conflicts, therapistId, duration, rooms, timeSlots]);
+
   const freeRooms = useMemo(() => {
     if (!time) return [];
     const taken = new Set<number>();
@@ -447,24 +475,30 @@ export function QuickWalkinModal({
                   </p>
                 )}
                 <div className="mt-1 grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {timeSlots.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      disabled={useCustomTime}
-                      onClick={() => {
-                        setSlotTime(s);
-                        setRoomNumber("");
-                      }}
-                      className={`min-h-[44px] sm:min-h-0 rounded-md border px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40 ${
-                        slotTime === s && !useCustomTime
-                          ? "border-gold bg-gold/10 text-gold"
-                          : "border-border text-foreground"
-                      }`}
-                    >
-                      {fmtTime(s)}
-                    </button>
-                  ))}
+                  {timeSlots.map((s) => {
+                    const taken = takenSlots.has(s);
+                    const selected = slotTime === s && !useCustomTime;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        disabled={taken || useCustomTime}
+                        onClick={() => {
+                          setSlotTime(s);
+                          setRoomNumber("");
+                        }}
+                        className={`min-h-[44px] sm:min-h-0 rounded-md border px-2 py-1.5 text-xs transition-all ${
+                          taken
+                            ? "border-dashed border-border/70 text-red-400/50 line-through opacity-50 cursor-not-allowed bg-transparent"
+                            : selected
+                            ? "border-gold bg-gradient-to-br from-[#c89b3c] to-[#a97e2e] text-black font-bold shadow-sm"
+                            : "border-border bg-background text-foreground hover:border-gold/50"
+                        }`}
+                      >
+                        {fmtTime(s)}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

@@ -5,6 +5,52 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Quick Walk-in — Live Time-Slot Greying by Therapist — complete**
+  (`ohm#9x4k2wr7`, 2026-09-02). UI-only, pre-check parity fix — no schema,
+  writer, or RLS changes. Plan + regression risk assessment presented and
+  approved before any code was written, per the prompt's mandatory gate.
+  - **Problem**: in Quick Walk-in
+    ([quick-walkin-modal.tsx](components/quick-walkin-modal.tsx)), selecting
+    a Therapist did not grey out their already-booked time slots — the grid
+    accepted a click on any slot regardless of therapist conflict, and
+    conflict was only surfaced the opposite direction (selected time →
+    taken therapists greyed in the dropdown, via the pre-existing
+    `takenTherapists`). Staff had to click a slot first to discover it was
+    unavailable.
+  - **Fix**: New Booking
+    ([booking-form-modal.tsx](components/booking-form-modal.tsx)) already
+    solved this correctly and was the reference implementation — read-only,
+    not modified. Added a `takenSlots` useMemo to
+    [quick-walkin-modal.tsx:150](components/quick-walkin-modal.tsx:150),
+    logic ported verbatim from New Booking's version: for each slot in
+    `timeSlots`, taken if the selected `therapistId` has a conflicting
+    booking (`slotsOverlap`) OR zero free rooms remain for that slot
+    (computed from the same `conflicts` rows). Reuses `conflicts`,
+    `therapistId`, `duration`, `rooms`, `timeSlots` — all already present
+    in this file, nothing new fetched.
+  - **UI**: the Time Slot grid button block
+    ([quick-walkin-modal.tsx:449](components/quick-walkin-modal.tsx:449))
+    now computes `taken`/`selected` per slot,
+    `disabled={taken || useCustomTime}`, and applies the same
+    taken/selected/default className branching as New Booking (taken:
+    `border-dashed border-border/70 text-red-400/50 line-through
+    opacity-50 cursor-not-allowed bg-transparent`; selected: gold gradient;
+    default: existing border/background) — visual parity with the already-
+    shipped pattern, no new design. The existing `onClick`
+    (`setSlotTime(s); setRoomNumber("")`) is untouched; disabled buttons
+    don't dispatch it.
+  - **Both directions now coexist**: `takenTherapists` (selected time →
+    taken therapists in the dropdown) is completely unchanged, matching New
+    Booking's dual `takenSlots` + `conflictingTherapists` pattern.
+  - **Untouched, confirmed by scope**: `app/(staff)/bookings/actions.ts`,
+    `quickWalkin()`, the `public.quick_walkin(...)` RPC, the GiST exclusion
+    constraints (`no_double_book_therapist`/`no_double_book_room` — still
+    the source of truth, this is a UI pre-check only),
+    `lib/bookings/slots.ts` (`slotsOverlap` reused as-is), and
+    `booking-form-modal.tsx` (read-only reference).
+  - `npx tsc --noEmit` clean. Not verified live in-browser this session (no
+    browser preview run for this change). See [[bookings_state]].
+
 - **Log Visit — Conditional Therapist Field — complete** (`ohm#7n4k9wx3`,
   2026-09-02). UI-only, display-layer conditional render — no schema,
   writer, or RLS changes. Plan + regression risk assessment presented and

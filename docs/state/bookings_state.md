@@ -150,7 +150,16 @@
   section above) — a single atomic write that still goes through the same
   GiST exclusion constraints as New Booking, so a walk-in still can't
   silently double-book a room or therapist. Placeholder staff picker, same
-  pattern as elsewhere.
+  pattern as elsewhere. **(`ohm#9x4k2wr7`, 2026-09-02) Time Slot grid now
+  has `takenSlots` parity with New Booking**: selecting a Therapist greys
+  out (disables, struck-through) their already-conflicting slots in the
+  grid itself, ported logic-for-logic from `booking-form-modal.tsx`'s
+  `takenSlots` useMemo — not just the reverse direction
+  (`takenTherapists`, selected time → taken therapists in the dropdown),
+  which already existed beforehand. Both directions now coexist, matching
+  New Booking's dual `takenSlots` + `conflictingTherapists` pattern. UI-only
+  pre-check — the GiST exclusion constraints remain the enforced source of
+  truth, unchanged.
 - `components/sms-preview-modal.tsx` — shown after a successful New
   Booking for a registered client (`client_id` not null). Editable
   textarea pre-filled with **placeholder** copy (no locked SMS format
