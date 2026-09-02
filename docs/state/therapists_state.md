@@ -28,6 +28,16 @@ Availability/scheduling support tables:
   - **Add Therapist / Edit (rename) — real Supabase persistence** (`ohm#5v8n3ptc`, 2026-09-01): `handleConfirmAdd` calls `createTherapist()` (`app/(staff)/therapists/actions.ts`), which was already wired but previously **silently RLS-rejected** — `therapists` had no INSERT policy, so the insert failed and the UI showed an error toast instead of adding the therapist. Fixed by adding a `staff_insert` (`is_supervisor_or_above()`) RLS policy — no client-side code change was needed for Add itself. `handleConfirmEdit` (the Edit Name modal, name-only field — no position/comment exposed) now calls a new server action `updateTherapistName(therapistId, name, staffId)` (`UPDATE therapists SET name = … WHERE id = …`, `action_logs` insert as `therapist_rename`, `revalidatePath("/therapists")`) instead of only mutating local state; reuses the existing `staff_update` policy from `ohm#7m2w9dxk`, no new policy needed. No uniqueness check on `therapists.name` — confirmed live there's no unique constraint (only the PK on `id`); the pre-existing client-side duplicate-name guard is unchanged. Confirmed the component's name-keyed `therapistIds`/`therapistMeta` maps aren't referenced as an identifier anywhere outside `therapist-browser.tsx` — other code (e.g. `app/(staff)/bookings/actions.ts`) always looks up therapists by `id`, using `name` only for human-readable log strings — so rename carries no collision risk.
   - **Copy Available-List to clipboard** (`ohm#9d4r7t2h`, 2026-08-30): a copy-icon button next to "Show Archived" runs `handleCopyAvailable`, which filters the existing `cardRows` (already computed per-card `slotStatus`, respecting day-off/leave/absence/archive/busy logic — no new filtering added) for `slotStatus === "available"`, and copies `"{fmtTime(viewTime)} Available\n\n{Name}\n..."` to the clipboard via `navigator.clipboard.writeText`, confirmed with the existing toast. Client-only, no persistence, no backend involvement.
 
+## Availability enforcement in Bookings
+
+`therapist_day_off`/`therapist_absence`/`therapist_leave` are now enforced
+as a DB-level gate on `bookings` (trigger `check_therapist_availability()`,
+`ohm#j4m8v2xq`, 2026-09-02) — a therapist with a matching row for a
+booking's date can no longer be saved via New Booking, Quick Walk-in, or
+Change/Reassign Therapist. New Booking's dropdown also surfaces the status
+as a suffix + disabled option. See [[bookings_state]] for the full detail;
+this table's own RLS/columns are unchanged by that work.
+
 ## RLS
 
 `therapist_day_off`: `staff_select` (`is_staff()`), `staff_insert`/`staff_delete` (`is_supervisor_or_above()`) — added `ohm#7k2m9x4p`, 2026-08-30 (`20260830000000_therapist_day_off_rls.sql`), matching the identity-keyed pattern from Settings' catalog RLS.

@@ -331,6 +331,44 @@ backend/DB/business-logic change.
   `components/booking-browser.tsx`, `app/(staff)/bookings/actions.ts`, or
   any Supabase/migration/exclusion-constraint state.
 
+**Correction, `ohm#j4m8v2xq` (2026-09-02)** — Status-aware therapist
+dropdown + DB-level availability gate on `bookings`, fixing a bug where a
+Day-Off therapist (Leo) could be saved from New Booking.
+
+- **New DB trigger, authoritative gate**: `check_therapist_availability()`
+  (`supabase/migrations/20260902000000_bookings_therapist_availability_trigger.sql`),
+  `BEFORE INSERT OR UPDATE OF therapist_id, booking_date, start_time ON
+  bookings` — same column-scoping as `trg_bookings_set_computed_fields`, so
+  a bare status transition (Complete/Cancel/No-show) never re-validates.
+  Raises `THERAPIST_UNAVAILABLE: Day Off|Absent|On Leave` when the assigned
+  `therapist_id` matches a live row in `therapist_day_off`/
+  `therapist_absence`/`therapist_leave` for that `booking_date`. Table-level,
+  so it also covers `quick_walkin()` and `changeBookingTherapist()`
+  (Change/Reassign), not just `createBooking()` — confirmed and approved as
+  intentional.
+- **Known pre-existing bad data, left as-is by design**: live data has
+  ~40 `Booked`/`Completed`/`Needs Reassignment` bookings already assigned to
+  a Day-Off/Absent therapist for their booking date (some dated the day of
+  this fix). The trigger's column scoping means these are never touched
+  unless someone actually reassigns/reschedules them, at which point the
+  new check correctly applies. No backfill/cleanup was done.
+- `app/(staff)/bookings/actions.ts`: new `therapistUnavailableError()`
+  helper parses the trigger's message; wired into `createBooking`,
+  `quickWalkin`, and `changeBookingTherapist`'s existing error-mapping
+  (same pattern as their pre-existing `23P01` parsing).
+- `components/booking-form-modal.tsx` (New Booking only — no shared
+  therapist-select component exists across modals; Quick Walk-in, Log
+  Visit, and Sales each inline their own `<select>` and are untouched,
+  covered only by the DB trigger): new per-date fetch of the three
+  availability tables into an `unavailableTherapists` map. Dropdown options
+  get a `— Day Off`/`— Absent`/`— On Leave` suffix and `disabled`, alongside
+  the pre-existing (already-correct, runtime-derived) `— Fully Booked`.
+  Default therapist selection now skips to the first available therapist
+  instead of blindly `therapists[0]`.
+- Confirmed live: "On Leave" (`therapist_leave`) was already modeled
+  separately from `therapist_absence`/`therapist_day_off` — no schema
+  change needed for status types.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - Therapist options are not filtered by `therapist_services` (which

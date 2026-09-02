@@ -68,7 +68,8 @@ export function BookingFormModal({
   const [clientSelectValue, setClientSelectValue] = useState<string>("__walkin__");
   const [walkinName, setWalkinName] = useState("");
   const [serviceId, setServiceId] = useState(services[0]?.id ?? "");
-  const [therapistId, setTherapistId] = useState(therapists[0]?.id ?? "");
+  const [therapistId, setTherapistId] = useState("");
+  const [therapistTouched, setTherapistTouched] = useState(false);
   const [date, setDate] = useState(defaultDate || todayIso());
   const [slotTime, setSlotTime] = useState<string>("");
   const [useCustomTime, setUseCustomTime] = useState(false);
@@ -78,6 +79,7 @@ export function BookingFormModal({
   const actor = sessionStaff;
   const staffId = actor?.id ?? "";
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
+  const [unavailableTherapists, setUnavailableTherapists] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [smsBooking, setSmsBooking] = useState<{
     codename: string;
@@ -98,6 +100,45 @@ export function BookingFormModal({
       .in("status", ACTIVE_STATUSES)
       .then(({ data }) => setConflicts(data ?? []));
   }, [date]);
+
+  // Therapist status (Day Off / Absent / On Leave) for the selected date —
+  // same per-date client-side query pattern as `conflicts` above, kept
+  // independent by design (see bookings_state.md "Known simplifications").
+  useEffect(() => {
+    const supabase = createClient();
+    const weekday = new Date(`${date}T00:00:00`).getDay();
+    Promise.all([
+      supabase.from("therapist_day_off").select("therapist_id, weekday"),
+      supabase.from("therapist_absence").select("therapist_id, absent_date").eq("absent_date", date),
+      supabase
+        .from("therapist_leave")
+        .select("therapist_id, start_date, end_date")
+        .lte("start_date", date)
+        .gte("end_date", date),
+    ]).then(([dayOff, absence, leave]) => {
+      const map = new Map<string, string>();
+      for (const row of dayOff.data ?? []) {
+        if (row.weekday === weekday) map.set(row.therapist_id, "Day Off");
+      }
+      for (const row of absence.data ?? []) {
+        map.set(row.therapist_id, "Absent");
+      }
+      for (const row of leave.data ?? []) {
+        map.set(row.therapist_id, "On Leave");
+      }
+      setUnavailableTherapists(map);
+    });
+  }, [date]);
+
+  // Default the Therapist select to the first *available* therapist rather
+  // than blindly `therapists[0]` — re-runs whenever the availability map
+  // reloads (date change) so an unavailable default never sticks, but only
+  // while the user hasn't picked one manually.
+  useEffect(() => {
+    if (therapistTouched) return;
+    const firstAvailable = therapists.find((t) => !unavailableTherapists.has(t.id));
+    setTherapistId(firstAvailable?.id ?? "");
+  }, [therapists, unavailableTherapists, therapistTouched]);
 
   useEffect(() => {
     if (error) errorRef.current?.scrollIntoView({ block: "nearest" });
@@ -204,7 +245,8 @@ export function BookingFormModal({
     setError(null);
   }
 
-  const therapistOk = !!therapistId && !conflictingTherapists.has(therapistId);
+  const therapistOk =
+    !!therapistId && !conflictingTherapists.has(therapistId) && !unavailableTherapists.has(therapistId);
   const selectedTherapist = therapists.find((t) => t.id === therapistId);
 
   const canSubmit =
@@ -228,6 +270,10 @@ export function BookingFormModal({
     }
     if (isMassageService && !time) {
       setError("Please select an available time slot, or use a custom time.");
+      return;
+    }
+    if (isMassageService && therapistId && unavailableTherapists.has(therapistId)) {
+      setError(`That therapist is ${unavailableTherapists.get(therapistId)} on the selected date.`);
       return;
     }
     if (isMassageService && (!therapistId || !therapistOk)) {
@@ -362,17 +408,33 @@ export function BookingFormModal({
                 <select
                   id="bTherapist"
                   value={therapistId}
-                  onChange={(e) => setTherapistId(e.target.value)}
+                  onChange={(e) => {
+                    setTherapistTouched(true);
+                    setTherapistId(e.target.value);
+                  }}
                   className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
                 >
                   <option value="">— select —</option>
                   {therapists.map((t) => {
+                    const unavailableReason = unavailableTherapists.get(t.id);
                     const fullyBooked = fullyBookedTherapists.has(t.id);
                     const conflictNow = conflictingTherapists.has(t.id);
+                    const disabled = !!unavailableReason || fullyBooked || conflictNow;
                     return (
-                      <option key={t.id} value={t.id} disabled={fullyBooked || conflictNow}>
+                      <option
+                        key={t.id}
+                        value={t.id}
+                        disabled={disabled}
+                        className={disabled ? "text-muted" : undefined}
+                      >
                         {t.name}
-                        {fullyBooked ? " — Fully Booked" : conflictNow ? " (booked)" : ""}
+                        {unavailableReason
+                          ? ` — ${unavailableReason}`
+                          : fullyBooked
+                          ? " — Fully Booked"
+                          : conflictNow
+                          ? " (booked)"
+                          : ""}
                       </option>
                     );
                   })}

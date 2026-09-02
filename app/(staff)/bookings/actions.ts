@@ -63,6 +63,15 @@ export type CreateBookingResult =
 
 const EXCLUSION_VIOLATION = "23P01";
 
+// Parses the message raised by trg_bookings_check_therapist_availability
+// (`THERAPIST_UNAVAILABLE: Day Off|Absent|On Leave`) into a friendly error,
+// or returns null if the given error isn't that trigger.
+function therapistUnavailableError(message: string): string | null {
+  const match = message.match(/THERAPIST_UNAVAILABLE: (.+)$/);
+  if (!match) return null;
+  return `That therapist is ${match[1]} on the selected date.`;
+}
+
 export async function createBooking(
   input: CreateBookingInput
 ): Promise<CreateBookingResult> {
@@ -87,6 +96,10 @@ export async function createBooking(
     .single();
 
   if (error) {
+    const unavailable = therapistUnavailableError(error.message);
+    if (unavailable) {
+      return { ok: false, field: "therapist", error: unavailable };
+    }
     if (error.code === EXCLUSION_VIOLATION) {
       if (error.message.includes("no_double_book_room")) {
         return {
@@ -185,6 +198,10 @@ export async function quickWalkin(
   });
 
   if (error) {
+    const unavailable = therapistUnavailableError(error.message);
+    if (unavailable) {
+      return { ok: false, field: "therapist", error: unavailable };
+    }
     if (error.code === EXCLUSION_VIOLATION) {
       if (error.message.includes("no_double_book_room")) {
         return {
@@ -297,6 +314,10 @@ export async function changeBookingTherapist(
     .eq("id", bookingId);
 
   if (updateErr) {
+    const unavailable = therapistUnavailableError(updateErr.message);
+    if (unavailable) {
+      return { ok: false, error: unavailable };
+    }
     if (updateErr.code === EXCLUSION_VIOLATION) {
       return {
         ok: false,

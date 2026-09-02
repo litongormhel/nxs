@@ -5,6 +5,84 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **New Booking — Status-Aware Therapist Dropdown + DB-Level Availability
+  Gate — complete** (`ohm#j4m8v2xq`, 2026-09-02). Schema findings + plan +
+  regression risk assessment presented and approved before any code/
+  migration was written, per the prompt's mandatory gate.
+  - **Problem**: [booking-form-modal.tsx](components/booking-form-modal.tsx)
+    (the one "New Booking" modal, used for both walk-in and registered-
+    client bookings via the `__walkin__` toggle — no separate "shared
+    dropdown component" existed, correcting the prompt's premise) defaulted
+    `therapistId` to `therapists[0]?.id` with zero availability check, and
+    the dropdown only ever disabled on live time/room conflict
+    (`fullyBookedTherapists`/`conflictingTherapists`) — never on Day Off/
+    Absent/On Leave. `createBooking()` had no server-side therapist-status
+    validation at all, only the GiST `23P01` double-booking catch. This is
+    exactly how a Day-Off therapist (Leo) got saved.
+  - **Schema — confirmed live, no new tables needed**: `therapist_day_off`
+    (`therapist_id`, `weekday`), `therapist_absence` (`therapist_id`,
+    `absent_date`), `therapist_leave` (`therapist_id`, `start_date`,
+    `end_date`) already exist as three distinct tables — "On Leave" was
+    already modeled separately from Absent/Day Off, contrary to the
+    prompt's flagged risk of a schema change being needed. No other status
+    type (e.g. "Break") exists anywhere in the schema.
+  - **DB-level gate (authoritative)**: new migration
+    `supabase/migrations/20260902000000_bookings_therapist_availability_trigger.sql`
+    — `check_therapist_availability()` trigger function, `BEFORE INSERT OR
+    UPDATE OF therapist_id, booking_date, start_time ON bookings` (same
+    column-scoping pattern as the pre-existing
+    `trg_bookings_set_computed_fields`), raising
+    `THERAPIST_UNAVAILABLE: Day Off|Absent|On Leave` when the assigned
+    therapist has a matching row for that `booking_date`. Being table-level,
+    this also gates `quick_walkin()` and `changeBookingTherapist()`
+    (Change/Reassign), not just New Booking — confirmed and approved as
+    intentional defense-in-depth, flagged to the user before implementing
+    since it was broader than the prompt's literal New-Booking-only scope.
+  - **Critical regression risk found and mitigated**: live data has ~40
+    existing `Booked`/`Completed`/`Needs Reassignment` bookings already
+    assigned to Day-Off/Absent therapists, including `Booked` rows dated
+    today. The column-scoped trigger (`OF therapist_id, booking_date,
+    start_time`, not a bare `UPDATE`) means a status-only transition
+    (Complete/Cancel/No-show) on these pre-existing rows is never
+    re-validated — verified live via a real `UPDATE ... SET status =
+    'Booked'` on one such row (Akio, day-off, booked today), which
+    succeeded unaffected. Approved with the user to leave this existing bad
+    data as-is (no backfill/cleanup) — the gate only applies going forward.
+  - **App layer**: `booking-form-modal.tsx` gained a second per-date
+    `useEffect` (mirroring the existing `conflicts` fetch) querying
+    `therapist_day_off`/`therapist_absence`/`therapist_leave` into an
+    `unavailableTherapists: Map<id, "Day Off"|"Absent"|"On Leave">`. The
+    Therapist `<select>` now shows a `— Day Off`/`— Absent`/`— On Leave`
+    suffix and `disabled` for these, alongside the pre-existing `— Fully
+    Booked`/`(booked)` states (that Fully-Booked logic was already correct
+    and runtime-derived — untouched). Default therapist selection changed
+    from blind `therapists[0]` to the first *available* therapist, via a
+    `therapistTouched` guard so a manual pick is never overridden. `Please
+    select a therapist who is available` submit-guard extended; a new
+    friendlier message surfaces if a stale unavailable selection is somehow
+    still submitted.
+  - `app/(staff)/bookings/actions.ts`: new `therapistUnavailableError()`
+    helper parses the trigger's message, wired into `createBooking`,
+    `quickWalkin`, and `changeBookingTherapist`'s existing error-mapping
+    blocks (same pattern as their `23P01` parsing) — surfaces "That
+    therapist is Day Off/Absent/On Leave on the selected date." instead of
+    a raw Postgres error.
+  - **Untouched, confirmed by scope**: Quick Walk-in, Log Visit, and Sales
+    each have their own independent inline therapist `<select>` (no shared
+    component existed) — not touched; they're still covered by the DB
+    trigger as the authoritative gate even without a UI-level status
+    indicator. Reassign/Change Therapist's dropdown UI also untouched for
+    the same reason (do-not-touch scope) — protected server-side only.
+  - **Verification**: `npx tsc --noEmit` clean. Live-tested against
+    Supabase directly (dev-server preview harness hit the same recurring
+    "Missing script: dev" working-directory bug noted in every other entry
+    this week — unrelated to this change): a real INSERT for Leo (day-off
+    today) was rejected with `THERAPIST_UNAVAILABLE: Day Off`; the same
+    insert for an available therapist (Dan) succeeded and was cleaned up;
+    a status-only UPDATE on a pre-existing bad row succeeded unaffected,
+    confirming the regression mitigation above. See [[bookings_state]] and
+    [[therapists_state]].
+
 - **Call Sheet / Lockers — Stale Occupancy Filter + Nudge — complete**
   (`ohm#3n8w5tqf`, 2026-09-02, implements approaches A + C from audit
   `ohm#7q2m9xk4`). UI/display-layer only — no schema, RLS, writer, trigger,

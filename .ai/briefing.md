@@ -82,7 +82,35 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-02 — Call Sheet / Lockers — Stale Occupancy Filter + Nudge**
+1. **2026-09-02 — New Booking — Status-Aware Therapist Dropdown + DB-Level
+   Availability Gate** (`ohm#j4m8v2xq`). Fixes a bug where a Day-Off
+   therapist (Leo) could be saved on a booking — the therapist dropdown had
+   no availability awareness at all beyond live time/room conflicts, and
+   `createBooking()` had zero server-side status validation. Confirmed live:
+   "On Leave" was already a distinct table (`therapist_leave`, separate from
+   `therapist_absence`/`therapist_day_off`) — no schema change needed.
+   New DB trigger `check_therapist_availability()` (`BEFORE INSERT OR UPDATE
+   OF therapist_id, booking_date, start_time ON bookings`, migration
+   `20260902000000_bookings_therapist_availability_trigger.sql`) is the
+   authoritative gate — table-level, so it also covers Quick Walk-in and
+   Change/Reassign Therapist, not just New Booking (approved as intentional
+   defense-in-depth). Column-scoped (not a bare `UPDATE` trigger) so the
+   ~40 pre-existing bookings already assigned to Day-Off/Absent therapists
+   in live data are never re-validated by an unrelated status transition —
+   verified live. `booking-form-modal.tsx`'s Therapist `<select>` now shows
+   `— Day Off`/`— Absent`/`— On Leave` suffixes and disables those options,
+   alongside the pre-existing (already-correct, runtime-derived) `— Fully
+   Booked`; default selection now skips to the first available therapist.
+   No shared therapist-select component existed across modals (New Booking,
+   Quick Walk-in, Log Visit, Sales each inline their own) — only New
+   Booking's UI was touched; the others remain covered by the DB trigger
+   only. `npx tsc --noEmit` clean; live-verified directly against Supabase
+   (insert rejected for Leo, succeeded for an available therapist, status-
+   only update on a pre-existing bad row unaffected) — dev-server preview
+   hit the same recurring Windows working-directory bug as every other
+   session this week. See [[bookings_state]] and [[therapists_state]].
+
+2. **2026-09-02 — Call Sheet / Lockers — Stale Occupancy Filter + Nudge**
    (`ohm#3n8w5tqf`, implements approaches A + C from audit `ohm#7q2m9xk4`;
    approach B, auto-checkout, stays explicitly out of scope pending its own
    future prompt). UI/display-layer only — no schema, RLS, writer, trigger,
@@ -129,7 +157,7 @@ Full invariant list: [[nxs-architecture-locks]].
      instead via `tsc` and direct trace of the render logic. See
      [[operations_state]].
 
-2. **2026-09-02 — Quick Walk-in — Live Time-Slot Greying by Therapist**
+3. **2026-09-02 — Quick Walk-in — Live Time-Slot Greying by Therapist**
    (`ohm#9x4k2wr7`). UI-only — no schema/writer/RLS changes. Plan +
    regression risk assessment presented and approved before any code was
    written, per the prompt's mandatory gate. Reference implementation was
@@ -151,7 +179,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `booking-form-modal.tsx`. `npx tsc --noEmit` clean. See
    [[bookings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-02 — Log Visit — Conditional Therapist Field** (`ohm#7n4k9wx3`).
+4. **2026-09-02 — Log Visit — Conditional Therapist Field** (`ohm#7n4k9wx3`).
    UI-only — no schema/writer/RLS changes. Plan + regression risk
    assessment presented and approved before any code was written, per the
    prompt's mandatory gate. `LogVisitModal`'s Therapist field reused the
@@ -170,7 +198,7 @@ Full invariant list: [[nxs-architecture-locks]].
    working-directory bug noted in prior entries (unrelated to this
    change). See [[bookings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-02 — Activity Logs — Human-Readable Detail Formatting**
+5. **2026-09-02 — Activity Logs — Human-Readable Detail Formatting**
    (`ohm#i35wdbgr`). Display-layer only — no writer/schema/RLS changes.
    New `lib/logs/format-detail.ts` (`formatLogDetail`) turns each row's
    raw `key=value` `detail` text into a human sentence, keyed off
@@ -195,40 +223,4 @@ Full invariant list: [[nxs-architecture-locks]].
    working-directory bug as the prior entry (confirmed unrelated to this
    change: `npm run dev` runs cleanly from a direct terminal). See
    [[logs_state]] and `.ai/handoff.md`.
-
-5. **2026-09-02 — Dashboard — Add Cancel Action to Needs Reassignment
-   Cards** (`ohm#9d4k7m2x`). Plan + regression risk assessment presented
-   and approved before any code was written, per the prompt's mandatory
-   gate. Investigation surfaced the prompt's notes-append requirement
-   ("reuse the existing notes-flagging pattern, e.g. 'No QR presented'")
-   didn't match live code — `bookings` has no `notes` column at all, and
-   no such append pattern exists anywhere in the repo. Flagged to Ohm;
-   chose to drop the notes requirement entirely rather than add a `notes`
-   column (would have violated the prompt's own "do not touch schema"
-   rule). New `cancelReassignmentBooking(bookingId, staffId)` server
-   action (`app/(staff)/bookings/actions.ts`), mirroring
-   `changeBookingTherapist`'s guard/logging shape: rejects unless the
-   booking is currently `Needs Reassignment`, updates `status =
-   'Cancelled'` (existing enum value, no schema/enum change), logs one
-   `action_logs` row (`cancel_reassignment_booking`, detail includes
-   `reason=Client decided not to pursue`), revalidates `/bookings`,
-   `/dashboard`, `/call-sheet`. `components/reassignment-panel.tsx` gained
-   a "Cancel" button next to "Transfer" on each card plus its own confirm
-   dialog (client/service/room/time) and state, fully independent of the
-   Transfer button's state/handler/modal. No dashboard query change
-   needed — it already filters on `status = 'Needs Reassignment'`, so a
-   cancelled row disappears on the next fetch the same way a
-   successfully-transferred one does. Follow-up prompt (`ohm#3p8v6k1r`)
-   verified the Call Sheet page (`locker_occupancy`-driven, keyed off
-   check-in state, never reads `bookings.status`) has no dependency on
-   `Needs Reassignment` at all — a booking in that status was never
-   check-in'd, so it was never on the call sheet to begin with; no bug,
-   no change needed. `npx tsc --noEmit` clean. No branch was created (work
-   done directly on `main`, uncommitted). **Not verified live in-browser**
-   — the preview tool's `npm run dev` fails with "Missing script: dev"
-   despite the script existing and running cleanly via a direct terminal
-   `npm run dev`/`npm run` check; looks like a working-directory mismatch
-   in the preview harness itself, not caused by this change (same class
-   of recurring Windows preview-tooling gap noted in prior entries). See
-   [[dashboard_state]] and `.ai/handoff.md`.
 
