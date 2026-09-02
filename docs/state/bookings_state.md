@@ -91,7 +91,11 @@
   (`#modalScrim` and screenshot):
   - Find Booking search with live suggestions of open bookings (`Booked` / `Needs Reassignment`)
     and `Linked: [Name] · Room [X]` badge.
-  - Date of Visit & Therapist dropdown (therapist disabled for Wet Area).
+  - Date of Visit & Therapist field: read-only display (shows the
+    therapist already assigned on the linked booking, via
+    `bookings.therapist_id`) when a booking is linked via Find Booking
+    search; editable dropdown for walk-ins (no linked booking); disabled/
+    exempted for Wet Area in both cases (`ohm#7n4k9wx3`, 2026-09-02).
   - Assign Locker dropdown (shows free lockers).
   - Availed Service dropdown (services + points preview, plus `Redeem: Combi Massage Reward (−100 pts)`).
   - Cash upgrade section for redemptions (`Upgraded with cash top-up`).

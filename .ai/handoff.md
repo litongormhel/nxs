@@ -5,6 +5,43 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Log Visit — Conditional Therapist Field — complete** (`ohm#7n4k9wx3`,
+  2026-09-02). UI-only, display-layer conditional render — no schema,
+  writer, or RLS changes. Plan + regression risk assessment presented and
+  approved before any code was written, per the prompt's mandatory gate.
+  - **Problem**: the Therapist field in [log-visit-modal.tsx](components/log-visit-modal.tsx)
+    was always an editable `<select>` (disabled only for Wet Area), even
+    when a booking was linked via Find Booking search — letting staff
+    re-edit a therapist assignment that was already locked in at New
+    Booking time.
+  - **Fix**: reused the existing `linkedBooking` memo
+    ([log-visit-modal.tsx:167](components/log-visit-modal.tsx:167)) — the
+    same condition already driving the `Linked: [Name] · Room [X]` badge —
+    to conditionally render the Therapist field
+    ([log-visit-modal.tsx:467](components/log-visit-modal.tsx:467)):
+    linked + not Wet Area → read-only text showing
+    `therapists.find(t => t.id === linkedBooking.therapist_id)?.name`
+    (falls back to `"— unassigned —"` if null, e.g. a `Needs
+    Reassignment` booking with no therapist yet); Wet Area → existing
+    exempted/disabled behavior unchanged (checked first, wins over
+    linked); no linked booking (walk-in) → existing editable `<select>`,
+    untouched. No new state — `therapistId` itself is still populated by
+    `linkBooking()`'s existing `setTherapistId(b.therapist_id ?? "")` and
+    is what's actually submitted to `logVisitBooking`, so the write path
+    is unaffected.
+  - **Untouched, confirmed by scope**: New Booking
+    (`booking-form-modal.tsx`), Quick Walk-in (`quick-walkin-modal.tsx`),
+    `logVisitBooking`'s write path
+    ([bookings/actions.ts](<app/(staff)/bookings/actions.ts>)), locker
+    assignment, Availed Service, Add-ons, Points/Amount auto-calc,
+    Payment Method, Promo Code, Logged by, manual discount,
+    Change/Reassign Therapist actions on the Bookings tab, Therapist
+    Commission, Analytics, Dashboard.
+  - `npx tsc --noEmit` clean. **Not verified live in-browser** — same
+    recurring Windows preview-harness working-directory bug noted in
+    prior entries (unrelated to this change). See
+    [[bookings_state]].
+
 - **Activity Logs — Human-Readable Detail Formatting — complete**
   (`ohm#i35wdbgr`, 2026-09-02). Read-only, display-layer only — no writer,
   schema, migration, or RLS changes (DATABASE CHANGE SAFETY RULES did not

@@ -82,7 +82,26 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-02 — Activity Logs — Human-Readable Detail Formatting**
+1. **2026-09-02 — Log Visit — Conditional Therapist Field** (`ohm#7n4k9wx3`).
+   UI-only — no schema/writer/RLS changes. Plan + regression risk
+   assessment presented and approved before any code was written, per the
+   prompt's mandatory gate. `LogVisitModal`'s Therapist field reused the
+   existing `linkedBooking` memo (the same condition driving the
+   `Linked: [Name] · Room [X]` badge) to render read-only text
+   (`therapists.find(t => t.id === linkedBooking.therapist_id)?.name`,
+   falls back to `"— unassigned —"`) once a booking is linked via Find
+   Booking search, instead of the always-editable dropdown — the
+   therapist was already assigned at New Booking time and shouldn't be
+   re-editable from Log Visit. Wet Area exemption (checked first) and the
+   walk-in editable-dropdown path are both unchanged. No new state —
+   `therapistId` is still populated by the existing `linkBooking()` call
+   and is what's actually submitted to `logVisitBooking`, so the write
+   path is untouched. `npx tsc --noEmit` clean. **Not verified live
+   in-browser** — same recurring Windows preview-harness
+   working-directory bug noted in prior entries (unrelated to this
+   change). See [[bookings_state]] and `.ai/handoff.md`.
+
+2. **2026-09-02 — Activity Logs — Human-Readable Detail Formatting**
    (`ohm#i35wdbgr`). Display-layer only — no writer/schema/RLS changes.
    New `lib/logs/format-detail.ts` (`formatLogDetail`) turns each row's
    raw `key=value` `detail` text into a human sentence, keyed off
@@ -108,7 +127,7 @@ Full invariant list: [[nxs-architecture-locks]].
    change: `npm run dev` runs cleanly from a direct terminal). See
    [[logs_state]] and `.ai/handoff.md`.
 
-2. **2026-09-02 — Dashboard — Add Cancel Action to Needs Reassignment
+3. **2026-09-02 — Dashboard — Add Cancel Action to Needs Reassignment
    Cards** (`ohm#9d4k7m2x`). Plan + regression risk assessment presented
    and approved before any code was written, per the prompt's mandatory
    gate. Investigation surfaced the prompt's notes-append requirement
@@ -144,7 +163,7 @@ Full invariant list: [[nxs-architecture-locks]].
    of recurring Windows preview-tooling gap noted in prior entries). See
    [[dashboard_state]] and `.ai/handoff.md`.
 
-3. **2026-09-01 — RLS & Grant Tightening — sale_addons Insert Policy +
+4. **2026-09-01 — RLS & Grant Tightening — sale_addons Insert Policy +
    apply_points_delta REST Exposure** (`ohm#7n4c1wp6`). Addresses audit
    `ohm#9k3v7bx2`'s Medium #3 (`sale_addons.public_insert` let any anon-key
    holder insert arbitrary rows via public REST) and Medium #6
@@ -164,7 +183,7 @@ Full invariant list: [[nxs-architecture-locks]].
    left untouched, as scoped. Re-ran Supabase security advisors — both
    findings clear. See [[bookings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-01 — Client Portal — Auth Hardening: Rate Limiting + Session
+5. **2026-09-01 — Client Portal — Auth Hardening: Rate Limiting + Session
    Secret Separation** (`ohm#5t2m8qz1`). Addresses audit `ohm#9k3v7bx2`'s
    High #1 (no brute-force protection on `/portal/api/login`) and High #2
    (portal session HMAC secret reused `SUPABASE_SERVICE_ROLE_KEY`). Plan +
@@ -183,24 +202,4 @@ Full invariant list: [[nxs-architecture-locks]].
    `PORTAL_SESSION_SECRET` must still be set in Vercel Production + Preview
    manually — no Vercel env-write tool was available this session. See
    [[client_portal_state]] and `.ai/handoff.md`.
-
-5. **2026-09-01 — Therapists — Services Offered RLS + Wiring**
-   (`ohm#9q4x1mwr`, Prompt 3 of 3, closes the "Therapist Roster —
-   Investigate & Wire" sequence). Investigation surfaced that the prompt's
-   premise didn't match live code: `handleToggleService` was genuinely
-   local-state-only as expected, but there was no "Services Offered"
-   section on the therapist card at all — it was never called from any
-   JSX (only the separate, still-local Add Therapist modal picker rendered
-   service pills). Also surfaced `Scrub` is a real `services` row but
-   `active: false` live. Both flagged and resolved via explicit user
-   choice before any code was written: build the missing card section;
-   proceed with `Scrub` as-is. Added `staff_select`/`staff_insert`/
-   `staff_delete` (`is_staff()`/`is_supervisor_or_above()`) to
-   `therapist_services` — had **no policies at all**, so 26 pre-seeded
-   rows were previously unreadable. New "Services Offered" pill section on
-   each card, wired to new `toggleTherapistService(therapistId, serviceId,
-   offering, staffId)` server action mirroring `toggleDayOff`'s shape.
-   Page fetch now seeds initial services state via a new `services`/
-   `therapist_services` join, resolved through a `serviceIdMap` in the
-   component. See [[therapists_state]] and `.ai/handoff.md`.
 

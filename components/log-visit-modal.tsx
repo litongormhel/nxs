@@ -468,20 +468,27 @@ export function LogVisitModal({
               <label className="text-xs text-muted" htmlFor="fTherapist">
                 Therapist <span className="opacity-70">(required unless Wet Area)</span>
               </label>
-              <select
-                id="fTherapist"
-                value={therapistId}
-                disabled={isWetArea}
-                onChange={(e) => setTherapistId(e.target.value)}
-                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none disabled:opacity-50"
-              >
-                <option value="">— none —</option>
-                {therapists.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
+              {!isWetArea && linkedBooking ? (
+                <div className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground opacity-80">
+                  {therapists.find((t) => t.id === linkedBooking.therapist_id)?.name ??
+                    "— unassigned —"}
+                </div>
+              ) : (
+                <select
+                  id="fTherapist"
+                  value={therapistId}
+                  disabled={isWetArea}
+                  onChange={(e) => setTherapistId(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none disabled:opacity-50"
+                >
+                  <option value="">— none —</option>
+                  {therapists.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
