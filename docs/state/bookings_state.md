@@ -90,6 +90,8 @@
 - `components/log-visit-modal.tsx` — **Log Visit** modal with full HTML mockup parity
   (`#modalScrim` and screenshot):
   - Client state initializer (`clientId`) respects `initialBooking.client_id` even when `null` for walk-in guest bookings (`ohm#7f3k2m9p`, 2026-09-16).
+  - Walk-in account linking (`ohm#3k7yqxpz`, 2026-09-16): when `clientId` is null, displays collapsible "Link to Client Account" search box (searching `clients` prop by codename or username) and "Scan QR" button (nested `<ScanMemberQrModal>` overlay at `z-[60]`). Displays "Unlink account (back to walk-in)" text button when `isGuestOrigin && clientId !== null`.
+  - Added Points field (`ohm#3k7yqxpz`, 2026-09-16): renders disabled text input showing `"N/A — no account linked"` when `!clientId`, numeric `pointsDelta` when `clientId` is set.
   - Find Booking search with live suggestions of open bookings (`Booked` / `Needs Reassignment`)
     and `Linked: [Name] · Room [X]` badge.
   - Date of Visit & Therapist field: read-only display (shows the

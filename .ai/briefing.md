@@ -82,7 +82,15 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-16 — Fix Walk-in Client Mis-link Bug & Reorder Log Visit Modal Fields**
+1. **2026-09-16 — Log Visit: Link walk-in to client account (manual search + QR scan) & hide misleading points for unlinked guests**
+   (`ohm#3k7yqxpz`). Implementation plan & regression risk assessment presented and approved before code execution.
+   Confined strictly to `components/log-visit-modal.tsx`, reusing `ScanMemberQrModal` and `resolveMemberQr` action as-is.
+   - Fix A: Added Points input renders disabled `"N/A — no account linked"` text when `!clientId`.
+   - Fix B & C: Collapsible "Link to Client Account" search box (case-insensitive substring match on `clients` prop) and "Scan QR" button (opens `<ScanMemberQrModal>` as `z-[60]` overlay) when `!clientId`.
+   - Unlink: Added "Unlink account (back to walk-in)" text button when `isGuestOrigin && clientId !== null`.
+   - `npx tsc --noEmit` and `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
+
+2. **2026-09-16 — Fix Walk-in Client Mis-link Bug & Reorder Log Visit Modal Fields**
    (`ohm#7f3k2m9p`). Implementation plan & regression risk assessment presented and
    approved before code execution. Fixed client state initialization in `LogVisitModal`
    (`components/log-visit-modal.tsx`) where walk-in guest bookings (`client_id: null`)
@@ -91,7 +99,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Payment Method (standalone full-width) → GCash Ref → Staff. `npx tsc --noEmit` clean.
    See [[bookings_state]] and `.ai/handoff.md`.
 
-2. **2026-09-16 — Add Supabase keep-alive cron to prevent free-tier pause**
+3. **2026-09-16 — Add Supabase keep-alive cron to prevent free-tier pause**
    (`ohm#rzx46p4g`). Implementation plan & regression risk assessment presented
    and approved before code execution. Created `app/api/keep-alive/route.ts`
    GET endpoint executing a head select query against `addons` using
@@ -99,7 +107,7 @@ Full invariant list: [[nxs-architecture-locks]].
    entry (`0 0 * * *`) hitting `/api/keep-alive` in `vercel.json`. `npx tsc --noEmit`
    clean. See [[settings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-02 — toggleDayOff Missing Bulk-Reassignment Step + Manual
+4. **2026-09-02 — toggleDayOff Missing Bulk-Reassignment Step + Manual
    Cleanup** (`ohm#9x4r7b2q`). Diff + exact UPDATE statements presented and
    approved before any code/SQL was executed, per the prompt's mandatory
    gate. `toggleDayOff()` in `app/(staff)/therapists/actions.ts` wrote/
@@ -118,85 +126,12 @@ Full invariant list: [[nxs-architecture-locks]].
    `Booked` rows to `Needs Reassignment` (both under Akio: one a genuine
    `toggleDayOff` gap, one an unresolved `markAbsentToday` discrepancy
    flagged for follow-up) — the other ~38 rows in the known ~40-row gap
-   are untouched (22 `Completed`, 5 `Cancelled`, out of scope). The
-   prompt's cited prior-audit IDs (`ohm#7f2k9m3x`/`ohm#3n8v5k1p`) don't
-   appear anywhere in this repo's tracking files — re-verified the finding
-   independently against code and live DB before proceeding; the finding
-   held up, only the citation didn't. See [[bookings_state]] and
-   `.ai/handoff.md`.
+    were historical bookings (prior to 2026-08-27) left untouched per policy.
+   `npx tsc --noEmit` clean. See [[therapists_state]] and `.ai/handoff.md`.
 
-4. **2026-09-02 — New Booking — Status-Aware Therapist Dropdown + DB-Level
-   Availability Gate** (`ohm#j4m8v2xq`). Fixes a bug where a Day-Off
-   therapist (Leo) could be saved on a booking — the therapist dropdown had
-   no availability awareness at all beyond live time/room conflicts, and
-   `createBooking()` had zero server-side status validation. Confirmed live:
-   "On Leave" was already a distinct table (`therapist_leave`, separate from
-   `therapist_absence`/`therapist_day_off`) — no schema change needed.
-   New DB trigger `check_therapist_availability()` (`BEFORE INSERT OR UPDATE
-   OF therapist_id, booking_date, start_time ON bookings`, migration
-   `20260902000000_bookings_therapist_availability_trigger.sql`) is the
-   authoritative gate — table-level, so it also covers Quick Walk-in and
-   Change/Reassign Therapist, not just New Booking (approved as intentional
-   defense-in-depth). Column-scoped (not a bare `UPDATE` trigger) so the
-   ~40 pre-existing bookings already assigned to Day-Off/Absent therapists
-   in live data are never re-validated by an unrelated status transition —
-   verified live. `booking-form-modal.tsx`'s Therapist `<select>` now shows
-   `— Day Off`/`— Absent`/`— On Leave` suffixes and disables those options,
-   alongside the pre-existing (already-correct, runtime-derived) `— Fully
-   Booked`; default selection now skips to the first available therapist.
-   No shared therapist-select component existed across modals (New Booking,
-   Quick Walk-in, Log Visit, Sales each inline their own) — only New
-   Booking's UI was touched; the others remain covered by the DB trigger
-   only. `npx tsc --noEmit` clean; live-verified directly against Supabase
-   (insert rejected for Leo, succeeded for an available therapist, status-
-   only update on a pre-existing bad row unaffected) — dev-server preview
-   hit the same recurring Windows working-directory bug as every other
-   session this week. See [[bookings_state]] and [[therapists_state]].
-
-5. **2026-09-02 — Call Sheet / Lockers — Stale Occupancy Filter + Nudge**
-   (`ohm#3n8w5tqf`, implements approaches A + C from audit `ohm#7q2m9xk4`;
-   approach B, auto-checkout, stays explicitly out of scope pending its own
-   future prompt). UI/display-layer only — no schema, RLS, writer, trigger,
-   or cron changes; `checkOutLocker`, `quick_walkin`, `logVisitBooking`, and
-   every `locker_occupancy` insert path are untouched. Mockup presented and
-   plan + regression risk assessment approved before any code was written,
-   per the prompt's mandatory gate.
-   - **Staleness definition reused, not reinvented**: a `locker_occupancy`
-     row is stale when `toSpaDay(checked_in_at) !== spaDayNow()` — the
-     existing canonical Analytics-phase helper
-     (`lib/analytics/spa-day.ts`), not new date math and not
-     `lib/bookings/slots.ts` (that file's `toMinutesSinceOpen` only handles
-     intra-day `HH:MM` slot strings, not timestamps — confirmed wrong tool
-     before ruling it out).
-   - **Call Sheet** (`app/(staff)/call-sheet/page.tsx`,
-     `components/call-sheet-browser.tsx`): the `locker_occupancy` select
-     now also fetches `client_id, guest_label, clients(codename)`. Entries
-     split into `inProgress` (fresh) / `needsCheckout` (stale); all
-     existing time-slot filtering, the "Total: X massages…" count, and the
-     JPEG export are unchanged and now scoped to `inProgress` only. New
-     read-only "Needs checkout — N from a prior spa-day" section renders
-     below the existing table (locker, room, service, guest/client,
-     checked-in-at) — no action buttons, matching the prompt's spec;
-     checkout stays exclusively on the Lockers page.
-   - **Lockers page** (`app/(staff)/lockers/page.tsx`,
-     `components/locker-board.tsx`): each occupancy entry gains a `stale`
-     boolean (same `toSpaDay` check). Locker Board tiles for stale
-     occupants get a dashed rust border + red label + "Since yesterday"
-     tag instead of the normal gold-solid-border styling — still blocked
-     from reassignment and still use the same unmodified `checkOutLocker`
-     Check-Out button. New "`N` lockers need checkout" badge next to the
-     existing "`X / Y` occupied" count.
-   - **Known residual gap, explicitly not fixed here (do-not-touch scope)**:
-     `components/booking-browser.tsx`'s Check-in/Check-out tab derivation
-     (keyed off `bookings.status` + `occupancyOf()`) still shows a stale
-     row stuck in "Check-in" for that booking's date indefinitely — a
-     separate read path from Call Sheet/Lockers, untouched by this prompt.
-   - `npx tsc --noEmit` clean. **Not verified live in-browser** — no
-     `.env.local`/Supabase env vars configured in this sandbox (confirmed
-     `next dev` itself starts and compiles cleanly under Turbopack; the
-     500 is `proxy.ts` throwing on missing
-     `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`) — same
-     recurring environment gap as every other session this week. Verified
-     instead via `tsc` and direct trace of the render logic. See
-     [[operations_state]].
+5. **2026-09-02 — Wet Area read-only therapist assignment & promo code exemption in Log Visit modal**
+   (`ohm#7n4k9wx3`). Plan + regression risk assessment approved before code execution.
+   `LogVisitModal` updated to make Therapist field read-only when linked to an existing booking,
+   and disabled/exempted for Wet Area services. `npx tsc --noEmit` clean.
+   See [[bookings_state]] and `.ai/handoff.md`.
 

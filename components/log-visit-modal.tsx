@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { logVisitBooking } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
+import { ScanMemberQrModal, type ScannedClient } from "@/components/scan-member-qr-modal";
 import type {
   Addon,
   Client,
@@ -83,6 +84,46 @@ export function LogVisitModal({
   const [guestLabel, setGuestLabel] = useState<string | null>(
     initialBooking?.guest_label ?? null
   );
+
+  const isGuestOrigin = useMemo(
+    () => (initialBooking ? !initialBooking.client_id : !initialClientId),
+    [initialBooking, initialClientId]
+  );
+
+  const [clientLinkQuery, setClientLinkQuery] = useState("");
+  const [showClientLinkResults, setShowClientLinkResults] = useState(false);
+  const [showScanQrModal, setShowScanQrModal] = useState(false);
+  const [scannedFallback, setScannedFallback] = useState<{
+    codename: string;
+    username: string;
+  } | null>(null);
+
+  const matchingClients = useMemo(() => {
+    if (!clientLinkQuery.trim()) return [];
+    const q = clientLinkQuery.toLowerCase();
+    return clients
+      .filter(
+        (c) =>
+          c.codename.toLowerCase().includes(q) ||
+          c.username.toLowerCase().includes(q)
+      )
+      .slice(0, 8);
+  }, [clientLinkQuery, clients]);
+
+  function handleScanResolved(scannedClient: ScannedClient) {
+    setShowScanQrModal(false);
+    setClientId(scannedClient.id);
+    setGuestLabel(null);
+    const foundInClients = clients.some((c) => c.id === scannedClient.id);
+    if (!foundInClients) {
+      setScannedFallback({
+        codename: scannedClient.codename,
+        username: scannedClient.username,
+      });
+    } else {
+      setScannedFallback(null);
+    }
+  }
 
   const [date, setDate] = useState(initialBooking?.booking_date ?? todayIso());
   const [serviceId, setServiceId] = useState<string>(
@@ -294,7 +335,7 @@ export function LogVisitModal({
     discountValue,
   ]);
 
-  const canEarnRedeem = !clientId || !!selectedClient?.has_portal_account;
+  const canEarnRedeem = !clientId || !!selectedClient?.has_portal_account || !!scannedFallback;
 
   const canSubmit =
     !isPending &&
@@ -389,12 +430,77 @@ export function LogVisitModal({
         <p className="mt-0.5 text-xs text-muted">
           {selectedClient
             ? `${selectedClient.codename} · @${selectedClient.username}`
+            : scannedFallback
+            ? `${scannedFallback.codename} · @${scannedFallback.username}`
             : guestLabel ?? "Walk-in Guest"}
         </p>
+        {isGuestOrigin && clientId !== null && (
+          <button
+            type="button"
+            onClick={() => {
+              setClientId(null);
+              setGuestLabel(linkedBooking?.guest_label ?? guestLabel ?? null);
+              setScannedFallback(null);
+            }}
+            className="mt-1 text-xs text-gold hover:underline block"
+          >
+            Unlink account (back to walk-in)
+          </button>
+        )}
         {!canEarnRedeem && (
           <p className="mt-1 text-xs text-accent-red">
             Walang portal account — hindi pa mag-eearn/redeem ng points.
           </p>
+        )}
+
+        {!clientId && (
+          <div className="mt-3 rounded-lg border border-border bg-background/50 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-foreground">
+                Link to Client Account <span className="text-muted font-normal">(optional — enables points)</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowScanQrModal(true)}
+                className="rounded border border-border bg-surface px-2 py-1 text-xs text-foreground hover:border-gold/50"
+              >
+                Scan QR
+              </button>
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search client by codename or username…"
+                value={clientLinkQuery}
+                onChange={(e) => {
+                  setClientLinkQuery(e.target.value);
+                  setShowClientLinkResults(true);
+                }}
+                className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground focus:border-gold outline-none"
+              />
+              {showClientLinkResults && matchingClients.length > 0 && (
+                <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-border bg-background shadow-lg">
+                  {matchingClients.map((client) => (
+                    <button
+                      key={client.id}
+                      type="button"
+                      onClick={() => {
+                        setClientId(client.id);
+                        setGuestLabel(null);
+                        setScannedFallback(null);
+                        setClientLinkQuery("");
+                        setShowClientLinkResults(false);
+                      }}
+                      className="block w-full px-3 py-2 text-left text-xs text-foreground hover:bg-gold/10 border-b border-border last:border-0"
+                    >
+                      <span className="font-semibold text-gold">{client.codename}</span>{" "}
+                      <span className="text-muted">(@{client.username})</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
         <div className="mt-5 space-y-4">
@@ -680,8 +786,8 @@ export function LogVisitModal({
               </label>
               <input
                 id="fPoints"
-                type="number"
-                value={pointsDelta}
+                type={clientId ? "number" : "text"}
+                value={clientId ? pointsDelta : "N/A — no account linked"}
                 disabled
                 className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground opacity-70"
               />
@@ -778,6 +884,14 @@ export function LogVisitModal({
           </button>
         </div>
       </div>
+      {showScanQrModal && (
+        <div className="relative z-[60]">
+          <ScanMemberQrModal
+            onClose={() => setShowScanQrModal(false)}
+            onResolved={handleScanResolved}
+          />
+        </div>
+      )}
     </div>
   );
 }

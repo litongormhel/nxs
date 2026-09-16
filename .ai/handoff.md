@@ -5,6 +5,16 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Log Visit — link walk-in to client account (manual search + QR scan) + hide misleading points for unlinked guests — complete**
+  (`ohm#3k7yqxpz`, 2026-09-16).
+  - Implementation plan & regression risk assessment presented and approved before code execution.
+  - Confined strictly to `components/log-visit-modal.tsx`, reusing `ScanMemberQrModal` and `resolveMemberQr` server action as-is.
+  - **Fix A**: When `!clientId`, rendered "Added Points (auto)" field as a disabled text input showing `"N/A — no account linked"`. When `clientId` is set, preserved numeric `pointsDelta` display.
+  - **Fix B**: Added collapsible "Link to Client Account (optional — enables points)" search box (case-insensitive substring match on `clients` prop by `codename` or `username`, capped at 8 results) placed right after header subtitle/warning block and before "Find Booking", visible only when `!clientId`. Selecting a client updates `clientId`, clears `guestLabel`, and closes dropdown.
+  - **Fix C**: Added "Scan QR" button inside the Link to Client Account header box (visible only when `!clientId`). Opens `<ScanMemberQrModal>` as a nested overlay with stacking z-index (`z-[60]`). Auto-links immediately on resolve (`onResolved`).
+  - **Unlink (undo)**: Evaluated `isGuestOrigin` (`initialBooking ? !initialBooking.client_id : !initialClientId`) once at open. When `isGuestOrigin && clientId !== null`, renders "Unlink account (back to walk-in)" text button to revert to walk-in guest label. Hidden for actual registered client bookings (`isGuestOrigin === false`).
+  - `npx tsc --noEmit` and `npm run build` clean.
+
 - **Fix Walk-in Client Mis-link Bug & Reorder Log Visit Modal Fields — complete**
   (`ohm#7f3k2m9p`, 2026-09-16).
   - Implementation plan & regression risk assessment presented and approved before code execution.
