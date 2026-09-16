@@ -82,7 +82,16 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-16 — Add Supabase keep-alive cron to prevent free-tier pause**
+1. **2026-09-16 — Fix Walk-in Client Mis-link Bug & Reorder Log Visit Modal Fields**
+   (`ohm#7f3k2m9p`). Implementation plan & regression risk assessment presented and
+   approved before code execution. Fixed client state initialization in `LogVisitModal`
+   (`components/log-visit-modal.tsx`) where walk-in guest bookings (`client_id: null`)
+   erroneously fell back to `clients[0]?.id`. Reordered modal fields to: Availed
+   Service → Upgrade Box → Manual Discount → Promo Code → Add-ons → Points/Amount Paid →
+   Payment Method (standalone full-width) → GCash Ref → Staff. `npx tsc --noEmit` clean.
+   See [[bookings_state]] and `.ai/handoff.md`.
+
+2. **2026-09-16 — Add Supabase keep-alive cron to prevent free-tier pause**
    (`ohm#rzx46p4g`). Implementation plan & regression risk assessment presented
    and approved before code execution. Created `app/api/keep-alive/route.ts`
    GET endpoint executing a head select query against `addons` using
@@ -90,7 +99,7 @@ Full invariant list: [[nxs-architecture-locks]].
    entry (`0 0 * * *`) hitting `/api/keep-alive` in `vercel.json`. `npx tsc --noEmit`
    clean. See [[settings_state]] and `.ai/handoff.md`.
 
-2. **2026-09-02 — toggleDayOff Missing Bulk-Reassignment Step + Manual
+3. **2026-09-02 — toggleDayOff Missing Bulk-Reassignment Step + Manual
    Cleanup** (`ohm#9x4r7b2q`). Diff + exact UPDATE statements presented and
    approved before any code/SQL was executed, per the prompt's mandatory
    gate. `toggleDayOff()` in `app/(staff)/therapists/actions.ts` wrote/
@@ -116,7 +125,7 @@ Full invariant list: [[nxs-architecture-locks]].
    held up, only the citation didn't. See [[bookings_state]] and
    `.ai/handoff.md`.
 
-3. **2026-09-02 — New Booking — Status-Aware Therapist Dropdown + DB-Level
+4. **2026-09-02 — New Booking — Status-Aware Therapist Dropdown + DB-Level
    Availability Gate** (`ohm#j4m8v2xq`). Fixes a bug where a Day-Off
    therapist (Leo) could be saved on a booking — the therapist dropdown had
    no availability awareness at all beyond live time/room conflicts, and
@@ -144,7 +153,7 @@ Full invariant list: [[nxs-architecture-locks]].
    hit the same recurring Windows working-directory bug as every other
    session this week. See [[bookings_state]] and [[therapists_state]].
 
-4. **2026-09-02 — Call Sheet / Lockers — Stale Occupancy Filter + Nudge**
+5. **2026-09-02 — Call Sheet / Lockers — Stale Occupancy Filter + Nudge**
    (`ohm#3n8w5tqf`, implements approaches A + C from audit `ohm#7q2m9xk4`;
    approach B, auto-checkout, stays explicitly out of scope pending its own
    future prompt). UI/display-layer only — no schema, RLS, writer, trigger,
@@ -190,26 +199,4 @@ Full invariant list: [[nxs-architecture-locks]].
      recurring environment gap as every other session this week. Verified
      instead via `tsc` and direct trace of the render logic. See
      [[operations_state]].
-
-5. **2026-09-02 — Quick Walk-in — Live Time-Slot Greying by Therapist**
-   (`ohm#9x4k2wr7`). UI-only — no schema/writer/RLS changes. Plan +
-   regression risk assessment presented and approved before any code was
-   written, per the prompt's mandatory gate. Reference implementation was
-   `booking-form-modal.tsx` (New Booking), already correct and left
-   read-only. Added a `takenSlots` useMemo to `quick-walkin-modal.tsx`
-   (`components/quick-walkin-modal.tsx:150`), logic ported verbatim from
-   New Booking's version: a slot is taken if the selected `therapistId`
-   has an overlapping conflict (via `slotsOverlap`) or zero free rooms
-   remain for that slot. Time Slot grid buttons
-   (`components/quick-walkin-modal.tsx:449`) now `disabled={taken ||
-   useCustomTime}` and use the same taken/selected/default className
-   branching as New Booking (dashed/struck-through/greyed for taken,
-   gold gradient for selected). The pre-existing `takenTherapists`
-   greying (selected time → taken therapists in the dropdown) is
-   untouched — both directions now coexist, matching New Booking's dual
-   `takenSlots` + `conflictingTherapists` pattern. No changes to
-   `app/(staff)/bookings/actions.ts`, `quickWalkin()`, the
-   `public.quick_walkin(...)` RPC, `lib/bookings/slots.ts`, or
-   `booking-form-modal.tsx`. `npx tsc --noEmit` clean. See
-   [[bookings_state]] and `.ai/handoff.md`.
 

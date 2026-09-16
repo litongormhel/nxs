@@ -78,7 +78,7 @@ export function LogVisitModal({
   const [showBookingResults, setShowBookingResults] = useState(false);
 
   const [clientId, setClientId] = useState<string | null>(
-    initialBooking?.client_id ?? initialClientId ?? clients[0]?.id ?? null
+    initialBooking ? initialBooking.client_id : (initialClientId ?? clients[0]?.id ?? null)
   );
   const [guestLabel, setGuestLabel] = useState<string | null>(
     initialBooking?.guest_label ?? null
@@ -623,6 +623,27 @@ export function LogVisitModal({
             )}
           </div>
 
+          {/* Promo Code */}
+          <div>
+            <label className="text-xs text-muted" htmlFor="fPromo">
+              Promo Code <span className="opacity-70">(optional — one discount at a time)</span>
+            </label>
+            <select
+              id="fPromo"
+              value={promoId}
+              disabled={manualDiscountOn}
+              onChange={(e) => onPromoChange(e.target.value)}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none disabled:opacity-50"
+            >
+              <option value="none">None</option>
+              {promos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label} (−₱{p.discount})
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Add-ons Box */}
           {addons.length > 0 && (
             <div className="rounded-lg border border-border p-3">
@@ -679,47 +700,26 @@ export function LogVisitModal({
             </div>
           </div>
 
-          {/* Payment Method & Promo */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted" htmlFor="fPayment">
-                Payment Method
-              </label>
-              <select
-                id="fPayment"
-                value={paymentMethod}
-                onChange={(e) =>
-                  setPaymentMethod(
-                    e.target.value as "Cash" | "GCash" | "Card" | "Points"
-                  )
-                }
-                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
-              >
-                <option value="Cash">Cash</option>
-                <option value="GCash">GCash</option>
-                <option value="Card">Card</option>
-                <option value="Points">Points</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted" htmlFor="fPromo">
-                Promo Code <span className="opacity-70">(optional — one discount at a time)</span>
-              </label>
-              <select
-                id="fPromo"
-                value={promoId}
-                disabled={manualDiscountOn}
-                onChange={(e) => onPromoChange(e.target.value)}
-                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none disabled:opacity-50"
-              >
-                <option value="none">None</option>
-                {promos.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label} (−₱{p.discount})
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Payment Method */}
+          <div>
+            <label className="text-xs text-muted" htmlFor="fPayment">
+              Payment Method
+            </label>
+            <select
+              id="fPayment"
+              value={paymentMethod}
+              onChange={(e) =>
+                setPaymentMethod(
+                  e.target.value as "Cash" | "GCash" | "Card" | "Points"
+                )
+              }
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+            >
+              <option value="Cash">Cash</option>
+              <option value="GCash">GCash</option>
+              <option value="Card">Card</option>
+              <option value="Points">Points</option>
+            </select>
           </div>
 
           {/* GCash Ref */}

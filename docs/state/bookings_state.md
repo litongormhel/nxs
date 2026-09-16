@@ -89,6 +89,7 @@
   or `Cancel` calls `updateBookingStatus` server action and immediately reloads.
 - `components/log-visit-modal.tsx` — **Log Visit** modal with full HTML mockup parity
   (`#modalScrim` and screenshot):
+  - Client state initializer (`clientId`) respects `initialBooking.client_id` even when `null` for walk-in guest bookings (`ohm#7f3k2m9p`, 2026-09-16).
   - Find Booking search with live suggestions of open bookings (`Booked` / `Needs Reassignment`)
     and `Linked: [Name] · Room [X]` badge.
   - Date of Visit & Therapist field: read-only display (shows the
@@ -97,12 +98,7 @@
     search; editable dropdown for walk-ins (no linked booking); disabled/
     exempted for Wet Area in both cases (`ohm#7n4k9wx3`, 2026-09-02).
   - Assign Locker dropdown (shows free lockers).
-  - Availed Service dropdown (services + points preview, plus `Redeem: Combi Massage Reward (−100 pts)`).
-  - Cash upgrade section for redemptions (`Upgraded with cash top-up`).
-  - Manual discount box (`Manual discount (e.g. Senior or PWD)` with Percentage / Fixed ₱).
-  - Add-ons checklist (+₱50 Towel, etc.).
-  - Auto-calculated read-only Added Points and Amount Paid (₱).
-  - Payment Method select (Cash, GCash, Card, Points) and Promo Code dropdown.
+  - Field order (`ohm#7f3k2m9p`, 2026-09-16): Availed Service → Upgrade Box (conditional) → Manual Discount → **Promo Code** (standalone dropdown) → **Add-ons** checklist → Points & Amount Paid (2-column auto-calc grid) → **Payment Method** (standalone dropdown) → GCash Ref (conditional) → Staff attribution.
 - `app/bookings/actions.ts` — `logVisitBooking` server action handles complete visit logging
   (marks booking `Completed`, inserts `sales`, `sale_addons`, `point_transactions`, `locker_occupancy`,
   and `action_logs` in one atomic flow); `updateBookingStatus` handles status transitions.

@@ -5,6 +5,14 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Fix Walk-in Client Mis-link Bug & Reorder Log Visit Modal Fields — complete**
+  (`ohm#7f3k2m9p`, 2026-09-16).
+  - Implementation plan & regression risk assessment presented and approved before code execution.
+  - **Problem 1 (Bug)**: In `LogVisitModal` (`components/log-visit-modal.tsx`), client state initialization `initialBooking?.client_id ?? initialClientId ?? clients[0]?.id ?? null` evaluated `null ?? ...` when `initialBooking` was present but its `client_id` was `null` (walk-in guest booking). This fell through to `clients[0]?.id`, causing walk-in bookings to falsely link to the alphabetically first client.
+  - **Fix 1**: Changed initializer to `initialBooking ? initialBooking.client_id : (initialClientId ?? clients[0]?.id ?? null)` to respect `initialBooking.client_id` even when `null`.
+  - **Reorder 2**: Reordered fields in `LogVisitModal` JSX body: Availed Service → Upgrade Box (conditional) → Manual Discount → **Promo Code** (standalone field) → **Add-ons** (moved right after Promo Code) → Points/Amount Paid → **Payment Method** (standalone full-width field) → GCash Ref → Staff.
+  - `npx tsc --noEmit` clean.
+
 - **Supabase keep-alive cron — complete** (`ohm#rzx46p4g`, 2026-09-16).
   - Implementation plan & regression risk assessment presented and approved before code execution.
   - Added `app/api/keep-alive/route.ts` GET endpoint executing `supabase.from("addons").select("id", { count: "exact", head: true })` using `createClient()` from `@/lib/supabase/server`.
