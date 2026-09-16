@@ -5,6 +5,13 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Supabase keep-alive cron — complete** (`ohm#rzx46p4g`, 2026-09-16).
+  - Implementation plan & regression risk assessment presented and approved before code execution.
+  - Added `app/api/keep-alive/route.ts` GET endpoint executing `supabase.from("addons").select("id", { count: "exact", head: true })` using `createClient()` from `@/lib/supabase/server`.
+  - Added daily Vercel cron configuration (`0 0 * * *`) hitting `/api/keep-alive` to `vercel.json`.
+  - Prevents Supabase free-tier project (`zqwiqrvqyinacjozubtc`) auto-pause caused by 7 days of inactivity.
+  - `npx tsc --noEmit` clean.
+
 - **toggleDayOff Missing Bulk-Reassignment Step + Manual Cleanup — complete**
   (`ohm#9x4r7b2q`, 2026-09-02). Diff + exact UPDATE statements presented and
   approved before any code/SQL was executed, per the prompt's mandatory gate.

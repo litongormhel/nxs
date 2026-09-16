@@ -258,3 +258,16 @@ wiring detail.
 the user as correct to leave unpersisted, since it's a per-device
 preference, not app state that needs to survive a refresh or be shared
 across sessions.
+
+## Supabase Keep-Alive Cron (`ohm#rzx46p4g`, 2026-09-16)
+
+Adds a lightweight keep-alive endpoint and Vercel cron configuration to prevent
+the Supabase free-tier project (`zqwiqrvqyinacjozubtc`) from auto-pausing after
+7 days of inactivity.
+
+- **Route handler**: `app/api/keep-alive/route.ts` (GET route handler). Uses
+  `createClient()` from `lib/supabase/server.ts` (`@supabase/ssr` server
+  client) to execute a head query on `addons` (`supabase.from("addons").select("id", { count: "exact", head: true })`).
+- **Response**: Returns `{ ok: true }` (200 OK) or `{ ok: false, error }` (500 Internal Server Error). Exposes no query results or sensitive data in the body.
+- **Cron schedule**: Configured in `vercel.json` as `"crons": [{ "path": "/api/keep-alive", "schedule": "0 0 * * *" }]` (runs daily at 00:00 UTC).
+

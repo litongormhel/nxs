@@ -82,7 +82,15 @@ Full invariant list: [[nxs-architecture-locks]].
 
 (Newest on top, keep only 5.)
 
-1. **2026-09-02 — toggleDayOff Missing Bulk-Reassignment Step + Manual
+1. **2026-09-16 — Add Supabase keep-alive cron to prevent free-tier pause**
+   (`ohm#rzx46p4g`). Implementation plan & regression risk assessment presented
+   and approved before code execution. Created `app/api/keep-alive/route.ts`
+   GET endpoint executing a head select query against `addons` using
+   `createClient()` from `@/lib/supabase/server`. Added a daily Vercel cron
+   entry (`0 0 * * *`) hitting `/api/keep-alive` in `vercel.json`. `npx tsc --noEmit`
+   clean. See [[settings_state]] and `.ai/handoff.md`.
+
+2. **2026-09-02 — toggleDayOff Missing Bulk-Reassignment Step + Manual
    Cleanup** (`ohm#9x4r7b2q`). Diff + exact UPDATE statements presented and
    approved before any code/SQL was executed, per the prompt's mandatory
    gate. `toggleDayOff()` in `app/(staff)/therapists/actions.ts` wrote/
@@ -108,7 +116,7 @@ Full invariant list: [[nxs-architecture-locks]].
    held up, only the citation didn't. See [[bookings_state]] and
    `.ai/handoff.md`.
 
-2. **2026-09-02 — New Booking — Status-Aware Therapist Dropdown + DB-Level
+3. **2026-09-02 — New Booking — Status-Aware Therapist Dropdown + DB-Level
    Availability Gate** (`ohm#j4m8v2xq`). Fixes a bug where a Day-Off
    therapist (Leo) could be saved on a booking — the therapist dropdown had
    no availability awareness at all beyond live time/room conflicts, and
@@ -136,7 +144,7 @@ Full invariant list: [[nxs-architecture-locks]].
    hit the same recurring Windows working-directory bug as every other
    session this week. See [[bookings_state]] and [[therapists_state]].
 
-3. **2026-09-02 — Call Sheet / Lockers — Stale Occupancy Filter + Nudge**
+4. **2026-09-02 — Call Sheet / Lockers — Stale Occupancy Filter + Nudge**
    (`ohm#3n8w5tqf`, implements approaches A + C from audit `ohm#7q2m9xk4`;
    approach B, auto-checkout, stays explicitly out of scope pending its own
    future prompt). UI/display-layer only — no schema, RLS, writer, trigger,
@@ -183,7 +191,7 @@ Full invariant list: [[nxs-architecture-locks]].
      instead via `tsc` and direct trace of the render logic. See
      [[operations_state]].
 
-4. **2026-09-02 — Quick Walk-in — Live Time-Slot Greying by Therapist**
+5. **2026-09-02 — Quick Walk-in — Live Time-Slot Greying by Therapist**
    (`ohm#9x4k2wr7`). UI-only — no schema/writer/RLS changes. Plan +
    regression risk assessment presented and approved before any code was
    written, per the prompt's mandatory gate. Reference implementation was
@@ -204,23 +212,4 @@ Full invariant list: [[nxs-architecture-locks]].
    `public.quick_walkin(...)` RPC, `lib/bookings/slots.ts`, or
    `booking-form-modal.tsx`. `npx tsc --noEmit` clean. See
    [[bookings_state]] and `.ai/handoff.md`.
-
-5. **2026-09-02 — Log Visit — Conditional Therapist Field** (`ohm#7n4k9wx3`).
-   UI-only — no schema/writer/RLS changes. Plan + regression risk
-   assessment presented and approved before any code was written, per the
-   prompt's mandatory gate. `LogVisitModal`'s Therapist field reused the
-   existing `linkedBooking` memo (the same condition driving the
-   `Linked: [Name] · Room [X]` badge) to render read-only text
-   (`therapists.find(t => t.id === linkedBooking.therapist_id)?.name`,
-   falls back to `"— unassigned —"`) once a booking is linked via Find
-   Booking search, instead of the always-editable dropdown — the
-   therapist was already assigned at New Booking time and shouldn't be
-   re-editable from Log Visit. Wet Area exemption (checked first) and the
-   walk-in editable-dropdown path are both unchanged. No new state —
-   `therapistId` is still populated by the existing `linkBooking()` call
-   and is what's actually submitted to `logVisitBooking`, so the write
-   path is untouched. `npx tsc --noEmit` clean. **Not verified live
-   in-browser** — same recurring Windows preview-harness
-   working-directory bug noted in prior entries (unrelated to this
-   change). See [[bookings_state]] and `.ai/handoff.md`.
 
