@@ -80,34 +80,34 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-17 — Align Quick Walk-in Split Payment UI to dropdown option "Split (Cash + GCash)"**
+1. **2026-09-17 — Scale down Call Sheet typography and row density to match Bookings table styling**
+   (`ohm#callsheettypography`).
+   - **Table Header & Filter Controls (`components/call-sheet-browser.tsx`)**: Standardized header text size to `text-xs font-medium tracking-wider uppercase text-muted` with `px-4 py-2.5` padding. Scaled filter pill buttons to `px-3.5 py-1.5 text-xs font-semibold`.
+   - **Row Cell Density & Typography (`components/call-sheet-browser.tsx`)**: Reduced row padding from `px-6 py-5` to `px-4 py-2.5 text-sm`. Scaled Locker/Room to `font-mono text-sm font-medium text-foreground`, Service to `text-sm font-medium text-gold`, Therapist to `text-sm text-foreground`, Client to `text-sm font-semibold text-foreground`, Time to `font-mono text-xs text-muted`, and Status badges to `px-2.5 py-0.5 text-xs`.
+   - `npm run build` clean. See [[operations_state]] and `.ai/handoff.md`.
+
+2. **2026-09-17 — Align Quick Walk-in Split Payment UI to dropdown option "Split (Cash + GCash)"**
    (`ohm#quickwalkindropdownsplit`). Implementation plan presented and approved before code execution.
    - **Split Payment Dropdown Option (`components/quick-walkin-modal.tsx`)**: Removed standalone `Split Payment` checkbox. Added `Split (Cash + GCash)` directly to Payment Method dropdown options (`Cash`, `GCash`, `Card`, `Maya`, `Split (Cash + GCash)`).
    - **Dual Column Inputs & Auto-balancing (`components/quick-walkin-modal.tsx`)**: Renders side-by-side `Cash Amount (₱)` and `GCash Amount (₱)` inputs with auto-balancing and validation feedback. Reference number field displayed when GCash amount > 0.
    - **Backend Action Parameter Alignment (`app/(staff)/bookings/actions.ts`)**: Updated `quickWalkin` action to extract `splitCashAmount` and `splitGcashAmount`, preserving backend split sales ledger logic.
    - `npm run build` clean. See [[bookings_state]], [[sales_state]], and `.ai/handoff.md`.
 
-2. **2026-09-17 — Remove ACTION column and Check Out buttons from Bookings page**
+3. **2026-09-17 — Remove ACTION column and Check Out buttons from Bookings page**
    (`ohm#rembookingact`).
    - **Check-in Tab Cleanup (`components/booking-browser.tsx`)**: Removed `ACTION` table header (`<th>ACTION</th>`) and `Check Out` button cell (`<td><button ...>Check Out</button></td>`) under the **Check-in** tab table.
    - **Unused State & Modal Clean Up (`components/booking-browser.tsx`)**: Removed `CheckoutConfirmModal` import and `checkoutTarget` state binding from `BookingBrowser`.
    - **Clean Grid Alignment (`components/booking-browser.tsx`)**: Re-aligned Check-in table columns cleanly to 8 columns: `EDIT`, `MASSAGE TIME`, `CLIENT`, `SERVICE`, `ROOM`, `THERAPIST`, `CHECK-IN TIME`, `LOCKER #`. Locker checkout remains strictly protected in the Lockers tab (`components/locker-board.tsx`).
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-17 — Add Quick Search Bar and Time Slot Filters to Bookings Page**
+4. **2026-09-17 — Add Quick Search Bar and Time Slot Filters to Bookings Page**
    (`ohm#bookingfilterbar`). Implementation plan presented and approved before code execution.
    - **Quick Search & Filter Controls (`components/booking-browser.tsx`)**: Placed responsive Filter Bar controls directly above active tab table. Added `searchQuery` (instant client-side substring search on client codename/guest label and locker number with clear 'x' button) and `selectedTimeSlot` (`All` + operating-day sorted time slot pills with active gold highlight).
    - **Record Counter & Empty State (`components/booking-browser.tsx`)**: Displays reactive record counter (`Showing X of Y bookings` / `Showing Y bookings`). Displays inline empty state `No bookings match your search or filter criteria.` when no records match filter criteria.
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-17 — Port Split Payment support to Quick Walk-in Modal**
+5. **2026-09-17 — Port Split Payment support to Quick Walk-in Modal**
    (`ohm#quickwalkinsplitpay`). Implementation plan presented and approved before code execution.
    - **Split Payment UI & Auto-balancing (`components/quick-walkin-modal.tsx`)**: Added `Split Payment` checkbox toggle with state for `isSplitPayment`, `splitMethod1`, `splitAmount1`, `splitMethod2`, `splitAmount2`, and `lastEditedSplitField`. Added auto-balancing logic (`Method 1 + Method 2 === Total Amount`) and validation error badge.
    - **Backend Action Support (`app/(staff)/bookings/actions.ts`)**: Updated `QuickWalkinInput` type to support split payment fields. Updated `quickWalkin` action to insert 2 distinct `sales` entries for split payment channels, guaranteeing accurate shift remittance.
    - `npm run build` clean. See [[bookings_state]], [[sales_state]], and `.ai/handoff.md`.
-
-5. **2026-09-17 — Add Massage Time & Enforce 12-Hour Format in Walk-In Visit History Drawer**
-   (`ohm#walkindrawertimeformat`). Implementation plan presented and approved before code execution.
-   - **12-Hour Time Format Helper (`components/client-browser.tsx`)**: Created `formatTime` helper using `toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })` to format `"HH:mm"` / `"HH:mm:ss"` times into standard 12-hour AM/PM format (e.g. `11:30 PM`). Updated visit card header to display date and formatted time (e.g., `Sep 17, 2026 · 11:30 PM`).
-   - **Massage Time Details Block (`components/client-browser.tsx`)**: Added a dedicated `MASSAGE TIME` block inside each visit item card details grid displaying formatted 12-hour massage start time or `None (Wet Area)`.
-   - `npm run build` clean. See [[clients_state]] and `.ai/handoff.md`.

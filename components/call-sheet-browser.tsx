@@ -204,14 +204,14 @@ export function CallSheetBrowser({
   return (
     <div className="max-w-5xl space-y-6">
       <div className="mb-2">
-        <div className="text-sm font-bold tracking-[0.13em] uppercase text-muted mb-3">
+        <div className="text-xs font-bold tracking-[0.13em] uppercase text-muted mb-3">
           Call Sheet — Locker / Room / Service / Thera / Client
         </div>
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => setTimeFilter("all")}
             className={
-              "shrink-0 rounded-lg border px-5 py-2.5 text-base font-bold transition " +
+              "shrink-0 rounded-md border px-3.5 py-1.5 text-xs font-semibold transition " +
               (timeFilter === "all"
                 ? "border-[#a97e2e] bg-[#c89b3c]/15 text-accent-gold"
                 : "border-border bg-surface-2 text-muted hover:text-foreground")
@@ -225,7 +225,7 @@ export function CallSheetBrowser({
                 key={t}
                 onClick={() => setTimeFilter(t)}
                 className={
-                  "shrink-0 rounded-lg border px-5 py-2.5 text-base font-bold transition " +
+                  "shrink-0 rounded-md border px-3.5 py-1.5 text-xs font-semibold transition " +
                   (t === timeFilter
                     ? "border-[#a97e2e] bg-[#c89b3c]/15 text-accent-gold"
                     : "border-border bg-surface-2 text-muted hover:text-foreground")
@@ -240,7 +240,7 @@ export function CallSheetBrowser({
 
       <div className="rounded-xl border border-border bg-surface overflow-hidden">
         <div
-          className="grid gap-4 border-b border-border px-6 py-4 text-sm font-bold tracking-wider uppercase text-muted items-center"
+          className="grid gap-4 border-b border-border px-4 py-2.5 text-xs font-medium tracking-wider uppercase text-muted items-center"
           style={{
             gridTemplateColumns: isAllTab
               ? "0.8fr 0.8fr 1.5fr 1fr 1.2fr 1fr 1.1fr"
@@ -256,7 +256,7 @@ export function CallSheetBrowser({
           {isAllTab && <div>Status</div>}
         </div>
         {filtered.length === 0 ? (
-          <div className="px-6 py-8 text-lg text-muted">No massages match this time.</div>
+          <div className="px-4 py-6 text-xs text-muted">No massages match this time.</div>
         ) : (
           filtered.map((e) => {
             const status = getSlotStatus(e.slot_time, e.duration_minutes ?? 90, e.checked_in_at);
@@ -264,7 +264,7 @@ export function CallSheetBrowser({
               <div
                 key={e.id}
                 className={
-                  "grid gap-4 border-b border-border px-6 py-5 text-lg last:border-b-0 items-center " +
+                  "grid gap-4 border-b border-border px-4 py-2.5 text-sm last:border-b-0 items-center " +
                   (isAllTab && status === "done" ? "opacity-60" : "")
                 }
                 style={{
@@ -273,31 +273,31 @@ export function CallSheetBrowser({
                     : "0.8fr 0.8fr 1.5fr 1fr 1.2fr",
                 }}
               >
-                <div className="text-foreground">{e.locker_number}</div>
-                <div className="text-muted">{e.room_number ?? "—"}</div>
-                <div className="font-semibold text-accent-gold">{e.service_name}</div>
-                <div className="text-muted">{e.therapist_name ?? "—"}</div>
-                <div className="font-semibold text-foreground">{e.client_codename ?? "—"}</div>
+                <div className="font-mono text-sm font-medium text-foreground">{e.locker_number}</div>
+                <div className="font-mono text-sm font-medium text-foreground">{e.room_number ?? "—"}</div>
+                <div className="text-sm font-medium text-gold">{e.service_name}</div>
+                <div className="text-sm text-foreground">{e.therapist_name ?? "—"}</div>
+                <div className="text-sm font-semibold text-foreground">{e.client_codename ?? "—"}</div>
                 {isAllTab && (
-                  <div className="font-mono text-base text-muted">
+                  <div className="font-mono text-xs text-muted">
                     {e.slot_time ? fmtTime(e.slot_time) : "—"}
                   </div>
                 )}
                 {isAllTab && (
                   <div>
                     {status === "ongoing" && (
-                      <span className="inline-flex items-center gap-1.5 rounded-md border border-[#C97A3E]/40 bg-[#C97A3E]/15 px-2.5 py-1 text-xs font-semibold text-[#C97A3E]">
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-[#C97A3E]/40 bg-[#C97A3E]/15 px-2.5 py-0.5 text-xs font-semibold text-[#C97A3E]">
                         <span className="h-1.5 w-1.5 rounded-full bg-[#C97A3E] animate-pulse" />
                         In Progress
                       </span>
                     )}
                     {status === "done" && (
-                      <span className="inline-flex items-center rounded-md border border-border/60 bg-surface-2 px-2.5 py-1 text-xs font-medium text-stone-500">
+                      <span className="inline-flex items-center rounded-md border border-border/60 bg-surface-2 px-2.5 py-0.5 text-xs font-medium text-stone-500">
                         Done
                       </span>
                     )}
                     {status === "upcoming" && (
-                      <span className="inline-flex items-center rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-stone-300">
+                      <span className="inline-flex items-center rounded-md border border-border bg-surface px-2.5 py-0.5 text-xs font-medium text-stone-300">
                         Upcoming
                       </span>
                     )}
@@ -310,14 +310,14 @@ export function CallSheetBrowser({
       </div>
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-base text-muted">
+        <div className="text-xs text-muted">
           Total: {filtered.length} massage{filtered.length === 1 ? "" : "s"}
           {timeFilter === "all" ? " in progress" : ` at ${fmtTime(timeFilter)}`}
         </div>
         {timeFilter !== "all" && (
           <button
             onClick={handleDownload}
-            className="rounded-lg border border-[#a97e2e] bg-surface px-5 py-2.5 text-base font-bold text-accent-gold transition hover:bg-[#c89b3c]/10"
+            className="rounded-md border border-[#a97e2e] bg-surface px-3.5 py-1.5 text-xs font-bold text-accent-gold transition hover:bg-[#c89b3c]/10"
           >
             Download JPEG
           </button>

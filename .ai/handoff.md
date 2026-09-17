@@ -5,6 +5,12 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Scale down Call Sheet typography and row density to match Bookings table styling — complete**
+  (`ohm#callsheettypography`, 2026-09-17).
+  - **Table Header & Filter Controls (`components/call-sheet-browser.tsx`)**: Standardized header text size to `text-xs font-medium tracking-wider uppercase text-muted` with `px-4 py-2.5` padding. Scaled filter pill buttons to `px-3.5 py-1.5 text-xs font-semibold`.
+  - **Row Cell Density & Typography (`components/call-sheet-browser.tsx`)**: Reduced row padding from `px-6 py-5` to `px-4 py-2.5 text-sm`. Scaled Locker/Room to `font-mono text-sm font-medium text-foreground`, Service to `text-sm font-medium text-gold`, Therapist to `text-sm text-foreground`, Client to `text-sm font-semibold text-foreground`, Time to `font-mono text-xs text-muted`, and Status badges to `px-2.5 py-0.5 text-xs`.
+  - `npm run build` clean. See [[operations_state]] and `.ai/briefing.md`.
+
 - **Align Quick Walk-in Split Payment UI to dropdown option "Split (Cash + GCash)" — complete**
   (`ohm#quickwalkindropdownsplit`, 2026-09-17).
   - Implementation plan presented and approved before code execution.
