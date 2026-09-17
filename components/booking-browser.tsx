@@ -970,7 +970,7 @@ function EditBookingModal({
       serviceId,
       therapistId: isMassageService && therapistId ? therapistId : null,
       roomNumber: isMassageService && roomNumber !== "" ? Number(roomNumber) : null,
-      startTime,
+      startTime: isMassageService ? startTime : null,
       lockerNumber: lockerNumber === "" ? null : Number(lockerNumber),
       staffId: sessionStaff.id,
     });
@@ -1132,36 +1132,38 @@ function EditBookingModal({
         )}
 
         {/* Massage Time / Schedule */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted">Massage Time / Schedule</label>
-          {timeSlots.length === 0 ? (
-            <p className="text-xs text-muted">No time slots available.</p>
-          ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-40 overflow-y-auto p-1 border border-border/50 rounded-lg">
-              {timeSlots.map((s) => {
-                const available = therapistId && isMassageService ? (availabilityMap[s] ?? true) : true;
-                const selected = startTime === s;
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    disabled={!available}
-                    onClick={() => setStartTime(s)}
-                    className={`rounded-md border px-2 py-1.5 font-mono text-xs transition-all ${
-                      !available
-                        ? "border-dashed border-border/70 text-red-400/50 line-through opacity-50 cursor-not-allowed bg-transparent"
-                        : selected
-                        ? "border-gold bg-gradient-to-br from-[#c89b3c] to-[#a97e2e] text-black font-bold shadow-sm"
-                        : "border-border bg-background text-foreground hover:border-gold/50"
-                    }`}
-                  >
-                    {fmtTime(s)}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        {isMassageService && (
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted">Massage Time / Schedule</label>
+            {timeSlots.length === 0 ? (
+              <p className="text-xs text-muted">No time slots available.</p>
+            ) : (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-40 overflow-y-auto p-1 border border-border/50 rounded-lg">
+                {timeSlots.map((s) => {
+                  const available = therapistId && isMassageService ? (availabilityMap[s] ?? true) : true;
+                  const selected = startTime === s;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      disabled={!available}
+                      onClick={() => setStartTime(s)}
+                      className={`rounded-md border px-2 py-1.5 font-mono text-xs transition-all ${
+                        !available
+                          ? "border-dashed border-border/70 text-red-400/50 line-through opacity-50 cursor-not-allowed bg-transparent"
+                          : selected
+                          ? "border-gold bg-gradient-to-br from-[#c89b3c] to-[#a97e2e] text-black font-bold shadow-sm"
+                          : "border-border bg-background text-foreground hover:border-gold/50"
+                      }`}
+                    >
+                      {fmtTime(s)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Locker # */}
         <div className="space-y-1">

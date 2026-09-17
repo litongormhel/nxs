@@ -428,6 +428,11 @@ Day-Off therapist (Leo) could be saved from New Booking.
 - **Dynamic Form Fields (`components/booking-browser.tsx`)**: Extended `EditBookingModal` to inspect selected service (`isMassageService = selectedService.name !== "Wet Area"`). Renders `Assign Room` dropdown when Massage is selected, computes same-day room availability at `startTime`, marks occupied rooms, and requires selecting both a **Room** and a **Therapist**. Automatically resets `room_number = null` and `therapist_id = null` when downgraded to Wet Area. Added **Price & Remittance Banner** showing original service price vs new service price, price difference (+₱X / -₱X), and updated sales remittance total. Passed `rooms={rooms}` from `BookingBrowser`.
 - **Backend Action & Sales Sync (`app/(staff)/bookings/actions.ts`)**: Updated `editBooking` server action to accept `roomNumber`. Enforces required Room and Therapist for massage services and clears them for Wet Area. Updates `bookings.room_number` and `locker_occupancy.room_number` simultaneously so Call Sheet immediately reflects room changes. Automatically adjusts active non-voided `sales.amount` by the price difference when service changes and updates `sales.service_id` and `sales.therapist_id`.
 
+**Correction, `ohm#editbkgwettimehide` (2026-09-17)** — Hide Massage Time / Schedule picker when service is downgraded to Wet Area in Edit Booking Modal.
+
+- **Conditional Schedule Selector (`components/booking-browser.tsx`)**: Wrapped **Massage Time / Schedule** section in `{isMassageService && (...)}`. When service is changed to "Wet Area", the schedule slot selector is completely hidden. Updated form payload in `handleConfirmSave` to pass `startTime: isMassageService ? startTime : null`.
+- **Server Action & Slot Release (`app/(staff)/bookings/actions.ts`)**: Updated `EditBookingInput.startTime` to `string | null`. Computed `finalStartTime` in `editBooking` action (`isMassageService ? input.startTime : (input.startTime ?? booking.start_time)`). Clearing `therapist_id` and `room_number` when downgraded to Wet Area immediately releases the booking from the `no_double_book_therapist` and `no_double_book_room` GiST exclusion constraints, freeing up the massage slot immediately for other bookings on that day.
+
 
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 

@@ -5,6 +5,19 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Hide Massage Time / Schedule Picker when Service Downgraded to Wet Area in Edit Booking Modal — complete**
+  (`ohm#editbkgwettimehide`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Conditional Schedule Picker Rendering (`components/booking-browser.tsx`)**:
+    - Wrapped **Massage Time / Schedule** section in `{isMassageService && (...)}`.
+    - When service is changed to "Wet Area", the schedule slot selector is completely hidden.
+    - Updated form payload in `handleConfirmSave` to pass `startTime: isMassageService ? startTime : null`.
+  - **Server Action Handling (`app/(staff)/bookings/actions.ts`)**:
+    - Updated `EditBookingInput.startTime` type to `string | null`.
+    - Computed `finalStartTime` in `editBooking` action (`isMassageService ? input.startTime : (input.startTime ?? booking.start_time)`).
+    - Clearing `therapist_id` and `room_number` when downgraded to Wet Area immediately releases the booking from the `no_double_book_therapist` and `no_double_book_room` GiST exclusion constraints, freeing up the massage slot immediately for other bookings on that day.
+  - `npm run build` clean. See [[bookings_state]] and `.ai/briefing.md`.
+
 - **Dynamic Room/Therapist Handling & Sales Adjustment in Edit Booking Modal — complete**
   (`ohm#editbkgsvcroom`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

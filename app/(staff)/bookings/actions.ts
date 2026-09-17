@@ -383,7 +383,7 @@ export type EditBookingInput = {
   serviceId: string;
   therapistId: string | null;
   roomNumber: number | null;
-  startTime: string;
+  startTime: string | null;
   lockerNumber: number | null;
   staffId: string;
 };
@@ -423,6 +423,7 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
 
   const finalTherapistId = isMassageService ? input.therapistId : null;
   const finalRoomNumber = isMassageService ? input.roomNumber : null;
+  const finalStartTime = isMassageService && input.startTime ? input.startTime : (input.startTime ?? booking.start_time);
 
   if (isMassageService && (!finalTherapistId || finalRoomNumber == null)) {
     return {
@@ -468,7 +469,7 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
   const serviceChanged = booking.service_id !== input.serviceId;
   const therapistChanged = (booking.therapist_id ?? null) !== finalTherapistId;
   const roomChanged = (booking.room_number ?? null) !== finalRoomNumber;
-  const timeChanged = booking.start_time !== input.startTime;
+  const timeChanged = booking.start_time !== finalStartTime;
   const lockerChanged = (existingOcc?.locker_number ?? null) !== input.lockerNumber;
 
   if (!serviceChanged && !therapistChanged && !roomChanged && !timeChanged && !lockerChanged) {
@@ -482,7 +483,7 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
       service_id: input.serviceId,
       therapist_id: finalTherapistId,
       room_number: finalRoomNumber,
-      start_time: input.startTime,
+      start_time: finalStartTime,
       ...(booking.status === "Needs Reassignment" ? { status: "Booked" } : {}),
     })
     .eq("id", input.bookingId);
