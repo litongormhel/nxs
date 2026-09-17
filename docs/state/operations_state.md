@@ -65,7 +65,7 @@ occupancy rows are never hard-deleted.
   stays out of scope). An active (`checked_out_at IS NULL`)
   `locker_occupancy` row is **stale** when `toSpaDay(checked_in_at) !==
   spaDayNow()` (`lib/analytics/spa-day.ts`'s canonical Analytics-phase
-  bucketing, reused as-is) — i.e. it was checked in on a prior spa-day and
+  bucketing, updated in `ohm#spaday8am` to switch to current date at 8:00 AM PHT) — i.e. it was checked in on a prior spa-day and
   never checked out, which previously inflated Call Sheet's "in progress"
   count with dead entries (confirmed live: 1 stale row at audit time, plus
   16/77 historical rows that took >12h to close). Call Sheet's

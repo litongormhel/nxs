@@ -1,28 +1,30 @@
-// Spa-day bucketing (Analytics phase, ohm#7v2q8f5c): the spa runs from open
-// (4:30 PM, matching the operating hours already established in
-// lib/bookings/slots.ts) through last call (1:00 AM) — it does NOT reset at
-// midnight. A timestamp between 12:00 AM and the next opening belongs to the
-// PREVIOUS spa-day.
+// Spa-day bucketing (Analytics phase, ohm#7v2q8f5c; updated ohm#spaday8am):
+// Starting at 8:00 AM (08:00 PHT), the spa day evaluates to the CURRENT CALENDAR DATE
+// so reception can prepare for the upcoming 4:00 PM shift.
+// Subtracting 1 day (-1 day) applies ONLY from 12:00 AM to 07:59 AM PHT (00:00 - 07:59 PHT)
+// to cover late night operations and early morning turnover up to the 8:00 AM cutoff.
 //
-// Asia/Manila is a fixed UTC+8 offset with no DST, so "spa-day of a UTC
-// timestamp" reduces to: shift back 8 hours to get Manila local time, then
-// shift back another 8 hours (16 total) so the 12:00 AM–3:59 PM window rolls
-// onto the prior calendar date, then read off the UTC calendar date of the
-// result. Net effect: subtract 8 hours from the original UTC instant.
+// Asia/Manila is a fixed UTC+8 offset with no DST.
 //
-// This is the one canonical definition — no separate "operating day" concept
-// existed anywhere in the codebase before this (checked ADR-001 and
-// lib/bookings/slots.ts, which only defines the intra-day slot grid, not a
-// day-bucketing rule). Every spa-day-bucketed stat/table in Analytics must
-// route through this function rather than reimplementing the offset.
-const SPA_DAY_OFFSET_MS = 8 * 60 * 60 * 1000;
+// This is the one canonical definition — every spa-day-bucketed stat/table in Analytics
+// and portal defaults must route through this helper.
+const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 function toManilaDateParts(ms: number): { year: number; month: number; day: number } {
-  const shifted = new Date(ms - SPA_DAY_OFFSET_MS);
+  // Convert UTC timestamp to Manila local time (UTC+8)
+  const manilaDate = new Date(ms + MANILA_OFFSET_MS);
+
+  // Manila local hour (0 to 23)
+  const hour = manilaDate.getUTCHours();
+
+  // If local Manila hour is < 8 (00:00 to 07:59 PHT), it belongs to the previous spa-day.
+  // If hour >= 8 (08:00 PHT onwards), it belongs to the current calendar date.
+  const targetDate = hour < 8 ? new Date(manilaDate.getTime() - 24 * 60 * 60 * 1000) : manilaDate;
+
   return {
-    year: shifted.getUTCFullYear(),
-    month: shifted.getUTCMonth() + 1,
-    day: shifted.getUTCDate(),
+    year: targetDate.getUTCFullYear(),
+    month: targetDate.getUTCMonth() + 1,
+    day: targetDate.getUTCDate(),
   };
 }
 

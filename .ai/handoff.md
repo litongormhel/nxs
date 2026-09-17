@@ -5,6 +5,13 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Update Spa Day Cutoff to Switch to Current Date at 8:00 AM — complete**
+  (`ohm#spaday8am`, 2026-09-17).
+  - Updated `lib/analytics/spa-day.ts` (`toManilaDateParts`): adjusted local Manila hour check so that starting at 8:00 AM PHT (`hour >= 8`), `spaDayNow()` evaluates to the current calendar date so reception can prepare for the upcoming shift.
+  - Subtracting 1 day (-1 day) applies strictly between 00:00 AM and 07:59 AM PHT (`hour < 8`) to handle late-night operations and early-morning turnover.
+  - Verified dependent utilities (`getSpaDayBounds`, `spaDayNow`, `lastSpaDays`, default date queries) and verified test cases (01:30 AM Sept 18 -> "2026-09-17", 07:59 AM Sept 18 -> "2026-09-17", 08:00 AM Sept 17 -> "2026-09-17", 10:45 AM Sept 17 -> "2026-09-17", 04:00 PM Sept 17 -> "2026-09-17").
+  - `npm run build` clean.
+
 - **Fix Desync Between Bookings Check-In Tab & Locker Board (Missing Nanon Occupancy + Stale Locker Rows) — complete**
   (`ohm#lckstalesync`, 2026-09-17).
   - Implementation plan presented and approved before code execution.
