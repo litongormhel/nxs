@@ -84,6 +84,8 @@ on UPDATE/DELETE attempts, not a real permission.
 convention, not a schema constraint — there is no enum to extend when a
 new one is added.
 
+- **`auto_cancel_lapsed_booking`** (`ohm#c4nc3lbk`, 2026-09-17) — logged by the `auto_cancel_lapsed_bookings()` RPC when an unvisited booking past 2:00 AM cutoff is updated to `Cancelled`. Formatted in `lib/logs/format-detail.ts` into a human sentence showing booking date, start time, and cancellation reason.
+
 - **`phone_number_revealed`** (Client Portal 7A-1, `ohm#7a1f9c2k`,
   2026-08-29) — reserved for when a staff member reveals a client's full
   phone number (default display is masked, last 4 digits only, per

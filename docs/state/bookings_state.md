@@ -380,6 +380,14 @@ Day-Off therapist (Leo) could be saved from New Booking.
   separately from `therapist_absence`/`therapist_day_off` — no schema
   change needed for status types.
 
+**Correction, `ohm#c4nc3lbk` (2026-09-17)** — Auto-cancel lapsed unvisited bookings past 2:00 AM cutoff.
+
+- Added stored procedure `public.auto_cancel_lapsed_bookings()` (`supabase/migrations/20260917100000_auto_cancel_lapsed_bookings.sql`).
+- Calculates current Manila time (`now() AT TIME ZONE 'Asia/Manila'`). At or past 2:00 AM, target cutoff date is yesterday (`date_ph - 1`), auto-cancelling any remaining unvisited bookings (`Booked` or `Needs Reassignment`) for `booking_date <= cutoff_date`.
+- Updates `bookings.status = 'Cancelled'` and inserts `action_logs` audit entries with `action = 'auto_cancel_lapsed_booking'`.
+- Created Route Handler `/api/cron/auto-cancel-bookings` (`app/api/cron/auto-cancel-bookings/route.ts`) registered in `vercel.json` with schedule `0 18 * * *` (2:00 AM Manila time / UTC+8).
+
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - Therapist options are not filtered by `therapist_services` (which

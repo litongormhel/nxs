@@ -5,6 +5,14 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Auto-cancel lapsed unvisited bookings past 2:00 AM cutoff — complete**
+  (`ohm#c4nc3lbk`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - Added DB function `public.auto_cancel_lapsed_bookings()` (`supabase/migrations/20260917100000_auto_cancel_lapsed_bookings.sql`) executing an atomic UPDATE on `public.bookings` setting `status = 'Cancelled'` for unvisited bookings (`Booked` / `Needs Reassignment`) for elapsed spa dates (`booking_date <= cutoff_date`) past 2:00 AM Asia/Manila cutoff, writing audit entries to `action_logs`.
+  - Created Vercel Cron route `/api/cron/auto-cancel-bookings` (`app/api/cron/auto-cancel-bookings/route.ts`) registered in `vercel.json` with schedule `0 18 * * *` (2:00 AM Manila Time / UTC+8).
+  - Added log detail formatter in `lib/logs/format-detail.ts` for `auto_cancel_lapsed_booking`.
+  - `npm run build` clean.
+
 - **Log Visit — link walk-in to client account (manual search + QR scan) + hide misleading points for unlinked guests — complete**
   (`ohm#3k7yqxpz`, 2026-09-16).
   - Implementation plan & regression risk assessment presented and approved before code execution.

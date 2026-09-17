@@ -1165,6 +1165,14 @@ export type Database = {
       }
     }
     Functions: {
+      auto_cancel_lapsed_bookings: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          cutoff_date: string
+          cancelled_count: number
+          cancelled_ids: string[]
+        }
+      }
       clear_own_must_change_password: {
         Args: never
         Returns: undefined

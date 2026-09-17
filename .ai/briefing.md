@@ -80,9 +80,12 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ## Last Completed Tasks
 
-(Newest on top, keep only 5.)
+(1. **2026-09-17 — Auto-cancel lapsed unvisited bookings past 2:00 AM cutoff**
+   (`ohm#c4nc3lbk`). Implementation plan presented and approved before code execution.
+   Added DB function `public.auto_cancel_lapsed_bookings()` (`20260917100000_auto_cancel_lapsed_bookings.sql`) that auto-cancels unvisited bookings (`Booked` / `Needs Reassignment`) for elapsed spa dates past 2:00 AM Asia/Manila cutoff, recording audit entries in `action_logs`.
+   Created Vercel Cron route `/api/cron/auto-cancel-bookings` (`app/api/cron/auto-cancel-bookings/route.ts`) registered in `vercel.json` (`0 18 * * *`). Added log detail formatter in `lib/logs/format-detail.ts`. `npm run build` clean. See [[bookings_state]], [[logs_state]], and `.ai/handoff.md`.
 
-1. **2026-09-16 — Log Visit: Link walk-in to client account (manual search + QR scan) & hide misleading points for unlinked guests**
+2. **2026-09-16 — Log Visit: Link walk-in to client account (manual search + QR scan) & hide misleading points for unlinked guests**
    (`ohm#3k7yqxpz`). Implementation plan & regression risk assessment presented and approved before code execution.
    Confined strictly to `components/log-visit-modal.tsx`, reusing `ScanMemberQrModal` and `resolveMemberQr` action as-is.
    - Fix A: Added Points input renders disabled `"N/A — no account linked"` text when `!clientId`.
@@ -90,7 +93,7 @@ Full invariant list: [[nxs-architecture-locks]].
    - Unlink: Added "Unlink account (back to walk-in)" text button when `isGuestOrigin && clientId !== null`.
    - `npx tsc --noEmit` and `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-2. **2026-09-16 — Fix Walk-in Client Mis-link Bug & Reorder Log Visit Modal Fields**
+3. **2026-09-16 — Fix Walk-in Client Mis-link Bug & Reorder Log Visit Modal Fields**
    (`ohm#7f3k2m9p`). Implementation plan & regression risk assessment presented and
    approved before code execution. Fixed client state initialization in `LogVisitModal`
    (`components/log-visit-modal.tsx`) where walk-in guest bookings (`client_id: null`)
@@ -99,7 +102,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Payment Method (standalone full-width) → GCash Ref → Staff. `npx tsc --noEmit` clean.
    See [[bookings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-16 — Add Supabase keep-alive cron to prevent free-tier pause**
+4. **2026-09-16 — Add Supabase keep-alive cron to prevent free-tier pause**
    (`ohm#rzx46p4g`). Implementation plan & regression risk assessment presented
    and approved before code execution. Created `app/api/keep-alive/route.ts`
    GET endpoint executing a head select query against `addons` using
@@ -107,7 +110,7 @@ Full invariant list: [[nxs-architecture-locks]].
    entry (`0 0 * * *`) hitting `/api/keep-alive` in `vercel.json`. `npx tsc --noEmit`
    clean. See [[settings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-02 — toggleDayOff Missing Bulk-Reassignment Step + Manual
+5. **2026-09-02 — toggleDayOff Missing Bulk-Reassignment Step + Manual
    Cleanup** (`ohm#9x4r7b2q`). Diff + exact UPDATE statements presented and
    approved before any code/SQL was executed, per the prompt's mandatory
    gate. `toggleDayOff()` in `app/(staff)/therapists/actions.ts` wrote/
@@ -126,12 +129,7 @@ Full invariant list: [[nxs-architecture-locks]].
    `Booked` rows to `Needs Reassignment` (both under Akio: one a genuine
    `toggleDayOff` gap, one an unresolved `markAbsentToday` discrepancy
    flagged for follow-up) — the other ~38 rows in the known ~40-row gap
-    were historical bookings (prior to 2026-08-27) left untouched per policy.
-   `npx tsc --noEmit` clean. See [[therapists_state]] and `.ai/handoff.md`.
-
-5. **2026-09-02 — Wet Area read-only therapist assignment & promo code exemption in Log Visit modal**
-   (`ohm#7n4k9wx3`). Plan + regression risk assessment approved before code execution.
-   `LogVisitModal` updated to make Therapist field read-only when linked to an existing booking,
-   and disabled/exempted for Wet Area services. `npx tsc --noEmit` clean.
+   were historical bookings (prior to 2026-08-27) left untouched per policy.
+   `npx tsc --noEmit` clean. See [[therapists_state]] and `.ai/handoff.md`.--noEmit` clean.
    See [[bookings_state]] and `.ai/handoff.md`.
 

@@ -230,6 +230,11 @@ const FORMATTERS: Record<string, Formatter> = {
     }.`,
     technicalIds: [],
   }),
+
+  auto_cancel_lapsed_booking: (f) => ({
+    sentence: `Auto-cancelled lapsed booking on ${f.date ?? "?"}${f.start_time ? ` (${fmtTime(f.start_time)})` : ""} (past 2:00 AM cutoff).`,
+    technicalIds: f.booking_id ? [`booking_id=${f.booking_id}`] : [],
+  }),
 };
 
 export function formatLogDetail(action: string, detail: string | null, lookups: Lookups): FormattedDetail {
