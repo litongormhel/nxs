@@ -416,6 +416,11 @@ Day-Off therapist (Leo) could be saved from New Booking.
 - **Removed Redundancy**: The leftmost Edit column is omitted from the UPCOMING tab (which features dedicated rightmost action buttons) and CHECK-OUT tab.
 
 
+**Correction, `ohm#droprmoccupancy` (2026-09-17)** — Drop `one_active_occupant_per_room` Constraint from `locker_occupancy` to Decouple Room Sessions from Locker Stays.
+
+- **Database Migration (`20260917130000_drop_room_occupancy_unique_index.sql`)**: Dropped partial unique index `public.one_active_occupant_per_room` on `locker_occupancy(room_number) WHERE checked_out_at IS NULL`. Intact: `one_active_occupant_per_locker`.
+- **Server Actions (`app/(staff)/bookings/actions.ts`)**: Removed dead `one_active_occupant_per_room` unique violation error checks from `quickWalkin` and `logVisitBooking` (both update and insert paths). Decoupled physical 90-minute massage room session windows from all-day locker stays so consecutive clients in different time slots can occupy the same room on the same day without triggering false "That room is already occupied" errors.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - Therapist options are not filtered by `therapist_services` (which

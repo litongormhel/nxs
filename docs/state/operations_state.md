@@ -92,10 +92,7 @@ occupancy rows are never hard-deleted.
   and `logVisitBooking()`'s linked-booking branch
   (`app/bookings/actions.ts`) — were verified directly (not assumed) to
   reliably populate it at check-in, which is what makes Check-Out safe.
-  Two pre-existing partial unique indexes,
-  `one_active_occupant_per_locker` and `one_active_occupant_per_room`
-  (both `WHERE checked_out_at IS NULL`), are what make "active occupancy"
-  well-defined.
+- `one_active_occupant_per_locker` (WHERE checked_out_at IS NULL) ensures one occupant per locker. The previous `one_active_occupant_per_room` index was dropped (`ohm#droprmoccupancy`, 2026-09-17) to decouple 90-minute room massage sessions from all-day locker stays; room availability is strictly enforced by booking time-slot exclusion constraints (`no_double_book_room`).
 
 ## Not yet implemented — see roadmap
 

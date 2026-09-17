@@ -5,6 +5,17 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Drop `one_active_occupant_per_room` Constraint from `locker_occupancy` to Decouple Room Sessions from Locker Stays — complete**
+  (`ohm#droprmoccupancy`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Database Migration (`supabase/migrations/20260917130000_drop_room_occupancy_unique_index.sql`)**:
+    - Dropped partial unique index `public.one_active_occupant_per_room` on `locker_occupancy(room_number) WHERE checked_out_at IS NULL`.
+    - Preserved `one_active_occupant_per_locker` index intact.
+  - **Server Action Handling (`app/(staff)/bookings/actions.ts`)**:
+    - Removed dead `one_active_occupant_per_room` unique violation error handling from `quickWalkin` and `logVisitBooking` (both update and insert branches).
+    - Decoupled 90-minute massage room session windows from all-day locker stays so consecutive clients in different time slots can occupy the same physical room without false "That room is already occupied" errors.
+  - `npm run build` clean. See [[bookings_state]], [[operations_state]], and `.ai/briefing.md`.
+
 - **Format Activity Logs Action and Detail into Clean Human-Readable Entries — complete**
   (`ohm#actloghuman`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

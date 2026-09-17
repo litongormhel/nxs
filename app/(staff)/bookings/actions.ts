@@ -234,13 +234,6 @@ export async function quickWalkin(
           error: "That locker was just taken — pick another.",
         };
       }
-      if (error.message.includes("one_active_occupant_per_room")) {
-        return {
-          ok: false,
-          field: "room",
-          error: "That room is already occupied.",
-        };
-      }
     }
     return { ok: false, error: error.message };
   }
@@ -779,9 +772,6 @@ export async function logVisitBooking(
         if (lockerErr.message.includes("one_active_occupant_per_locker")) {
           return { ok: false, field: "locker", error: "That locker was just taken — pick another." };
         }
-        if (lockerErr.message.includes("one_active_occupant_per_room")) {
-          return { ok: false, field: "room", error: "That room is already occupied." };
-        }
       }
       return { ok: false, error: lockerErr.message };
     }
@@ -805,9 +795,6 @@ export async function logVisitBooking(
       if (lockerErr.code === UNIQUE_VIOLATION) {
         if (lockerErr.message.includes("one_active_occupant_per_locker")) {
           return { ok: false, field: "locker", error: "That locker was just taken — pick another." };
-        }
-        if (lockerErr.message.includes("one_active_occupant_per_room")) {
-          return { ok: false, field: "room", error: "That room is already occupied." };
         }
       }
       return { ok: false, error: lockerErr.message };
