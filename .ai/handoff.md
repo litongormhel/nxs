@@ -5,6 +5,13 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Restrict Payment Method dropdown options & remove Logged by Staff in Quick Walk-In — complete**
+  (`ohm#quickwalkinpaymethods`, 2026-09-17).
+  - **Dropdown Options Restricted (`components/quick-walkin-modal.tsx`)**: Removed `Card` and `Maya` options from Quick Walk-In payment method `<select>` dropdown, strictly restricting choices to `Cash`, `GCash`, and `Split (Cash + GCash)`. Updated reference number input label span to `(optional — GCash)`.
+  - **Removed Logged by Staff Field (`components/quick-walkin-modal.tsx`)**: Removed redundant visible "Logged by (staff)" field from Quick Walk-In modal UI while preserving staff attribution in backend actions via `useStaffSim()`.
+  - **Split Logic Intact (`components/quick-walkin-modal.tsx`)**: Preserved auto-balancing, dual numerical inputs, and backend split sales ledger logic intact.
+  - `npm run build` clean. See [[bookings_state]] and `.ai/briefing.md`.
+
 - **Scale down Call Sheet typography and row density to match Bookings table styling — complete**
   (`ohm#callsheettypography`, 2026-09-17).
   - **Table Header & Filter Controls (`components/call-sheet-browser.tsx`)**: Standardized header text size to `text-xs font-medium tracking-wider uppercase text-muted` with `px-4 py-2.5` padding. Scaled filter pill buttons to `px-3.5 py-1.5 text-xs font-semibold`.

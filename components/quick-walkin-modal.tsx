@@ -790,8 +790,6 @@ export function QuickWalkinModal({
                 >
                   <option value="Cash">Cash</option>
                   <option value="GCash">GCash</option>
-                  <option value="Card">Card</option>
-                  <option value="Maya">Maya</option>
                   <option value="Split (Cash + GCash)">Split (Cash + GCash)</option>
                 </select>
               </div>
@@ -886,7 +884,7 @@ export function QuickWalkinModal({
           {(paymentMethod !== "Cash" && (paymentMethod !== "Split (Cash + GCash)" || numGcash > 0)) && (
             <div>
               <label className="text-xs text-muted" htmlFor="wk-gcash-ref">
-                Reference Number <span className="opacity-70">(optional — GCash / Card / Maya)</span>
+                Reference Number <span className="opacity-70">(optional — GCash)</span>
               </label>
               <input
                 id="wk-gcash-ref"
@@ -899,12 +897,6 @@ export function QuickWalkinModal({
             </div>
           )}
 
-          <div>
-            <div className="text-xs text-muted">Logged by (staff)</div>
-            <div className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
-              {actor ? `${actor.name} · ${actor.position}` : "—"}
-            </div>
-          </div>
 
           {error && (
             <p
