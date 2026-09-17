@@ -80,36 +80,37 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ## Last Completed Tasks
 
-1. **2026-09-17 — Conditionally Display Leftmost Edit Column Strictly on CHECK-IN Tab**
+1. **2026-09-17 — Display Therapist Availability Suffixes & Grayed-Out Disabled States in Quick Walk-In Modal Dropdown**
+   (`ohm#j4m8v2xq`). Implementation plan presented and approved before code execution.
+   - Updated `components/quick-walkin-modal.tsx` to fetch `therapist_day_off`, `therapist_absence`, and `therapist_leave` for the modal date (`todayIso()`).
+   - Formatted dropdown options with status labels (`Akio - Day Off`, `Josh - On Leave`, `Name - Absent`, `Name - Fully Booked`), set `disabled={disabled}`, and applied `text-stone-500` disabled styling.
+   - Extended `canSubmit` to check `!unavailableTherapists.has(therapistId)`.
+   - Verified server-side validation in `app/(staff)/bookings/actions.ts` (`quickWalkin` action) handling Postgres trigger `trg_bookings_check_therapist_availability` exception `THERAPIST_UNAVAILABLE` and returning a friendly error. `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
+
+2. **2026-09-17 — Conditionally Display Leftmost Edit Column Strictly on CHECK-IN Tab**
    (`ohm#bkgupcedt`).
    - Updated `components/booking-browser.tsx` to conditionally render the leftmost "Edit" header (`<th>`) and body cell (`<td>`) only when `tab === "checkin"`.
    - On UPCOMING and CHECK-OUT tabs, the redundant leftmost Edit column is removed.
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-2. **2026-09-17 — Update Spa Day Cutoff to 8:00 AM Current Date Switch**
+3. **2026-09-17 — Update Spa Day Cutoff to 8:00 AM Current Date Switch**
    (`ohm#spaday8am`).
    - Updated `lib/analytics/spa-day.ts` (`toManilaDateParts`): shifted cutoff boundary from 4:00 PM to 8:00 AM PHT.
    - From 08:00 AM PHT onwards (`hour >= 8`), `spaDayNow()` evaluates to the current calendar date so reception can prepare for the upcoming shift. Subtracting 1 day (-1 day) applies strictly between 00:00 AM and 07:59 AM PHT (`hour < 8`).
    - Verified all 5 test cases (01:30 AM Sept 18 -> "2026-09-17", 07:59 AM Sept 18 -> "2026-09-17", 08:00 AM Sept 17 -> "2026-09-17", 10:45 AM Sept 17 -> "2026-09-17", 04:00 PM Sept 17 -> "2026-09-17"). `npm run build` clean. See [[operations_state]], [[analytics_state]], and `.ai/handoff.md`.
 
-3. **2026-09-17 — Fix Desync Between Bookings Check-In Tab & Locker Board (Missing Nanon Occupancy + Stale Locker Rows)**
+4. **2026-09-17 — Fix Desync Between Bookings Check-In Tab & Locker Board (Missing Nanon Occupancy + Stale Locker Rows)**
    (`ohm#lckstalesync`). Implementation plan presented and approved before code execution.
    - Reordered `logVisitBooking` in `app/(staff)/bookings/actions.ts` to assign locker occupancy before updating booking status, ensuring atomicity.
    - Added DB migration `20260917120000_auto_checkout_stale_lockers.sql` creating `public.auto_checkout_stale_lockers()` stored procedure to auto check-out unclosed lockers past 2:00 AM cutoff, auto-releasing JM (#9) and ohm (#18) and repairing Nanon (#8).
    - Updated `app/(staff)/lockers/page.tsx` to invoke `auto_checkout_stale_lockers()` on load.
    - Added log detail formatter for `auto_checkout_stale_locker` in `lib/logs/format-detail.ts`. `npm run build` clean. See [[lockers_state]], [[bookings_state]], and `.ai/handoff.md`.
 
-4. **2026-09-17 — Daily Sales Remittance Page Redesign using SpaDay Window (4:00 PM – 2:00 AM)**
+5. **2026-09-17 — Daily Sales Remittance Page Redesign using SpaDay Window (4:00 PM – 2:00 AM)**
    (`ohm#slsremit`). Implementation plan presented and approved before code execution.
    - Added `getSpaDayBounds(spaDateStr)` and `shiftSpaDay(spaDateStr, days)` helpers in `lib/analytics/spa-day.ts` to compute 4:00 PM PHT to 2:00 AM PHT (+1d) UTC bounds (`08:00:00Z` to `18:00:00Z`).
    - Redesigned `app/(staff)/sales/page.tsx` to read `searchParams` for date (defaulting to `spaDayNow()`) and query `sales` bounded by the selected Spa Day.
    - Redesigned `components/sales-browser.tsx` with Spa Day date selector (Prev/Today/Next & operational window badge), Shift Remittance Summary Bar (Cash Remit, Online/E-Wallet, Total Shift Sales), PHT transaction time formatting (`fmtPhtTime`), and table presentation enhancements using design tokens (Fraunces headings, IBM Plex Mono amounts/times). `npm run build` clean. See [[sales_state]] and `.ai/handoff.md`.
-
-5. **2026-09-17 — Fix EditBookingModal Self-Locker False Conflict & Therapist Availability Dropdown**
-   (`ohm#edtmodbfix`). Implementation plan presented and approved before code execution.
-   - Fixed self-locker conflict detection in `EditBookingModal` (`components/booking-browser.tsx`) by excluding the current session's locker occupancy in client state and allowing `<option disabled={occupied && !isCurrent}>`.
-   - Refined `editBooking` action (`app/(staff)/bookings/actions.ts`) to resolve active `locker_occupancy`, skip conflict check when locker is unchanged, and exclude self-session records.
-   - Added therapist status suffixing (`Akio - Day Off`, `Josh - On Leave`, `Name - Absent`) for `booking.booking_date` and disabled unavailable options unless assigned to that booking. `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
 
 

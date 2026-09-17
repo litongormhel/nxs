@@ -5,6 +5,19 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Display Therapist Availability Suffixes & Grayed-Out Disabled States in Quick Walk-In Modal Dropdown — complete**
+  (`ohm#j4m8v2xq`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Quick Walk-in Modal (`components/quick-walkin-modal.tsx`)**:
+    - Added client-side fetching of `therapist_day_off`, `therapist_absence`, and `therapist_leave` for the active date (`todayIso()`).
+    - Computed therapist availability status (`Day Off`, `Absent`, `On Leave`, `Fully Booked`, and slot conflict `(booked)`).
+    - Formatted dropdown options with status labels (e.g., `Akio - Day Off`, `Josh - On Leave`, `Name - Absent`).
+    - Disabled unavailable options (`disabled={disabled}`) and styled with `text-stone-500`.
+    - Extended `canSubmit` to check `!unavailableTherapists.has(therapistId)`.
+  - **Server Action Guard (`app/(staff)/bookings/actions.ts`)**:
+    - Verified `quickWalkin` action handles DB trigger `trg_bookings_check_therapist_availability` exception `THERAPIST_UNAVAILABLE` via `therapistUnavailableError`, returning a friendly error `{ ok: false, field: "therapist", error: "That therapist is <Reason> on the selected date." }`.
+  - `npm run build` clean. See [[bookings_state]] and `.ai/briefing.md`.
+
 - **Conditionally Display Leftmost Edit Column Strictly on CHECK-IN Tab — complete**
   (`ohm#bkgupcedt`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

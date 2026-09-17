@@ -104,6 +104,7 @@ export function QuickWalkinModal({
   const actor = sessionStaff;
   const staffId = actor?.id ?? "";
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
+  const [unavailableTherapists, setUnavailableTherapists] = useState<Map<string, string>>(new Map());
   const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -123,6 +124,32 @@ export function QuickWalkinModal({
       .select("locker_number")
       .is("checked_out_at", null)
       .then(({ data }) => setOccupiedLockers(new Set((data ?? []).map((r) => r.locker_number))));
+  }, [date]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const weekday = new Date(`${date}T00:00:00`).getDay();
+    Promise.all([
+      supabase.from("therapist_day_off").select("therapist_id, weekday"),
+      supabase.from("therapist_absence").select("therapist_id, absent_date").eq("absent_date", date),
+      supabase
+        .from("therapist_leave")
+        .select("therapist_id, start_date, end_date")
+        .lte("start_date", date)
+        .gte("end_date", date),
+    ]).then(([dayOff, absence, leave]) => {
+      const map = new Map<string, string>();
+      for (const row of dayOff.data ?? []) {
+        if (row.weekday === weekday) map.set(row.therapist_id, "Day Off");
+      }
+      for (const row of absence.data ?? []) {
+        map.set(row.therapist_id, "Absent");
+      }
+      for (const row of leave.data ?? []) {
+        map.set(row.therapist_id, "On Leave");
+      }
+      setUnavailableTherapists(map);
+    });
   }, [date]);
 
   useEffect(() => {
@@ -173,6 +200,24 @@ export function QuickWalkinModal({
     }
     return taken;
   }, [conflicts, therapistId, duration, rooms, timeSlots]);
+
+  // Therapists with zero free slots anywhere in the day's slot grid
+  const fullyBookedTherapists = useMemo(() => {
+    const fullyBooked = new Set<string>();
+    if (timeSlots.length === 0) return fullyBooked;
+    for (const t of therapists) {
+      const hasFreeSlot = timeSlots.some(
+        (slot) =>
+          !conflicts.some(
+            (c) =>
+              c.therapist_id === t.id &&
+              slotsOverlap(slot, duration, c.start_time, c.duration_minutes ?? 0)
+          )
+      );
+      if (!hasFreeSlot) fullyBooked.add(t.id);
+    }
+    return fullyBooked;
+  }, [therapists, timeSlots, conflicts, duration]);
 
   const freeRooms = useMemo(() => {
     if (!time) return [];
@@ -267,7 +312,11 @@ export function QuickWalkinModal({
     !!lockerNumber &&
     (clientId ? true : guestName.trim().length > 0) &&
     (!isMassageService ||
-      (!!therapistId && !!time && !!roomNumber && !takenTherapists.has(therapistId)));
+      (!!therapistId &&
+        !!time &&
+        !!roomNumber &&
+        !takenTherapists.has(therapistId) &&
+        !unavailableTherapists.has(therapistId)));
 
   function handleSubmit() {
     setError(null);
@@ -455,11 +504,29 @@ export function QuickWalkinModal({
                   className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
                 >
                   <option value="">— select —</option>
-                  {therapists.map((t) => (
-                    <option key={t.id} value={t.id} disabled={takenTherapists.has(t.id)}>
-                      {t.name} {takenTherapists.has(t.id) ? "(booked)" : ""}
-                    </option>
-                  ))}
+                  {therapists.map((t) => {
+                    const unavailableReason = unavailableTherapists.get(t.id);
+                    const fullyBooked = fullyBookedTherapists.has(t.id);
+                    const conflictNow = takenTherapists.has(t.id);
+                    const disabled = !!unavailableReason || fullyBooked || conflictNow;
+                    return (
+                      <option
+                        key={t.id}
+                        value={t.id}
+                        disabled={disabled}
+                        className={disabled ? "text-stone-500" : undefined}
+                      >
+                        {t.name}
+                        {unavailableReason
+                          ? ` - ${unavailableReason}`
+                          : fullyBooked
+                          ? " - Fully Booked"
+                          : conflictNow
+                          ? " (booked)"
+                          : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             )}

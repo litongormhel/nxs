@@ -154,10 +154,9 @@
   grid itself, ported logic-for-logic from `booking-form-modal.tsx`'s
   `takenSlots` useMemo — not just the reverse direction
   (`takenTherapists`, selected time → taken therapists in the dropdown),
-  which already existed beforehand. Both directions now coexist, matching
-  New Booking's dual `takenSlots` + `conflictingTherapists` pattern. UI-only
-  pre-check — the GiST exclusion constraints remain the enforced source of
-  truth, unchanged.
+  which already existed beforehand.  both directions now coexist, matching New Booking's dual `takenSlots` + `conflictingTherapists` pattern.
+  - **(`ohm#j4m8v2xq`, 2026-09-17) Therapist Availability Dropdown & Status Suffixes**:
+    `QuickWalkinModal` now fetches `therapist_day_off`, `therapist_absence`, and `therapist_leave` for the active date (`todayIso()`). Therapist options format as `{t.name}{unavailableReason ? ` - ${unavailableReason}` : fullyBooked ? " - Fully Booked" : conflictNow ? " (booked)" : ""}` (e.g. `Akio - Day Off`, `Josh - On Leave`, `Name - Absent`), with `disabled={disabled}` and styled with `text-stone-500`. Extended `canSubmit` check to include `!unavailableTherapists.has(therapistId)`. Server action `quickWalkin` catches DB trigger `trg_bookings_check_therapist_availability` exception `THERAPIST_UNAVAILABLE` via `therapistUnavailableError` returning a friendly error `{ ok: false, field: "therapist", error: "That therapist is <Reason> on the selected date." }`.
 - `components/sms-preview-modal.tsx` — shown after a successful New
   Booking for a registered client (`client_id` not null). Editable
   textarea pre-filled with **placeholder** copy (no locked SMS format
