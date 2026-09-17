@@ -80,12 +80,19 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ## Last Completed Tasks
 
-(1. **2026-09-17 — Auto-cancel lapsed unvisited bookings past 2:00 AM cutoff**
+1. **2026-09-17 — Fix Check-in Time & Locker missing data + Add leftmost Edit Booking action & modal**
+   (`ohm#bkgchkedt`). Implementation plan presented and approved before code execution.
+   - Fixed blank Check-in Time and Locker # rendering on CHECK-IN and CHECK-OUT tabs by querying `locker_occupancy` with fallback resolution for unlinked `booking_id` records in `components/booking-browser.tsx`.
+   - Added leftmost "Edit" button column in the Bookings table and introduced `EditBookingModal` allowing receptionists to update Service, Therapist, Massage Time / Schedule, and Locker #.
+   - Added `editBooking` server action in `app/(staff)/bookings/actions.ts` with therapist double-booking GiST validation, therapist availability checks, locker occupancy conflict checks, and `action_logs` audit entry creation.
+   - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
+
+2. **2026-09-17 — Auto-cancel lapsed unvisited bookings past 2:00 AM cutoff**
    (`ohm#c4nc3lbk`). Implementation plan presented and approved before code execution.
    Added DB function `public.auto_cancel_lapsed_bookings()` (`20260917100000_auto_cancel_lapsed_bookings.sql`) that auto-cancels unvisited bookings (`Booked` / `Needs Reassignment`) for elapsed spa dates past 2:00 AM Asia/Manila cutoff, recording audit entries in `action_logs`.
    Created Vercel Cron route `/api/cron/auto-cancel-bookings` (`app/api/cron/auto-cancel-bookings/route.ts`) registered in `vercel.json` (`0 18 * * *`). Added log detail formatter in `lib/logs/format-detail.ts`. `npm run build` clean. See [[bookings_state]], [[logs_state]], and `.ai/handoff.md`.
 
-2. **2026-09-16 — Log Visit: Link walk-in to client account (manual search + QR scan) & hide misleading points for unlinked guests**
+3. **2026-09-16 — Log Visit: Link walk-in to client account (manual search + QR scan) & hide misleading points for unlinked guests**
    (`ohm#3k7yqxpz`). Implementation plan & regression risk assessment presented and approved before code execution.
    Confined strictly to `components/log-visit-modal.tsx`, reusing `ScanMemberQrModal` and `resolveMemberQr` action as-is.
    - Fix A: Added Points input renders disabled `"N/A — no account linked"` text when `!clientId`.
@@ -93,7 +100,7 @@ Full invariant list: [[nxs-architecture-locks]].
    - Unlink: Added "Unlink account (back to walk-in)" text button when `isGuestOrigin && clientId !== null`.
    - `npx tsc --noEmit` and `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-16 — Fix Walk-in Client Mis-link Bug & Reorder Log Visit Modal Fields**
+4. **2026-09-16 — Fix Walk-in Client Mis-link Bug & Reorder Log Visit Modal Fields**
    (`ohm#7f3k2m9p`). Implementation plan & regression risk assessment presented and
    approved before code execution. Fixed client state initialization in `LogVisitModal`
    (`components/log-visit-modal.tsx`) where walk-in guest bookings (`client_id: null`)
@@ -102,7 +109,7 @@ Full invariant list: [[nxs-architecture-locks]].
    Payment Method (standalone full-width) → GCash Ref → Staff. `npx tsc --noEmit` clean.
    See [[bookings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-16 — Add Supabase keep-alive cron to prevent free-tier pause**
+5. **2026-09-16 — Add Supabase keep-alive cron to prevent free-tier pause**
    (`ohm#rzx46p4g`). Implementation plan & regression risk assessment presented
    and approved before code execution. Created `app/api/keep-alive/route.ts`
    GET endpoint executing a head select query against `addons` using
@@ -110,26 +117,4 @@ Full invariant list: [[nxs-architecture-locks]].
    entry (`0 0 * * *`) hitting `/api/keep-alive` in `vercel.json`. `npx tsc --noEmit`
    clean. See [[settings_state]] and `.ai/handoff.md`.
 
-5. **2026-09-02 — toggleDayOff Missing Bulk-Reassignment Step + Manual
-   Cleanup** (`ohm#9x4r7b2q`). Diff + exact UPDATE statements presented and
-   approved before any code/SQL was executed, per the prompt's mandatory
-   gate. `toggleDayOff()` in `app/(staff)/therapists/actions.ts` wrote/
-   deleted the `therapist_day_off` row but, unlike `markAbsentToday`,
-   `markOnLeave`, and `archiveTherapist`, never bulk-flagged already-
-   `Booked` rows to `Needs Reassignment` when a recurring day-off was
-   added — confirmed by direct read of all four functions. Fix: when a
-   day-off is added, fetch the therapist's `Booked` rows with
-   `booking_date >= today`, filter in JS by `getDay() === weekday` (same
-   convention as `booking-form-modal.tsx:109`, since Postgres
-   `extract(dow ...)` isn't reachable via the supabase-js query builder
-   without an RPC), bulk-update matches to `Needs Reassignment`, log
-   `flagged=N` — mirrors the other three functions exactly. Removing a
-   day-off does not auto-revert existing `Needs Reassignment` rows,
-   matching current behavior. Manually corrected 2 confirmed-stale live
-   `Booked` rows to `Needs Reassignment` (both under Akio: one a genuine
-   `toggleDayOff` gap, one an unresolved `markAbsentToday` discrepancy
-   flagged for follow-up) — the other ~38 rows in the known ~40-row gap
-   were historical bookings (prior to 2026-08-27) left untouched per policy.
-   `npx tsc --noEmit` clean. See [[therapists_state]] and `.ai/handoff.md`.--noEmit` clean.
-   See [[bookings_state]] and `.ai/handoff.md`.
 

@@ -5,6 +5,16 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Fix Check-in Time & Locker missing data + Add leftmost Edit Booking action & modal — complete**
+  (`ohm#bkgchkedt`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Check-in Time & Locker # Fix**: Updated `BookingBrowser` (`components/booking-browser.tsx`) day-view fetch to query `bookings` alongside active `locker_occupancy` with fallback mapping for completed bookings whose `booking_id` FK is missing/unlinked, resolving blank `-` displays.
+  - **Leftmost Edit Button & Modal**:
+    - Added leftmost "Edit" column as the first column in the Bookings table across tabs.
+    - Built `EditBookingModal` component pre-filled with current Service, Therapist, Time/Schedule, and Locker #.
+    - Added `editBooking` server action (`app/(staff)/bookings/actions.ts`) with therapist double-booking GiST validation, therapist availability check, locker occupancy conflict checks, and `action_logs` audit entry creation.
+  - `npm run build` clean.
+
 - **Auto-cancel lapsed unvisited bookings past 2:00 AM cutoff — complete**
   (`ohm#c4nc3lbk`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

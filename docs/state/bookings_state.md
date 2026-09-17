@@ -387,6 +387,16 @@ Day-Off therapist (Leo) could be saved from New Booking.
 - Updates `bookings.status = 'Cancelled'` and inserts `action_logs` audit entries with `action = 'auto_cancel_lapsed_booking'`.
 - Created Route Handler `/api/cron/auto-cancel-bookings` (`app/api/cron/auto-cancel-bookings/route.ts`) registered in `vercel.json` with schedule `0 18 * * *` (2:00 AM Manila time / UTC+8).
 
+**Correction, `ohm#bkgchkedt` (2026-09-17)** — Fix Check-in Time & Locker missing data + Add leftmost Edit Booking action & modal.
+
+- **Check-in Time & Locker # Fix**: Updated `BookingBrowser` (`components/booking-browser.tsx`) day-view query to fetch `bookings` alongside active `locker_occupancy` records with fallback resolution for unlinked `booking_id` rows, resolving blank `-` displays on Check-in and Check-out tabs.
+- **Leftmost Edit Button & Modal**:
+  - Added leftmost "Edit" button column as the first column in the Bookings table.
+  - Built `EditBookingModal` component allowing receptionists to update Service, Therapist, Massage Time / Schedule (with slot availability struck through), and Locker #.
+  - Added `editBooking` server action in `app/(staff)/bookings/actions.ts`: updates `bookings` (`service_id`, `therapist_id`, `start_time`), validates double-booking GiST constraint (`no_double_book_therapist`) and therapist status availability (`THERAPIST_UNAVAILABLE`), checks and updates/inserts `locker_occupancy` (preventing double-locker assignment via `one_active_occupant_per_locker`), and logs an entry to `action_logs` (`action: "edit_booking"`).
+  - Revalidates `/bookings`, `/dashboard`, `/call-sheet`, `/lockers`.
+
+
 
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 

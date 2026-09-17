@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { updateBookingStatus, changeBookingTherapist } from "@/app/(staff)/bookings/actions";
+import { updateBookingStatus, changeBookingTherapist, editBooking } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
 import { slotsOverlap, compareSlotTimes } from "@/lib/bookings/slots";
 import { BookingFormModal } from "@/components/booking-form-modal";
@@ -100,7 +100,10 @@ function fmtTimestamp(ts: string | null | undefined): string {
 }
 
 function occupancyOf(row: BookingRow): LockerOccupancyRow | null {
-  return row.locker_occupancy?.[0] ?? null;
+  if (row.locker_occupancy && row.locker_occupancy.length > 0) {
+    return row.locker_occupancy.find((o) => !o.checked_out_at) ?? row.locker_occupancy[0];
+  }
+  return null;
 }
 
 function sortBySpaDay(rows: BookingRow[]): BookingRow[] {
@@ -141,6 +144,7 @@ export function BookingBrowser({
   const [showScanQr, setShowScanQr] = useState(false);
   const [logVisitBooking, setLogVisitBooking] = useState<LogVisitInitialBooking | null>(null);
   const [reassignBooking, setReassignBooking] = useState<BookingRow | null>(null);
+  const [editBookingRow, setEditBookingRow] = useState<BookingRow | null>(null);
   const [reassignTherapistId, setReassignTherapistId] = useState("");
   const [reassignStartTime, setReassignStartTime] = useState("");
   const [reassignError, setReassignError] = useState<string | null>(null);
@@ -151,18 +155,51 @@ export function BookingBrowser({
 
   useEffect(() => {
     const supabase = createClient();
-    supabase
-      .from("bookings")
-      .select(
-        "id, client_id, guest_label, service_id, therapist_id, room_number, booking_date, start_time, duration_minutes, promo_id, status, pax_count, locker_occupancy(checked_in_at, checked_out_at, locker_number)"
-      )
-      .eq("booking_date", date)
-      .in("status", ACTIVE_STATUSES)
-      .order("start_time", { ascending: true })
-      .then(({ data }) => {
-        setDayBookings((data as unknown as BookingRow[]) ?? []);
-        setLoadedFor(date);
+    Promise.all([
+      supabase
+        .from("bookings")
+        .select(
+          "id, client_id, guest_label, service_id, therapist_id, room_number, booking_date, start_time, duration_minutes, promo_id, status, pax_count, locker_occupancy(id, checked_in_at, checked_out_at, locker_number)"
+        )
+        .eq("booking_date", date)
+        .in("status", ACTIVE_STATUSES)
+        .order("start_time", { ascending: true }),
+      supabase
+        .from("locker_occupancy")
+        .select("id, booking_id, client_id, guest_label, locker_number, checked_in_at, checked_out_at")
+        .order("checked_in_at", { ascending: false }),
+    ]).then(([{ data: bookingsData }, { data: occupanciesData }]) => {
+      const rawBookings = (bookingsData as unknown as BookingRow[]) ?? [];
+      const occupancies = occupanciesData ?? [];
+
+      const mappedBookings = rawBookings.map((b) => {
+        let occList = b.locker_occupancy ?? [];
+        if (occList.length === 0) {
+          const match = occupancies.find((o) => {
+            if (o.booking_id && o.booking_id === b.id) return true;
+            if (b.client_id && o.client_id === b.client_id) return true;
+            if (b.guest_label && o.guest_label === b.guest_label) return true;
+            return false;
+          });
+          if (match) {
+            occList = [
+              {
+                checked_in_at: match.checked_in_at,
+                checked_out_at: match.checked_out_at,
+                locker_number: match.locker_number,
+              },
+            ];
+          }
+        }
+        return {
+          ...b,
+          locker_occupancy: occList,
+        };
       });
+
+      setDayBookings(mappedBookings);
+      setLoadedFor(date);
+    });
   }, [date, reloadToken]);
 
   function reload() {
@@ -461,6 +498,7 @@ export function BookingBrowser({
             <table className="w-full text-left text-[11px]">
               <thead>
                 <tr className="border-b border-border text-[9.5px] font-semibold uppercase tracking-wider text-muted">
+                  <th className="px-3.5 py-2.5 w-12 text-center">Edit</th>
                   <th className="px-3.5 py-2.5">Massage Time</th>
                   <th className="px-3.5 py-2.5">Client</th>
                   <th className="px-3.5 py-2.5">Service</th>
@@ -483,6 +521,16 @@ export function BookingBrowser({
                         flagged ? "bg-gradient-to-r from-red-950/20 to-surface" : ""
                       }`}
                     >
+                      <td className="px-3.5 py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setEditBookingRow(row)}
+                          title="Edit booking"
+                          className="rounded-md border border-border bg-surface-2 px-2 py-1 text-[10px] font-bold text-foreground hover:border-gold hover:text-accent-gold transition-all"
+                        >
+                          Edit
+                        </button>
+                      </td>
                       <td className="whitespace-nowrap px-3.5 py-3 font-mono text-[10.5px] text-muted">
                         {fmtTime(row.start_time)}
                       </td>
@@ -678,6 +726,285 @@ export function BookingBrowser({
           </div>
         </div>
       )}
+
+      {editBookingRow && (
+        <EditBookingModal
+          booking={editBookingRow}
+          clients={clients}
+          services={services}
+          therapists={therapists}
+          lockers={lockers}
+          timeSlots={timeSlots}
+          initialOccupancy={occupancyOf(editBookingRow)}
+          onClose={() => setEditBookingRow(null)}
+          onSaved={() => {
+            setEditBookingRow(null);
+            reload();
+            router.refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function EditBookingModal({
+  booking,
+  clients,
+  services,
+  therapists,
+  lockers,
+  timeSlots,
+  initialOccupancy,
+  onClose,
+  onSaved,
+}: {
+  booking: BookingRow;
+  clients: Client[];
+  services: Service[];
+  therapists: Therapist[];
+  lockers: number[];
+  timeSlots: string[];
+  initialOccupancy: LockerOccupancyRow | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { sessionStaff } = useStaffSim();
+  const [serviceId, setServiceId] = useState(booking.service_id);
+  const [therapistId, setTherapistId] = useState(booking.therapist_id ?? "");
+  const [startTime, setStartTime] = useState(booking.start_time);
+  const [lockerNumber, setLockerNumber] = useState<number | "">(
+    initialOccupancy?.locker_number ?? ""
+  );
+
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [availabilityMap, setAvailabilityMap] = useState<Record<string, boolean>>({});
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("locker_occupancy")
+      .select("locker_number, booking_id")
+      .is("checked_out_at", null)
+      .then(({ data }) => {
+        const occSet = new Set<number>();
+        for (const row of data ?? []) {
+          if (row.booking_id !== booking.id) {
+            occSet.add(row.locker_number);
+          }
+        }
+        setOccupiedLockers(occSet);
+      });
+  }, [booking.id]);
+
+  useEffect(() => {
+    if (!therapistId) {
+      setAvailabilityMap({});
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      if (cancelled) return;
+      setAvailabilityLoading(true);
+      const supabase = createClient();
+      const { data: sameDayBookings } = await supabase
+        .from("bookings")
+        .select("therapist_id, start_time, duration_minutes, status")
+        .eq("booking_date", booking.booking_date)
+        .eq("therapist_id", therapistId)
+        .in("status", ["Booked", "Completed", "Needs Reassignment"])
+        .neq("id", booking.id);
+
+      if (cancelled) return;
+      const selectedService = services.find((s) => s.id === serviceId);
+      const duration = selectedService?.duration_minutes ?? 60;
+      const map: Record<string, boolean> = {};
+
+      for (const slot of timeSlots) {
+        const conflict = (sameDayBookings ?? []).some((b) =>
+          slotsOverlap(slot, duration, b.start_time, b.duration_minutes ?? 60)
+        );
+        map[slot] = !conflict;
+      }
+      setAvailabilityMap(map);
+      setAvailabilityLoading(false);
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [booking.id, booking.booking_date, therapistId, serviceId, timeSlots, services]);
+
+  async function handleConfirmSave() {
+    if (!sessionStaff) return;
+    setSaving(true);
+    setError(null);
+
+    const res = await editBooking({
+      bookingId: booking.id,
+      serviceId,
+      therapistId: therapistId || null,
+      startTime,
+      lockerNumber: lockerNumber === "" ? null : Number(lockerNumber),
+      staffId: sessionStaff.id,
+    });
+
+    setSaving(false);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+
+    onSaved();
+  }
+
+  const clientName = booking.client_id
+    ? clients.find((c) => c.id === booking.client_id)?.codename ?? "Client"
+    : booking.guest_label ?? "Walk-in";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div>
+            <h3 className="text-base font-bold text-foreground">Edit Booking</h3>
+            <p className="text-xs text-muted">
+              {clientName} · Room {booking.room_number ?? "—"} · {booking.booking_date}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-muted hover:text-foreground text-sm font-bold"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Service */}
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-muted" htmlFor="edit-service">
+            Service
+          </label>
+          <select
+            id="edit-service"
+            value={serviceId}
+            onChange={(e) => setServiceId(e.target.value)}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+          >
+            {services.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} ({s.duration_minutes}m - ₱{s.price.toLocaleString()})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Therapist */}
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-muted" htmlFor="edit-therapist">
+            Therapist
+          </label>
+          <select
+            id="edit-therapist"
+            value={therapistId}
+            onChange={(e) => setTherapistId(e.target.value)}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+          >
+            <option value="">— Unassigned —</option>
+            {therapists.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          {availabilityLoading && (
+            <p className="text-[10px] text-muted">Checking availability…</p>
+          )}
+        </div>
+
+        {/* Massage Time / Schedule */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-muted">Massage Time / Schedule</label>
+          {timeSlots.length === 0 ? (
+            <p className="text-xs text-muted">No time slots available.</p>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-40 overflow-y-auto p-1 border border-border/50 rounded-lg">
+              {timeSlots.map((s) => {
+                const available = therapistId ? (availabilityMap[s] ?? true) : true;
+                const selected = startTime === s;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={!available}
+                    onClick={() => setStartTime(s)}
+                    className={`rounded-md border px-2 py-1.5 font-mono text-xs transition-all ${
+                      !available
+                        ? "border-dashed border-border/70 text-red-400/50 line-through opacity-50 cursor-not-allowed bg-transparent"
+                        : selected
+                        ? "border-gold bg-gradient-to-br from-[#c89b3c] to-[#a97e2e] text-black font-bold shadow-sm"
+                        : "border-border bg-background text-foreground hover:border-gold/50"
+                    }`}
+                  >
+                    {fmtTime(s)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Locker # */}
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-muted" htmlFor="edit-locker">
+            Locker #
+          </label>
+          <select
+            id="edit-locker"
+            value={lockerNumber}
+            onChange={(e) => setLockerNumber(e.target.value === "" ? "" : Number(e.target.value))}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+          >
+            <option value="">— Unassigned —</option>
+            {lockers.map((num) => {
+              const occupied = occupiedLockers.has(num);
+              const isCurrent = initialOccupancy?.locker_number === num;
+              return (
+                <option key={num} value={num} disabled={occupied}>
+                  Locker #{num} {isCurrent ? " (Current)" : occupied ? " (Occupied)" : ""}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+
+        {error && <p className="text-xs text-accent-red font-medium">{error}</p>}
+
+        <div className="flex gap-2 pt-3 border-t border-border">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={handleConfirmSave}
+            className="flex-1 rounded-lg border border-gold bg-gold/10 py-2 text-xs font-bold text-gold hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

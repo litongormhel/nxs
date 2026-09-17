@@ -357,6 +357,193 @@ export async function changeBookingTherapist(
   return { ok: true };
 }
 
+export type EditBookingInput = {
+  bookingId: string;
+  serviceId: string;
+  therapistId: string | null;
+  startTime: string;
+  lockerNumber: number | null;
+  staffId: string;
+};
+
+export type EditBookingResult =
+  | { ok: true }
+  | { ok: false; error: string; field?: "service" | "therapist" | "locker" | "room" };
+
+export async function editBooking(input: EditBookingInput): Promise<EditBookingResult> {
+  const supabase = await createClient();
+
+  const { data: booking, error: fetchErr } = await supabase
+    .from("bookings")
+    .select("id, client_id, guest_label, service_id, therapist_id, room_number, booking_date, start_time, status")
+    .eq("id", input.bookingId)
+    .single();
+
+  if (fetchErr || !booking) {
+    return { ok: false, error: fetchErr?.message ?? "Booking not found." };
+  }
+
+  if (booking.status === "Cancelled") {
+    return { ok: false, error: "Cannot edit a Cancelled booking." };
+  }
+
+  // Fetch existing occupancy for this booking
+  const { data: occupancyRows } = await supabase
+    .from("locker_occupancy")
+    .select("id, locker_number, checked_out_at")
+    .eq("booking_id", input.bookingId)
+    .order("checked_in_at", { ascending: false });
+
+  const existingOcc = occupancyRows?.[0] ?? null;
+
+  // Locker conflict check
+  if (input.lockerNumber !== null) {
+    const lockerChanged = !existingOcc || existingOcc.locker_number !== input.lockerNumber;
+    if (lockerChanged) {
+      const { data: activeOcc } = await supabase
+        .from("locker_occupancy")
+        .select("id")
+        .eq("locker_number", input.lockerNumber)
+        .is("checked_out_at", null)
+        .maybeSingle();
+
+      if (activeOcc && (!existingOcc || activeOcc.id !== existingOcc.id)) {
+        return {
+          ok: false,
+          field: "locker",
+          error: `Locker #${input.lockerNumber} is currently occupied by another client.`,
+        };
+      }
+    }
+  }
+
+  const serviceChanged = booking.service_id !== input.serviceId;
+  const therapistChanged = booking.therapist_id !== input.therapistId;
+  const timeChanged = booking.start_time !== input.startTime;
+  const lockerChanged = (existingOcc?.locker_number ?? null) !== input.lockerNumber;
+
+  if (!serviceChanged && !therapistChanged && !timeChanged && !lockerChanged) {
+    return { ok: false, error: "No changes were made." };
+  }
+
+  // Update bookings
+  const { error: updateErr } = await supabase
+    .from("bookings")
+    .update({
+      service_id: input.serviceId,
+      therapist_id: input.therapistId,
+      start_time: input.startTime,
+      ...(booking.status === "Needs Reassignment" ? { status: "Booked" } : {}),
+    })
+    .eq("id", input.bookingId);
+
+  if (updateErr) {
+    const unavailable = therapistUnavailableError(updateErr.message);
+    if (unavailable) {
+      return { ok: false, field: "therapist", error: unavailable };
+    }
+    if (updateErr.code === EXCLUSION_VIOLATION) {
+      return {
+        ok: false,
+        field: "therapist",
+        error: "That therapist is already booked for the selected time.",
+      };
+    }
+    return { ok: false, error: updateErr.message };
+  }
+
+  // Update or insert locker_occupancy if lockerNumber is supplied
+  if (input.lockerNumber !== null) {
+    if (existingOcc) {
+      if (lockerChanged || serviceChanged) {
+        const { error: occErr } = await supabase
+          .from("locker_occupancy")
+          .update({
+            locker_number: input.lockerNumber,
+            service_id: input.serviceId,
+          })
+          .eq("id", existingOcc.id);
+
+        if (occErr) {
+          if (occErr.code === UNIQUE_VIOLATION) {
+            return {
+              ok: false,
+              field: "locker",
+              error: `Locker #${input.lockerNumber} is already occupied.`,
+            };
+          }
+          return { ok: false, error: occErr.message };
+        }
+      }
+    } else {
+      const { error: occErr } = await supabase.from("locker_occupancy").insert({
+        locker_number: input.lockerNumber,
+        client_id: booking.client_id,
+        guest_label: booking.guest_label,
+        room_number: booking.room_number,
+        service_id: input.serviceId,
+        checked_in_by: input.staffId,
+        booking_id: booking.id,
+      });
+
+      if (occErr) {
+        if (occErr.code === UNIQUE_VIOLATION) {
+          return {
+            ok: false,
+            field: "locker",
+            error: `Locker #${input.lockerNumber} is already occupied.`,
+          };
+        }
+        return { ok: false, error: occErr.message };
+      }
+    }
+  }
+
+  // Build audit log details
+  const logParts: string[] = [`booking_id=${input.bookingId} date=${booking.booking_date}`];
+
+  if (serviceChanged) {
+    const { data: svcs } = await supabase
+      .from("services")
+      .select("id, name")
+      .in("id", [booking.service_id, input.serviceId]);
+    const oldSvc = svcs?.find((s) => s.id === booking.service_id)?.name ?? booking.service_id;
+    const newSvc = svcs?.find((s) => s.id === input.serviceId)?.name ?? input.serviceId;
+    logParts.push(`old_service="${oldSvc}" new_service="${newSvc}"`);
+  }
+
+  if (therapistChanged) {
+    const ids = [booking.therapist_id, input.therapistId].filter((id): id is string => !!id);
+    const { data: tRows } = ids.length
+      ? await supabase.from("therapists").select("id, name").in("id", ids)
+      : { data: [] };
+    const oldT = tRows?.find((t) => t.id === booking.therapist_id)?.name ?? "Unassigned";
+    const newT = tRows?.find((t) => t.id === input.therapistId)?.name ?? "Unassigned";
+    logParts.push(`old_therapist="${oldT}" new_therapist="${newT}"`);
+  }
+
+  if (timeChanged) {
+    logParts.push(`old_time=${booking.start_time} new_time=${input.startTime}`);
+  }
+
+  if (lockerChanged) {
+    logParts.push(`old_locker=${existingOcc?.locker_number ?? "none"} new_locker=${input.lockerNumber ?? "none"}`);
+  }
+
+  await supabase.from("action_logs").insert({
+    staff_id: input.staffId,
+    action: "edit_booking",
+    detail: logParts.join(" "),
+  });
+
+  revalidatePath("/bookings");
+  revalidatePath("/dashboard");
+  revalidatePath("/call-sheet");
+  revalidatePath("/lockers");
+
+  return { ok: true };
+}
+
 export type CancelReassignmentResult =
   | { ok: true }
   | { ok: false; error: string };
