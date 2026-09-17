@@ -80,38 +80,40 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ## Last Completed Tasks
 
-1. **2026-09-17 — Default Call Sheet to 'All' Tab, Add Time-based Status Badges, and Fix Missing Client Codename**
+1. **2026-09-17 — Split Payment (Cash + GCash), Restrict Methods to Cash/GCash, and Remove Redundant Staff Input**
+   (`ohm#spltpaylog`). Implementation plan presented and approved before code execution.
+   - **Restricted Payment Dropdown Options (`components/log-visit-modal.tsx`)**: Restricted payment method options strictly to `Cash`, `GCash`, and `Split (Cash + GCash)`, removing obsolete `Card` and `Points` options.
+   - **Split Payment Controls & Smart Auto-Balance**: Added numerical inputs for **Cash Amount (₱)** and **GCash Amount (₱)** side-by-side when `Split (Cash + GCash)` is selected. Editing one field automatically balances the remainder into the other field against `computedAmount`.
+   - **Validation Guard**: Enforced `cashAmount + gcashAmount === totalAmountPaid`. Renders inline warning `⚠ Sum of Cash (₱X) and GCash (₱Y) must equal required total (₱Z)` and disables confirm submit button when unbalanced.
+   - **Removed Redundant Staff Field**: Removed visible "Logged by (staff)" field from modal UI while retaining staff attribution in server action via `useStaffSim()`.
+   - **Split Payment Sales Recording (`app/(staff)/bookings/actions.ts`)**: Updated `logVisitBooking` (and `quickWalkin`) server action to insert **two distinct rows** in `public.sales` (`payment_method: 'Cash'` with `splitCashAmount` and `payment_method: 'GCash'` with `splitGcashAmount`) for split payment visits. Preserved schema while guaranteeing Daily Sales Remittance KPI cards (`Cash Remit` vs `Online / E-Wallet`) tally split payments accurately. `npm run build` clean. See [[sales_state]] and `.ai/handoff.md`.
+
+2. **2026-09-17 — Default Call Sheet to 'All' Tab, Add Time-based Status Badges, and Fix Missing Client Codename**
    (`ohm#cllshtstat`). Implementation plan presented and approved before code execution.
    - Updated `app/(staff)/call-sheet/page.tsx` query and mapping to use `extractCodename()` helper, robustly extracting `client_codename` across direct `locker_occupancy.client_id` and linked `bookings.client_id`, with fallback to `guest_label`. Passed `duration_minutes` to browser.
    - Updated `components/call-sheet-browser.tsx` default active tab state to `"all"`.
    - Added `getSlotStatus(slotTime, durationMinutes, checkedInAt)` to compute Asia/Manila status (In Progress, Done, Upcoming).
    - Rendered `TIME` and `STATUS` columns exclusively on the `"All"` tab view. Specific time slot tabs retain the standard 5-column layout. Canvas JPEG download export remains clean. `npm run build` clean. See [[operations_state]] and `.ai/handoff.md`.
 
-2. **2026-09-17 — Add Client Codename Column to Call Sheet Table**
+3. **2026-09-17 — Add Client Codename Column to Call Sheet Table**
    (`ohm#cllshtclnt`). Implementation plan presented and approved before code execution.
    - Updated `app/(staff)/call-sheet/page.tsx` query to include `bookings(start_time, therapists(name), clients(codename))` in addition to `clients(codename)`, resolving `client_codename` via `o.clients?.codename ?? o.bookings?.clients?.codename ?? null`.
    - Updated `components/call-sheet-browser.tsx` subtitle to `CALL SHEET — LOCKER / ROOM / SERVICE / THERA / CLIENT`.
    - Added `CLIENT` header column (`<div>CLIENT</div>`) to the right of `THERA`, rendered `client_codename` styled with `font-semibold text-foreground` or fallback `—`.
    - Updated Canvas JPEG drawer `drawCallSheetJpeg` to render the `CLIENT` header and column values in downloaded images. `npm run build` clean. See [[operations_state]] and `.ai/handoff.md`.
 
-3. **2026-09-17 — Fix Daily Sales Remittance Window to Include Daytime Check-Ins (8:00 AM – 2:00 AM)**
+4. **2026-09-17 — Fix Daily Sales Remittance Window to Include Daytime Check-Ins (8:00 AM – 2:00 AM)**
    (`ohm#slswndw8am`). Implementation plan presented and approved before code execution.
    - Updated `getSpaDayBounds(spaDateStr)` in `lib/analytics/spa-day.ts` start bound from `08:00:00Z` (16:00:00+08 / 4:00 PM PHT) to `00:00:00Z` (08:00:00+08 / 8:00 AM PHT), matching the 8:00 AM Spa Day turnover rule (`ohm#spaday8am`).
    - Updated badge in `components/sales-browser.tsx` to `Spa Operational Window (8:00 AM – 2:00 AM)`.
    - Ensures daytime check-in and walk-in sales logged from 8:00 AM onwards up to the 2:00 AM closing cutoff are included in the remittance tally. `npm run build` clean. See [[sales_state]] and `.ai/handoff.md`.
 
-4. **2026-09-17 — Display Therapist Availability Suffixes & Grayed-Out Disabled States in Quick Walk-In Modal Dropdown**
+5. **2026-09-17 — Display Therapist Availability Suffixes & Grayed-Out Disabled States in Quick Walk-In Modal Dropdown**
    (`ohm#j4m8v2xq`). Implementation plan presented and approved before code execution.
    - Updated `components/quick-walkin-modal.tsx` to fetch `therapist_day_off`, `therapist_absence`, and `therapist_leave` for the modal date (`todayIso()`).
    - Formatted dropdown options with status labels (`Akio - Day Off`, `Josh - On Leave`, `Name - Absent`, `Name - Fully Booked`), set `disabled={disabled}`, and applied `text-stone-500` disabled styling.
    - Extended `canSubmit` to check `!unavailableTherapists.has(therapistId)`.
    - Verified server-side validation in `app/(staff)/bookings/actions.ts` (`quickWalkin` action) handling Postgres trigger `trg_bookings_check_therapist_availability` exception `THERAPIST_UNAVAILABLE` and returning a friendly error. `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
-
-5. **2026-09-17 — Conditionally Display Leftmost Edit Column Strictly on CHECK-IN Tab**
-   (`ohm#bkgupcedt`).
-   - Updated `components/booking-browser.tsx` to conditionally render the leftmost "Edit" header (`<th>`) and body cell (`<td>`) only when `tab === "checkin"`.
-   - On UPCOMING and CHECK-OUT tabs, the redundant leftmost Edit column is removed.
-   - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
 
 

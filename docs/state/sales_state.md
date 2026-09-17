@@ -18,11 +18,14 @@
 
 ## Implemented (app level, Core Loop `ohm#7f3k9d2m`)
 
-- One write path exists, indirectly: `public.log_visit(...)` (see
-  [[points_ledger_state]]) inserts a `sales` row whenever the Log Visit
-  modal's amount is `> 0` — either the full service price (plain earn
-  visit) or a cash top-up (redemption-with-upgrade). `processed_by` is the
-  real authenticated staff member (`sessionStaff.id`).
+- **Log Visit / Quick Walk-In Write Path (`logVisitBooking` / `quickWalkin`, `ohm#spltpaylog`, 2026-09-17)**:
+  - Payment dropdown restricted to `Cash`, `GCash`, and `Split (Cash + GCash)`.
+  - For standard `Cash` or `GCash`, inserts 1 row into `public.sales`.
+  - For `Split (Cash + GCash)` payments, inserts **two distinct rows** into `public.sales` referencing the same booking/visit:
+    - Row 1: `payment_method: 'Cash'`, `amount: splitCashAmount`
+    - Row 2: `payment_method: 'GCash'`, `amount: splitGcashAmount`, `payment_ref: paymentRef`
+  - Preserves table schema while ensuring Daily Sales Remittance KPI cards (`Cash Remit` vs `Online / E-Wallet`) automatically tally split amounts accurately.
+- `processed_by` is the real authenticated staff member (`sessionStaff.id`).
 - **RLS, real role-based as of Staff Auth 6C-2 (`ohm#5m8t2x6b`,
   2026-08-29)**: the additive `public_select`/`public_insert`/
   `public_update` (`USING`/`WITH CHECK (true)`) policies from Core

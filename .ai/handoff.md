@@ -5,6 +5,27 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Split Payment (Cash + GCash), Restrict Methods to Cash/GCash, and Remove Redundant Staff Input — complete**
+  (`ohm#spltpaylog`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Restricted Payment Methods (`components/log-visit-modal.tsx`)**:
+    - Restricted payment method dropdown options strictly to `Cash`, `GCash`, and `Split (Cash + GCash)`.
+    - Removed obsolete `Card` and `Points` options.
+  - **Split Payment Controls & Smart Auto-Balance (`components/log-visit-modal.tsx`)**:
+    - Added side-by-side numerical inputs for **Cash Amount (₱)** and **GCash Amount (₱)** when `Split (Cash + GCash)` is selected.
+    - Smart Auto-Balance: editing Cash auto-computes `splitGcash = Math.max(0, totalAmount - cash)`; editing GCash auto-computes `splitCash = Math.max(0, totalAmount - gcash)`. Updating service/promo/addons automatically updates non-last-edited field.
+  - **Validation Guard (`components/log-visit-modal.tsx`)**:
+    - Enforced `splitCash + splitGcash === totalAmount`.
+    - Shows inline warning `⚠ Sum of Cash (₱X) and GCash (₱Y) must equal required total (₱Z)` and disables confirm submit button when unbalanced.
+  - **Removed Redundant Staff Field (`components/log-visit-modal.tsx`)**:
+    - Removed visible "Logged by (staff)" field from modal UI while preserving staff attribution in backend actions via `useStaffSim()`.
+  - **Sales Recording (`app/(staff)/bookings/actions.ts`)**:
+    - Updated `logVisitBooking` (and `quickWalkin`) server action to insert **two distinct rows** in `public.sales`:
+      - Row 1: `payment_method: 'Cash'`, `amount: splitCashAmount`
+      - Row 2: `payment_method: 'GCash'`, `amount: splitGcashAmount`, `payment_ref: paymentRef`
+    - Preserved schema while guaranteeing Daily Sales Remittance KPI cards (`Cash Remit` vs `Online / E-Wallet`) tally split payments accurately.
+  - `npm run build` clean. See [[sales_state]] and `.ai/briefing.md`.
+
 - **Default Call Sheet to 'All' Tab, Add Time-based Status Badges, and Fix Missing Client Codename — complete**
   (`ohm#cllshtstat`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

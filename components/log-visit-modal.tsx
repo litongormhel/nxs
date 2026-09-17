@@ -147,8 +147,11 @@ export function LogVisitModal({
   const [addonIds, setAddonIds] = useState<string[]>([]);
   const [promoId, setPromoId] = useState<string>(initialBooking?.promo_id ?? "none");
   const [paymentMethod, setPaymentMethod] = useState<
-    "Cash" | "GCash" | "Card" | "Points"
+    "Cash" | "GCash" | "Split (Cash + GCash)"
   >("Cash");
+  const [splitCash, setSplitCash] = useState<number | "">(0);
+  const [splitGcash, setSplitGcash] = useState<number | "">(0);
+  const [lastEditedField, setLastEditedField] = useState<"cash" | "gcash">("cash");
   const [gcashRef, setGcashRef] = useState("");
   const { sessionStaff } = useStaffSim();
   const actor = sessionStaff;
@@ -335,6 +338,23 @@ export function LogVisitModal({
     discountValue,
   ]);
 
+  useEffect(() => {
+    if (paymentMethod === "Split (Cash + GCash)") {
+      if (lastEditedField === "gcash") {
+        const g = typeof splitGcash === "number" ? splitGcash : 0;
+        setSplitCash(Math.max(0, computedAmount - g));
+      } else {
+        const c = typeof splitCash === "number" ? splitCash : 0;
+        setSplitGcash(Math.max(0, computedAmount - c));
+      }
+    }
+  }, [computedAmount, paymentMethod, lastEditedField]);
+
+  const numCash = typeof splitCash === "number" ? splitCash : (parseFloat(String(splitCash)) || 0);
+  const numGcash = typeof splitGcash === "number" ? splitGcash : (parseFloat(String(splitGcash)) || 0);
+  const isSplit = paymentMethod === "Split (Cash + GCash)";
+  const isSplitValid = !isSplit || (numCash >= 0 && numGcash >= 0 && Math.abs((numCash + numGcash) - computedAmount) < 0.01);
+
   const canEarnRedeem = !clientId || !!selectedClient?.has_portal_account || !!scannedFallback;
 
   const canSubmit =
@@ -344,7 +364,8 @@ export function LogVisitModal({
     (isWetArea || !!therapistId) &&
     !!lockerNumber &&
     !!staffId &&
-    canEarnRedeem;
+    canEarnRedeem &&
+    isSplitValid;
 
   function handleConfirm() {
     setError(null);
@@ -358,6 +379,10 @@ export function LogVisitModal({
     }
     if (!lockerNumber) {
       setError("Please assign a locker.");
+      return;
+    }
+    if (!isSplitValid) {
+      setError(`Sum of Cash (₱${numCash}) and GCash (₱${numGcash}) must equal total amount paid (₱${computedAmount}).`);
       return;
     }
 
@@ -379,7 +404,9 @@ export function LogVisitModal({
         amount: computedAmount,
         servicePaidAmount,
         paymentMethod,
-        paymentRef: paymentMethod === "GCash" ? gcashRef.trim() || null : null,
+        splitCashAmount: isSplit ? numCash : null,
+        splitGcashAmount: isSplit ? numGcash : null,
+        paymentRef: (paymentMethod === "GCash" || (isSplit && numGcash > 0)) ? gcashRef.trim() || null : null,
         isRedemption,
         upgradeTo: isUpgraded ? upgradeTo : null,
         upgradeCash: isUpgraded ? upgradeCash : null,
@@ -814,22 +841,91 @@ export function LogVisitModal({
             <select
               id="fPayment"
               value={paymentMethod}
-              onChange={(e) =>
-                setPaymentMethod(
-                  e.target.value as "Cash" | "GCash" | "Card" | "Points"
-                )
-              }
+              onChange={(e) => {
+                const newMethod = e.target.value as "Cash" | "GCash" | "Split (Cash + GCash)";
+                setPaymentMethod(newMethod);
+                if (newMethod === "Split (Cash + GCash)") {
+                  setSplitCash(computedAmount);
+                  setSplitGcash(0);
+                  setLastEditedField("cash");
+                }
+              }}
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
             >
               <option value="Cash">Cash</option>
               <option value="GCash">GCash</option>
-              <option value="Card">Card</option>
-              <option value="Points">Points</option>
+              <option value="Split (Cash + GCash)">Split (Cash + GCash)</option>
             </select>
           </div>
 
+          {/* Split Payment Form Controls */}
+          {paymentMethod === "Split (Cash + GCash)" && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted" htmlFor="fSplitCash">
+                    Cash Amount (₱)
+                  </label>
+                  <input
+                    id="fSplitCash"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={splitCash}
+                    onChange={(e) => {
+                      const valStr = e.target.value;
+                      if (valStr === "") {
+                        setSplitCash("");
+                        setLastEditedField("cash");
+                      } else {
+                        const val = parseFloat(valStr);
+                        const num = isNaN(val) ? 0 : val;
+                        setSplitCash(num);
+                        setSplitGcash(Math.max(0, computedAmount - num));
+                        setLastEditedField("cash");
+                      }
+                    }}
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted" htmlFor="fSplitGcash">
+                    GCash Amount (₱)
+                  </label>
+                  <input
+                    id="fSplitGcash"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={splitGcash}
+                    onChange={(e) => {
+                      const valStr = e.target.value;
+                      if (valStr === "") {
+                        setSplitGcash("");
+                        setLastEditedField("gcash");
+                      } else {
+                        const val = parseFloat(valStr);
+                        const num = isNaN(val) ? 0 : val;
+                        setSplitGcash(num);
+                        setSplitCash(Math.max(0, computedAmount - num));
+                        setLastEditedField("gcash");
+                      }
+                    }}
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none font-mono"
+                  />
+                </div>
+              </div>
+
+              {!isSplitValid && (
+                <p className="text-xs text-amber-400 font-medium">
+                  ⚠ Sum of Cash (₱{numCash.toLocaleString()}) and GCash (₱{numGcash.toLocaleString()}) must equal required total (₱{computedAmount.toLocaleString()}).
+                </p>
+              )}
+            </div>
+          )}
+
           {/* GCash Ref */}
-          {paymentMethod === "GCash" && (
+          {(paymentMethod === "GCash" || (paymentMethod === "Split (Cash + GCash)" && numGcash > 0)) && (
             <div>
               <label className="text-xs text-muted" htmlFor="fGcashRef">
                 GCash Reference Number <span className="opacity-70">(optional)</span>
@@ -844,14 +940,6 @@ export function LogVisitModal({
               />
             </div>
           )}
-
-          {/* Logged by staff */}
-          <div>
-            <div className="text-xs text-muted">Logged by (staff)</div>
-            <div className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
-              {actor ? `${actor.name} · ${actor.position}` : "—"}
-            </div>
-          </div>
 
           {/* Error Message */}
           {error && (

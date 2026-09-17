@@ -142,7 +142,9 @@ export type QuickWalkinInput = {
   amount: number;
   /** Service-only paid amount (post-promo/discount, excluding add-ons) — the input to the loyalty formula, distinct from `amount` which includes add-ons and is what's recorded on the sale. */
   servicePaidAmount: number;
-  paymentMethod: "Cash" | "GCash";
+  paymentMethod: "Cash" | "GCash" | "Split (Cash + GCash)";
+  splitCashAmount?: number | null;
+  splitGcashAmount?: number | null;
   paymentRef: string | null;
   staffId: string;
 };
@@ -177,6 +179,11 @@ export async function quickWalkin(
     );
   }
 
+  const isSplit = input.paymentMethod === "Split (Cash + GCash)";
+  const cashAmt = isSplit ? (input.splitCashAmount ?? 0) : input.amount;
+  const gcashAmt = isSplit ? (input.splitGcashAmount ?? 0) : 0;
+  const primaryMethod = isSplit ? "Cash" : input.paymentMethod;
+
   const { data, error } = await supabase.rpc("quick_walkin", {
     p_client_id: input.clientId,
     p_guest_label: input.guestLabel,
@@ -190,9 +197,9 @@ export async function quickWalkin(
     p_manual_discount_type: input.manualDiscountType,
     p_manual_discount_value: input.manualDiscountValue,
     p_addon_ids: input.addonIds,
-    p_amount: input.amount,
-    p_payment_method: input.paymentMethod,
-    p_payment_ref: input.paymentRef,
+    p_amount: cashAmt,
+    p_payment_method: primaryMethod,
+    p_payment_ref: isSplit ? null : input.paymentRef,
     p_staff_id: input.staffId,
     p_points_earned: pointsAwarded,
   });
@@ -243,8 +250,29 @@ export async function quickWalkin(
     return { ok: false, error: "Quick walk-in did not return a booking id." };
   }
 
+  if (isSplit && gcashAmt > 0) {
+    const { error: splitErr } = await supabase.from("sales").insert({
+      client_id: input.clientId,
+      guest_label: input.guestLabel,
+      booking_id: bookingId,
+      service_id: input.serviceId,
+      therapist_id: input.therapistId,
+      amount: gcashAmt,
+      payment_method: "GCash",
+      payment_ref: input.paymentRef,
+      promo_id: input.promoId,
+      manual_discount_type: input.manualDiscountType,
+      manual_discount_value: input.manualDiscountValue,
+      processed_by: input.staffId,
+    });
+    if (splitErr) {
+      return { ok: false, error: splitErr.message };
+    }
+  }
+
   revalidatePath("/bookings");
   revalidatePath("/dashboard");
+  revalidatePath("/sales");
 
   return { ok: true, bookingId, pointsAwarded };
 }
@@ -653,7 +681,9 @@ export type LogVisitBookingInput = {
   amount: number;
   /** Service-only paid amount (post-promo/discount, excluding add-ons) — the input to the loyalty formula, distinct from `amount` which includes add-ons and is what's recorded on the sale. */
   servicePaidAmount: number;
-  paymentMethod: "Cash" | "GCash" | "Card" | "Points";
+  paymentMethod: "Cash" | "GCash" | "Split (Cash + GCash)";
+  splitCashAmount?: number | null;
+  splitGcashAmount?: number | null;
   paymentRef: string | null;
   isRedemption: boolean;
   upgradeTo?: string | null;
@@ -687,7 +717,9 @@ export async function logVisitBooking(
       addonIds: input.addonIds,
       amount: input.amount,
       servicePaidAmount: input.servicePaidAmount,
-      paymentMethod: input.paymentMethod === "GCash" ? "GCash" : "Cash",
+      paymentMethod: input.paymentMethod,
+      splitCashAmount: input.splitCashAmount,
+      splitGcashAmount: input.splitGcashAmount,
       paymentRef: input.paymentRef,
       staffId: input.staffId,
     });
@@ -764,31 +796,79 @@ export async function logVisitBooking(
     return { ok: false, error: bookingErr.message };
   }
 
-  // 4. Insert Sale
-  const { data: saleData, error: saleErr } = await supabase
-    .from("sales")
-    .insert({
-      client_id: input.clientId,
-      guest_label: input.guestLabel,
-      booking_id: input.bookingId,
-      service_id: input.serviceId,
-      therapist_id: input.therapistId,
-      amount: input.amount,
-      payment_method: input.paymentMethod,
-      payment_ref: input.paymentRef,
-      promo_id: input.promoId,
-      manual_discount_type: input.manualDiscountType,
-      manual_discount_value: input.manualDiscountValue,
-      processed_by: input.staffId,
-    })
-    .select("id")
-    .single();
+  // 4. Insert Sale (1 row for standard Cash/GCash, 2 rows for Split Payment)
+  const isSplit = input.paymentMethod === "Split (Cash + GCash)";
+  const cashAmt = isSplit ? (input.splitCashAmount ?? 0) : input.amount;
+  const gcashAmt = isSplit ? (input.splitGcashAmount ?? 0) : 0;
 
-  if (saleErr) {
-    return { ok: false, error: saleErr.message };
+  let saleId: string | null = null;
+
+  if (isSplit) {
+    const saleRows = [
+      {
+        client_id: input.clientId,
+        guest_label: input.guestLabel,
+        booking_id: input.bookingId,
+        service_id: input.serviceId,
+        therapist_id: input.therapistId,
+        amount: cashAmt,
+        payment_method: "Cash",
+        payment_ref: null,
+        promo_id: input.promoId,
+        manual_discount_type: input.manualDiscountType,
+        manual_discount_value: input.manualDiscountValue,
+        processed_by: input.staffId,
+      },
+      {
+        client_id: input.clientId,
+        guest_label: input.guestLabel,
+        booking_id: input.bookingId,
+        service_id: input.serviceId,
+        therapist_id: input.therapistId,
+        amount: gcashAmt,
+        payment_method: "GCash",
+        payment_ref: input.paymentRef,
+        promo_id: input.promoId,
+        manual_discount_type: input.manualDiscountType,
+        manual_discount_value: input.manualDiscountValue,
+        processed_by: input.staffId,
+      },
+    ];
+
+    const { data: insertedSales, error: saleErr } = await supabase
+      .from("sales")
+      .insert(saleRows)
+      .select("id");
+
+    if (saleErr) {
+      return { ok: false, error: saleErr.message };
+    }
+    saleId = insertedSales?.[0]?.id ?? null;
+  } else {
+    const { data: saleData, error: saleErr } = await supabase
+      .from("sales")
+      .insert({
+        client_id: input.clientId,
+        guest_label: input.guestLabel,
+        booking_id: input.bookingId,
+        service_id: input.serviceId,
+        therapist_id: input.therapistId,
+        amount: input.amount,
+        payment_method: input.paymentMethod,
+        payment_ref: input.paymentRef,
+        promo_id: input.promoId,
+        manual_discount_type: input.manualDiscountType,
+        manual_discount_value: input.manualDiscountValue,
+        processed_by: input.staffId,
+      })
+      .select("id")
+      .single();
+
+    if (saleErr) {
+      return { ok: false, error: saleErr.message };
+    }
+    saleId = saleData?.id ?? null;
   }
-
-  const saleId = saleData?.id ?? null;
 
   // 5. Insert Sale Addons
   if (input.addonIds.length > 0 && saleId) {
@@ -808,10 +888,6 @@ export async function logVisitBooking(
   }
 
   // 6. Insert Points Transaction (for registered clients)
-  // EARN with earnedPoints === null means the loyalty formula isn't
-  // configured yet — the ledger insert is skipped entirely (no fabricated
-  // zero-point row); the visit still completes, and this is flagged in the
-  // action_logs entry below instead of a silent skip.
   let ledgerId: string | null = null;
   if (input.clientId && (input.isRedemption || earnedPoints !== null)) {
     const pointsDelta = input.isRedemption ? -100 : (earnedPoints as number);
@@ -846,10 +922,11 @@ export async function logVisitBooking(
     input.clientId && !input.isRedemption
       ? ` points_awarded=${earnedPoints === null ? "NONE:formula_not_configured" : earnedPoints}`
       : "";
+  const payDetail = isSplit ? `split_cash=${cashAmt} split_gcash=${gcashAmt}` : `method=${input.paymentMethod}`;
   await supabase.from("action_logs").insert({
     staff_id: input.staffId,
     action: "log_visit",
-    detail: `client=${input.clientId ?? input.guestLabel} service=${service.name} amount=${input.amount} sale_id=${saleId} booking_id=${input.bookingId}${pointsLogNote}`,
+    detail: `client=${input.clientId ?? input.guestLabel} service=${service.name} amount=${input.amount} ${payDetail} sale_id=${saleId} booking_id=${input.bookingId}${pointsLogNote}`,
   });
 
   revalidatePath("/bookings");
@@ -857,6 +934,7 @@ export async function logVisitBooking(
   revalidatePath("/clients");
   revalidatePath("/lockers");
   revalidatePath("/call-sheet");
+  revalidatePath("/sales");
 
   return { ok: true, saleId, ledgerId, pointsAwarded: input.isRedemption ? null : earnedPoints };
 }
