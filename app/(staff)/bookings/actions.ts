@@ -718,7 +718,34 @@ export async function logVisitBooking(
         service.points_earned
       );
 
-  // 2. Update booking status to Completed
+  // 2. Assign Locker Occupancy FIRST (validates locker/room constraints before updating booking status)
+  const { data: lockerData, error: lockerErr } = await supabase
+    .from("locker_occupancy")
+    .insert({
+      locker_number: input.lockerNumber,
+      client_id: input.clientId,
+      guest_label: input.guestLabel,
+      room_number: input.roomNumber,
+      service_id: input.serviceId,
+      checked_in_by: input.staffId,
+      booking_id: input.bookingId,
+    })
+    .select("id")
+    .single();
+
+  if (lockerErr) {
+    if (lockerErr.code === UNIQUE_VIOLATION) {
+      if (lockerErr.message.includes("one_active_occupant_per_locker")) {
+        return { ok: false, field: "locker", error: "That locker was just taken — pick another." };
+      }
+      if (lockerErr.message.includes("one_active_occupant_per_room")) {
+        return { ok: false, field: "room", error: "That room is already occupied." };
+      }
+    }
+    return { ok: false, error: lockerErr.message };
+  }
+
+  // 3. Update booking status to Completed
   const { error: bookingErr } = await supabase
     .from("bookings")
     .update({
@@ -730,10 +757,14 @@ export async function logVisitBooking(
     .eq("id", input.bookingId);
 
   if (bookingErr) {
+    // Roll back locker occupancy if booking update fails
+    if (lockerData?.id) {
+      await supabase.from("locker_occupancy").delete().eq("id", lockerData.id);
+    }
     return { ok: false, error: bookingErr.message };
   }
 
-  // 3. Insert Sale
+  // 4. Insert Sale
   const { data: saleData, error: saleErr } = await supabase
     .from("sales")
     .insert({
@@ -759,7 +790,7 @@ export async function logVisitBooking(
 
   const saleId = saleData?.id ?? null;
 
-  // 4. Insert Sale Addons
+  // 5. Insert Sale Addons
   if (input.addonIds.length > 0 && saleId) {
     const { data: addonsData } = await supabase
       .from("addons")
@@ -776,7 +807,7 @@ export async function logVisitBooking(
     }
   }
 
-  // 5. Insert Points Transaction (for registered clients)
+  // 6. Insert Points Transaction (for registered clients)
   // EARN with earnedPoints === null means the loyalty formula isn't
   // configured yet — the ledger insert is skipped entirely (no fabricated
   // zero-point row); the visit still completes, and this is flagged in the
@@ -808,29 +839,6 @@ export async function logVisitBooking(
       return { ok: false, error: ledgerErr.message };
     }
     ledgerId = ledgerData?.id ?? null;
-  }
-
-  // 6. Assign Locker Occupancy
-  const { error: lockerErr } = await supabase.from("locker_occupancy").insert({
-    locker_number: input.lockerNumber,
-    client_id: input.clientId,
-    guest_label: input.guestLabel,
-    room_number: input.roomNumber,
-    service_id: input.serviceId,
-    checked_in_by: input.staffId,
-    booking_id: input.bookingId,
-  });
-
-  if (lockerErr) {
-    if (lockerErr.code === UNIQUE_VIOLATION) {
-      if (lockerErr.message.includes("one_active_occupant_per_locker")) {
-        return { ok: false, field: "locker", error: "That locker was just taken — pick another." };
-      }
-      if (lockerErr.message.includes("one_active_occupant_per_room")) {
-        return { ok: false, field: "room", error: "That room is already occupied." };
-      }
-    }
-    return { ok: false, error: lockerErr.message };
   }
 
   // 7. Insert Action Log

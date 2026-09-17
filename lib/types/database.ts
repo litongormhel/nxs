@@ -1173,6 +1173,14 @@ export type Database = {
           cancelled_ids: string[]
         }
       }
+      auto_checkout_stale_lockers: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          cutoff_date: string
+          checked_out_count: number
+          checked_out_ids: string[]
+        }
+      }
       clear_own_must_change_password: {
         Args: never
         Returns: undefined

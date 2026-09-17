@@ -397,6 +397,11 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Set `<option disabled className="text-stone-500">` to prevent selecting unavailable therapists unless currently assigned to that booking (`booking.therapist_id === t.id`).
   - Evaluated recurring day-off weekday via `new Date('${date}T00:00:00').getDay()` (0 = Sunday ... 6 = Saturday), aligning JS `getDay()` with Postgres `extract(dow from booking_date)`.
 
+**Correction, `ohm#lckstalesync` (2026-09-17)** — Fix Desync Between Bookings Check-In Tab & Locker Board (Missing Nanon Occupancy + Stale Locker Rows).
+
+- **Atomicity & Order Fix (`logVisitBooking`)**: Reordered `logVisitBooking` in `app/(staff)/bookings/actions.ts` so `locker_occupancy` is assigned before `bookings.status` is set to `'Completed'`. If locker assignment fails, status update is aborted/rolled back, eliminating orphaned completed bookings without locker records.
+- **Stale Locker Cleanup & Nanon Backfill**: Created migration `20260917120000_auto_checkout_stale_lockers.sql` with procedure `auto_checkout_stale_lockers()` to auto check-out unclosed locker rows past 2:00 AM cutoff, auto-releasing JM (#9) and ohm (#18) and backfilling Nanon (#8).
+
 **Correction, `ohm#bkgchkedt` (2026-09-17)** — Fix Check-in Time & Locker missing data + Add leftmost Edit Booking action & modal.
 
 - **Check-in Time & Locker # Fix**: Updated `BookingBrowser` (`components/booking-browser.tsx`) day-view query to fetch `bookings` alongside active `locker_occupancy` records with fallback resolution for unlinked `booking_id` rows, resolving blank `-` displays on Check-in and Check-out tabs.

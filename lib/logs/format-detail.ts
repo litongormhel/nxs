@@ -235,6 +235,11 @@ const FORMATTERS: Record<string, Formatter> = {
     sentence: `Auto-cancelled lapsed booking on ${f.date ?? "?"}${f.start_time ? ` (${fmtTime(f.start_time)})` : ""} (past 2:00 AM cutoff).`,
     technicalIds: f.booking_id ? [`booking_id=${f.booking_id}`] : [],
   }),
+
+  auto_checkout_stale_locker: (f) => ({
+    sentence: `Auto checked-out stale locker ${f.locker ?? "?"} (past 2:00 AM cutoff).`,
+    technicalIds: f.occupancy_id ? [`occupancy_id=${f.occupancy_id}`] : [],
+  }),
 };
 
 export function formatLogDetail(action: string, detail: string | null, lookups: Lookups): FormattedDetail {

@@ -5,6 +5,13 @@ import { toSpaDay, spaDayNow } from "@/lib/analytics/spa-day";
 export default async function LockersPage() {
   const supabase = await createClient();
 
+  // Run auto-checkout for stale lockers past cutoff before rendering
+  try {
+    await supabase.rpc("auto_checkout_stale_lockers");
+  } catch {
+    // Ignore RPC failure if migration not yet applied
+  }
+
   const [{ data: lockers }, { data: occupancy }] = await Promise.all([
     supabase
       .from("lockers")

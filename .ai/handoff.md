@@ -5,6 +5,15 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Fix Desync Between Bookings Check-In Tab & Locker Board (Missing Nanon Occupancy + Stale Locker Rows) — complete**
+  (`ohm#lckstalesync`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Atomicity & Order Fix (`logVisitBooking`)**: Reordered steps in `app/(staff)/bookings/actions.ts` so `locker_occupancy` insertion occurs before `bookings.status` is updated to `'Completed'`. If locker assignment fails, the status update is prevented/rolled back, eliminating orphaned completed bookings without locker records.
+  - **Stale Locker Auto-Checkout DB Procedure (`20260917120000_auto_checkout_stale_lockers.sql`)**: Created `public.auto_checkout_stale_lockers()` stored procedure to automatically set `checked_out_at = now()` for unclosed locker rows checked in prior to the 2:00 AM cutoff date, and executed data cleanup to auto-release stale rows (JM #9 & ohm #18) and backfill Nanon's locker record (#8).
+  - **Auto Cleanup on Page Load (`LockersPage`)**: Updated `app/(staff)/lockers/page.tsx` to invoke `auto_checkout_stale_lockers()` on page load.
+  - **Log Detail Formatter**: Added `auto_checkout_stale_locker` formatter in `lib/logs/format-detail.ts`.
+  - `npm run build` clean.
+
 - **Daily Sales Remittance Page Redesign using SpaDay Window (4:00 PM – 2:00 AM) — complete**
   (`ohm#slsremit`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

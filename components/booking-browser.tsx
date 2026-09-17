@@ -185,6 +185,7 @@ export function BookingBrowser({
           if (match) {
             occList = [
               {
+                id: match.id,
                 checked_in_at: match.checked_in_at,
                 checked_out_at: match.checked_out_at,
                 locker_number: match.locker_number,

@@ -82,6 +82,8 @@ occupancy rows are never hard-deleted.
   Check-in/Check-out tabs (a separate `bookings.status`-keyed read path)
   still show a stale row stuck in "Check-in" indefinitely — flagged as a
   known residual gap for a future prompt, not silently patched here.
+- **Stale Locker Auto-Checkout & Sync Fix** (`ohm#lckstalesync`, 2026-09-17):
+  Created stored procedure `public.auto_checkout_stale_lockers()` (`20260917120000_auto_checkout_stale_lockers.sql`) to auto check-out unclosed `locker_occupancy` rows checked in prior to the 2:00 AM cutoff date (`v_cutoff_date`), releasing stale rows (JM #9 and ohm #18) and backfilling Nanon's missing occupancy (#8). Updated `app/(staff)/lockers/page.tsx` to invoke `auto_checkout_stale_lockers()` on page load. Reordered `logVisitBooking()` in `app/(staff)/bookings/actions.ts` to assign `locker_occupancy` before setting `bookings.status = 'Completed'`, eliminating orphaned completed bookings without locker records.
 - Both current write paths into `locker_occupancy` — `quick_walkin()` (RPC)
   and `logVisitBooking()`'s linked-booking branch
   (`app/bookings/actions.ts`) — were verified directly (not assumed) to
