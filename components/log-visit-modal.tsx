@@ -166,6 +166,7 @@ export function LogVisitModal({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [pointsWarning, setPointsWarning] = useState<string | null>(null);
+  const [showSummary, setShowSummary] = useState(false);
 
   // Fetch open bookings and occupied lockers on mount
   useEffect(() => {
@@ -404,7 +405,11 @@ export function LogVisitModal({
       setError(`Sum of Cash (₱${numCash}) and GCash (₱${numGcash}) must equal total amount paid (₱${computedAmount}).`);
       return;
     }
+    setShowSummary(true);
+  }
 
+  function handleFinalizeSubmit() {
+    setError(null);
     startTransition(async () => {
       const result = await logVisitBooking({
         bookingId: selectedBookingId,
@@ -464,6 +469,139 @@ export function LogVisitModal({
           >
             OK
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (showSummary) {
+    const clientCodenameDisplay = selectedClient
+      ? selectedClient.codename
+      : scannedFallback
+      ? scannedFallback.codename
+      : (guestLabel && guestLabel.trim().length > 0)
+      ? guestLabel
+      : "Walk-in Guest";
+
+    const therapistDisplay = isWetArea
+      ? "None (Wet Area)"
+      : therapists.find((t) => t.id === therapistId)?.name ?? "—";
+
+    const massageTimeDisplay = linkedBooking?.start_time
+      ? fmtTime(linkedBooking.start_time)
+      : "4:00 PM";
+    const lockerDisplay = lockerNumber ? `Locker ${lockerNumber}` : "—";
+    const roomDisplay = linkedBooking?.room_number ? `Room ${linkedBooking.room_number}` : "—";
+
+    const baseServiceName = selectedService?.name ?? (isRedemption ? "Combi Massage" : "—");
+    const serviceWithUpgrade = isRedemption && isUpgraded ? `${baseServiceName} (Upgraded to ${upgradeTo})` : baseServiceName;
+    const selectedAddonNames = addons
+      .filter((a) => addonIds.includes(a.id))
+      .map((a) => a.name);
+    const serviceAvailedDisplay = selectedAddonNames.length > 0
+      ? `${serviceWithUpgrade} (+ ${selectedAddonNames.join(", ")})`
+      : serviceWithUpgrade;
+
+    const paymentBreakdown =
+      paymentMethod === "Cash"
+        ? `₱${computedAmount.toLocaleString()} (Cash)`
+        : paymentMethod === "GCash"
+        ? `₱${computedAmount.toLocaleString()} (GCash${gcashRef.trim() ? ` - Ref: ${gcashRef.trim()}` : ""})`
+        : `₱${computedAmount.toLocaleString()} (Cash: ₱${numCash.toLocaleString()} | GCash: ₱${numGcash.toLocaleString()}${gcashRef.trim() ? ` - Ref: ${gcashRef.trim()}` : ""})`;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl space-y-5">
+          <div className="border-b border-border pb-3 flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-foreground">Confirm Check-in</h2>
+              <p className="text-xs text-muted">Review visit summary receipt before finalizing</p>
+            </div>
+            <span className="rounded-md bg-gold/10 px-2 py-1 text-[11px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20">
+              Summary
+            </span>
+          </div>
+
+          {/* Scannable Receipt Card */}
+          <div className="rounded-lg border border-[#292524] bg-[#0c0a09] p-4 space-y-3 font-sans text-xs">
+            <div className="flex items-center justify-between border-b border-[#292524] pb-2.5">
+              <span className="text-muted">Client Codename</span>
+              <span className="font-bold text-accent-gold text-sm">{clientCodenameDisplay}</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 border-b border-[#292524] pb-2.5">
+              <div>
+                <span className="text-muted block text-[11px]">Therapist</span>
+                <span className="font-medium text-foreground">{therapistDisplay}</span>
+              </div>
+              <div>
+                <span className="text-muted block text-[11px]">Massage Time</span>
+                <span className="font-mono text-foreground">{massageTimeDisplay}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 border-b border-[#292524] pb-2.5">
+              <div>
+                <span className="text-muted block text-[11px]">Locker Number</span>
+                <span className="font-medium text-foreground">{lockerDisplay}</span>
+              </div>
+              <div>
+                <span className="text-muted block text-[11px]">Room Number</span>
+                <span className="font-medium text-foreground">{roomDisplay}</span>
+              </div>
+            </div>
+
+            <div className="border-b border-[#292524] pb-2.5">
+              <span className="text-muted block text-[11px]">Service Availed</span>
+              <span className="font-medium text-foreground">{serviceAvailedDisplay}</span>
+            </div>
+
+            <div>
+              <span className="text-muted block text-[11px]">Total Payment</span>
+              <div className="font-mono text-base font-bold text-accent-gold mt-0.5">
+                ₱{computedAmount.toLocaleString()}
+              </div>
+              <div className="font-mono text-[11px] text-muted mt-0.5">
+                {paymentBreakdown}
+              </div>
+            </div>
+          </div>
+
+          {error && (
+            <p className="rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+              {error}
+            </p>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowSummary(false)}
+              disabled={isPending}
+              className="flex-1 rounded-md border border-border px-4 py-2.5 text-sm text-foreground hover:border-gold/30 disabled:opacity-50"
+            >
+              Back / Edit
+            </button>
+            <button
+              type="button"
+              onClick={handleFinalizeSubmit}
+              disabled={isPending}
+              className="flex-[1.4] rounded-md border border-gold bg-gold px-4 py-2.5 text-sm font-semibold text-black hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {isPending ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Finalizing…
+                </>
+              ) : (
+                "Finalize Check-in"
+              )}
+            </button>
+          </div>
         </div>
       </div>
     );

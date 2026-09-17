@@ -80,13 +80,20 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ## Last Completed Tasks
 
-1. **2026-09-17 — Drop `one_active_occupant_per_room` Constraint from `locker_occupancy` to Decouple Room Sessions from Locker Stays**
+1. **2026-09-17 — Add Pre-Confirmation Summary Dialog in Log Visit Modal**
+   (`ohm#logvstsummary`). Implementation plan presented and approved before code execution.
+   - **Two-Step Form Validation & Review Flow (`components/log-visit-modal.tsx`)**: Updated primary "Confirm" button to validate required inputs (therapist unless Wet Area, locker assignment, split payment balance equality, and client portal account check) and transition to `showSummary = true` pre-confirmation view.
+   - **Compact Scannable Receipt Card (`components/log-visit-modal.tsx`)**: Displayed client receipt card styled with `#0c0a09` charcoal background, `#292524` borders, and Gold/Ember font accents. Summarizes Client Codename (adhering strictly to client privacy rules), Therapist name (or `None (Wet Area)`), Massage Time (`fmtTime`), Locker number, Room number, Service Availed (with upgrade and add-ons formatted), and Total Payment with formatted payment method breakdown (`₱X (Cash)`, `₱X (GCash - Ref: Y)`, or `₱X (Cash: ₱A | GCash: ₱B)`).
+   - **Action Buttons (`components/log-visit-modal.tsx`)**: Added "Back / Edit" button to return staff to form view with all inputs preserved, and "Finalize Check-in" primary gold button to trigger `logVisitBooking` server action with `isPending` loading state.
+   - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
+
+2. **2026-09-17 — Drop `one_active_occupant_per_room` Constraint from `locker_occupancy` to Decouple Room Sessions from Locker Stays**
    (`ohm#droprmoccupancy`). Implementation plan presented and approved before code execution.
    - **Database Migration (`supabase/migrations/20260917130000_drop_room_occupancy_unique_index.sql`)**: Dropped partial unique index `public.one_active_occupant_per_room` on `locker_occupancy(room_number) WHERE checked_out_at IS NULL`.
    - **Server Action Handling (`app/(staff)/bookings/actions.ts`)**: Removed `one_active_occupant_per_room` unique violation error handling from `quickWalkin` and `logVisitBooking` (both update and insert branches). Decoupled 90-minute massage room session windows from all-day locker stays so consecutive clients in different time slots can occupy the same room on the same day without false "That room is already occupied" errors.
    - `npm run build` clean. See [[bookings_state]], [[operations_state]], and `.ai/handoff.md`.
 
-2. **2026-09-17 — Format Activity Logs Action and Detail into Clean Human-Readable Entries**
+3. **2026-09-17 — Format Activity Logs Action and Detail into Clean Human-Readable Entries**
    (`ohm#actloghuman`). Implementation plan presented and approved before code execution.
    - **Clean Action Labels**: Mapped raw snake_case database function keys (`quick_walkin`, `edit_booking`, `therapist_mark_on_leave`, `therapist_unarchive`, `therapist_archive`, `therapist_toggle_day_off`, `locker_checkout`, `cancel_reassignment_booking`, `therapist_create`, `sale_edit`, `sale_void`, etc.) to clean Title Case labels with fallback. Displayed in Action filter options and inside subtle gold badges (`inline-flex items-center rounded-md bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20`).
    - **Refined Detail Templates & Zero Technical ID Dumps**:
@@ -102,26 +109,19 @@ Full invariant list: [[nxs-architecture-locks]].
    - **Visual Hierarchy**: Primary detail text styled in crisp `text-foreground text-[12px]`.
    - `npm run build` clean. See [[logs_state]] and `.ai/handoff.md`.
 
-3. **2026-09-17 — Exclude Self-Booking in Room Collision Check & Gray Out Occupied Lockers in Log Visit Modal**
+4. **2026-09-17 — Exclude Self-Booking in Room Collision Check & Gray Out Occupied Lockers in Log Visit Modal**
    (`ohm#logvstconflict`). Implementation plan presented and approved before code execution.
    - **Fix Self-Collision in Room Validation (`app/(staff)/bookings/actions.ts`)**: Updated `logVisitBooking` server action to check for an existing active occupancy record (`checked_out_at IS NULL`) matching `input.bookingId` in `locker_occupancy`. If present, it updates the existing record instead of attempting a duplicate insert, avoiding false positive `one_active_occupant_per_room` collisions with itself.
    - **Locker Availability Dropdown (`components/log-visit-modal.tsx`)**: Updated `LogVisitModal` to query `locker_number, booking_id, client_id` from active `locker_occupancy`. Rendered occupied lockers as `Locker X - Unavailable` with `disabled={true}` and `text-stone-500` styling, while auto-selecting and enabling pre-assigned lockers for the active booking/client.
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-17 — Split Payment (Cash + GCash), Restrict Methods to Cash/GCash, and Remove Redundant Staff Input**
+5. **2026-09-17 — Split Payment (Cash + GCash), Restrict Methods to Cash/GCash, and Remove Redundant Staff Input**
    (`ohm#spltpaylog`). Implementation plan presented and approved before code execution.
    - **Restricted Payment Dropdown Options (`components/log-visit-modal.tsx`)**: Restricted payment method options strictly to `Cash`, `GCash`, and `Split (Cash + GCash)`, removing obsolete `Card` and `Points` options.
    - **Split Payment Controls & Smart Auto-Balance**: Added numerical inputs for **Cash Amount (₱)** and **GCash Amount (₱)** side-by-side when `Split (Cash + GCash)` is selected. Editing one field automatically balances the remainder into the other field against `computedAmount`.
    - **Validation Guard**: Enforced `cashAmount + gcashAmount === totalAmountPaid`. Renders inline warning `⚠ Sum of Cash (₱X) and GCash (₱Y) must equal required total (₱Z)` and disables confirm submit button when unbalanced.
    - **Removed Redundant Staff Field**: Removed visible "Logged by (staff)" field from modal UI while retaining staff attribution in server action via `useStaffSim()`.
    - **Split Payment Sales Recording (`app/(staff)/bookings/actions.ts`)**: Updated `logVisitBooking` (and `quickWalkin`) server action to insert **two distinct rows** in `public.sales` (`payment_method: 'Cash'` with `splitCashAmount` and `payment_method: 'GCash'` with `splitGcashAmount`) for split payment visits. Preserved schema while guaranteeing Daily Sales Remittance KPI cards (`Cash Remit` vs `Online / E-Wallet`) tally split payments accurately. `npm run build` clean. See [[sales_state]] and `.ai/handoff.md`.
-
-5. **2026-09-17 — Default Call Sheet to 'All' Tab, Add Time-based Status Badges, and Fix Missing Client Codename**
-   (`ohm#cllshtstat`). Implementation plan presented and approved before code execution.
-   - Updated `app/(staff)/call-sheet/page.tsx` query and mapping to use `extractCodename()` helper, robustly extracting `client_codename` across direct `locker_occupancy.client_id` and linked `bookings.client_id`, with fallback to `guest_label`. Passed `duration_minutes` to browser.
-   - Updated `components/call-sheet-browser.tsx` default active tab state to `"all"`.
-   - Added `getSlotStatus(slotTime, durationMinutes, checkedInAt)` to compute Asia/Manila status (In Progress, Done, Upcoming).
-   - Rendered `TIME` and `STATUS` columns exclusively on the `"All"` tab view. Specific time slot tabs retain the standard 5-column layout. Canvas JPEG download export remains clean. `npm run build` clean. See [[operations_state]] and `.ai/handoff.md`.
 
 
 

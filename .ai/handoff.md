@@ -5,6 +5,19 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Add Pre-Confirmation Summary Dialog in Log Visit Modal — complete**
+  (`ohm#logvstsummary`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Two-Step Form Validation & Review Flow (`components/log-visit-modal.tsx`)**:
+    - Updated primary "Confirm" button to validate required inputs (therapist unless Wet Area, locker assignment, split payment balance equality, and client portal account check) and transition to `showSummary = true` pre-confirmation view.
+  - **Compact Scannable Receipt Card (`components/log-visit-modal.tsx`)**:
+    - Displayed client receipt card styled with `#0c0a09` charcoal background, `#292524` borders, and Gold/Ember font accents.
+    - Summarizes Client Codename (adhering strictly to client privacy rules), Therapist name (or `None (Wet Area)`), Massage Time (`fmtTime`), Locker number, Room number, Service Availed (with upgrade and add-ons formatted), and Total Payment with formatted payment method breakdown (`₱X (Cash)`, `₱X (GCash - Ref: Y)`, or `₱X (Cash: ₱A | GCash: ₱B)`).
+  - **Action Buttons (`components/log-visit-modal.tsx`)**:
+    - Added "Back / Edit" button to return staff to form view with all inputs preserved.
+    - Added "Finalize Check-in" primary gold button to trigger `logVisitBooking` server action with `isPending` loading state.
+  - `npm run build` clean. See [[bookings_state]] and `.ai/briefing.md`.
+
 - **Drop `one_active_occupant_per_room` Constraint from `locker_occupancy` to Decouple Room Sessions from Locker Stays — complete**
   (`ohm#droprmoccupancy`, 2026-09-17).
   - Implementation plan presented and approved before code execution.
