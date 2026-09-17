@@ -24,17 +24,9 @@ export function ClientCombobox({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Filter active members only
+  // 1. All passed clients are active (inactive clients are purged from DB)
   const activeMembers = useMemo(() => {
-    return (clients ?? []).filter(
-      (c) =>
-        c.is_archived !== true &&
-        c.archived_at == null &&
-        c.is_active !== false &&
-        c.archived !== true &&
-        c.status !== "archived" &&
-        c.status !== "inactive"
-    );
+    return clients ?? [];
   }, [clients]);
 
   // Selected member object
