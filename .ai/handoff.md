@@ -5,6 +5,15 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Replace Client Select Dropdown in New Booking Modal with Searchable Combobox — complete**
+  (`ohm#newbookingclientcombobox`, 2026-09-17).
+  - **Active Members Filter (`components/client-combobox.tsx`)**: Excludes archived clients (`is_archived !== true && archived_at == null`) and filters records where `is_active !== false`.
+  - **Searchable Combobox / Typeahead (`components/client-combobox.tsx`, `components/booking-form-modal.tsx`)**: Replaced native `<select>` dropdown with searchable combobox typeahead component. Defaults to `No Account` (`"— Walk-in / No account —"`).
+  - **Typeahead & Keyboard Navigation**: Dynamically filters active members by codename, handle (`@username`), or member code (`#member_code`). Includes persistent `— Walk-in / No account —` top option and `✕` clear button. Fully supports keyboard navigation (ArrowUp/ArrowDown, Enter to select, Esc to close, click outside to close).
+  - **Styling Consistency**: Matches modal dark theme (`bg-background`, `border-border`, gold accents on focus/selection, `text-sm`, `shadow-xl shadow-black/60`).
+  - **Data Source Query (`app/(staff)/bookings/page.tsx`)**: Updated Supabase client query to include `member_code` for member code search matching.
+  - `npm run build` clean. See [[bookings_state]] and `.ai/briefing.md`.
+
 - **Enforce Proportional Points Calculation & Display Earned Points in Confirm Check-in — complete**
   (`ohm#proportionalpointscheckin`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

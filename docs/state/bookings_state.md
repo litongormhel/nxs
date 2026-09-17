@@ -111,9 +111,7 @@
   and `action_logs` in one atomic flow). Updates existing active `locker_occupancy` (`checked_out_at IS NULL`) matching `input.bookingId` if present, preventing false positive self-collisions on room/locker availability checks (`ohm#logvstconflict`, 2026-09-17); `updateBookingStatus` handles status transitions.
 - `components/booking-form-modal.tsx` — **New Booking** form (updated to full
   HTML mockup parity):
-  - Client selector dropdown (`<select id="bClient">`) with `— Walk-in / No account —`
-    at the top plus registered clients. When `__walkin__` is selected, reveals the
-    `Client Name (walk-in / no account)` free-text input field (`guest_label`).
+  - **Searchable Combobox Client Selector (`components/client-combobox.tsx`, `components/booking-form-modal.tsx`, `ohm#newbookingclientcombobox`, 2026-09-17)**: Replaced native `<select id="bClient">` dropdown with a typeahead combobox. Filters active members only (`is_archived !== true && archived_at == null && is_active !== false`). Defaults to `No Account` (`"— Walk-in / No account —"`). Dynamically searches members by codename, handle (`@username`), or member code (`#member_code`). Includes clear button `✕`, persistent top option `— Walk-in / No account —`, dark theme styling matching modal inputs (`bg-background border-border focus:border-gold`), and full keyboard navigation (ArrowUp/ArrowDown, Enter, Esc, click outside). When `__walkin__` is selected, reveals the `Client Name (walk-in / no account)` free-text input field (`guest_label`).
   - Service select (drives duration). When "Wet Area" is selected, therapist, promo,
     time slot grid, custom time toggle, and room assignment fields are cleanly hidden.
   - Therapist select (2-column row alongside Service).

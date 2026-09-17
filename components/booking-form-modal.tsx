@@ -6,6 +6,7 @@ import { createBooking } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
 import { slotsOverlap } from "@/lib/bookings/slots";
 import { SmsPreviewModal } from "@/components/sms-preview-modal";
+import { ClientCombobox } from "@/components/client-combobox";
 import type { Client, Service, Staff, Therapist } from "@/components/booking-browser";
 import type { Database } from "@/lib/types/database";
 
@@ -346,27 +347,20 @@ export function BookingFormModal({
         </p>
 
         <div className="mt-5 space-y-4">
-          {/* Client Select */}
+          {/* Client Select (Searchable Combobox) */}
           <div>
             <label className="text-xs text-muted" htmlFor="bClient">
               Client
             </label>
-            <select
+            <ClientCombobox
               id="bClient"
+              clients={clients}
               value={clientSelectValue}
-              onChange={(e) => {
-                setClientSelectValue(e.target.value);
+              onChange={(val) => {
+                setClientSelectValue(val);
                 setError(null);
               }}
-              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
-            >
-              <option value="__walkin__">— Walk-in / No account —</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.codename} (@{c.username})
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           {/* Walk-in Name field */}

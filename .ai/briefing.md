@@ -80,6 +80,15 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
+1. **2026-09-17 — Replace Client Select Dropdown in New Booking Modal with Searchable Combobox**
+   (`ohm#newbookingclientcombobox`).
+   - **Active Members Filter (`components/client-combobox.tsx`)**: Excludes archived clients (`is_archived !== true && archived_at == null`) and filters records where `is_active !== false`.
+   - **Searchable Combobox / Typeahead (`components/client-combobox.tsx`, `components/booking-form-modal.tsx`)**: Replaced native `<select>` dropdown with searchable combobox typeahead component. Defaults to `No Account` (`"— Walk-in / No account —"`).
+   - **Typeahead & Keyboard Navigation**: Dynamically filters active members by codename, handle (`@username`), or member code (`#member_code`). Includes persistent `— Walk-in / No account —` top option and `✕` clear button. Fully supports keyboard navigation (ArrowUp/ArrowDown, Enter to select, Esc to close, click outside to close).
+   - **Styling Consistency**: Matches modal dark theme (`bg-background`, `border-border`, gold accents on focus/selection, `text-sm`, `shadow-xl shadow-black/60`).
+   - **Data Source Query (`app/(staff)/bookings/page.tsx`)**: Updated Supabase client query to include `member_code` for member code search matching.
+   - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
+
 1. **2026-09-17 — Enforce Proportional Points Calculation & Display Earned Points in Confirm Check-in**
    (`ohm#proportionalpointscheckin`).
    - **Dynamic Proportional Calculation (`components/log-visit-modal.tsx`)**: Fetches `app_settings` on mount (defaulting to `"proportional"` if unset). Dynamically recomputes `pointsDelta` reactively using `computeLoyaltyPoints(mode, servicePaidAmount, price, basePoints, pesoPerPoint)` whenever service, promo, manual discount, or total amount changes.
