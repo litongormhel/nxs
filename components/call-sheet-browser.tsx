@@ -16,28 +16,31 @@ type Entry = {
 
 type SlotStatus = "ongoing" | "done" | "upcoming";
 
-function getSlotStatus(
+export function minutesFrom8am(h: number, m: number): number {
+  const normH = h % 24;
+  return normH >= 8 ? (normH - 8) * 60 + m : (normH + 16) * 60 + m;
+}
+
+export function getSlotStatus(
   slotTime: string | null,
   durationMinutes: number = 90,
-  checkedInAt?: string
+  checkedInAt?: string,
+  nowDate: Date = new Date()
 ): SlotStatus {
-  const now = new Date();
-  const manilaTimeString = now.toLocaleTimeString("en-US", {
+  const manilaTimeString = nowDate.toLocaleTimeString("en-US", {
     timeZone: "Asia/Manila",
     hour12: false,
     hour: "2-digit",
     minute: "2-digit",
   });
   const [nowH, nowM] = manilaTimeString.split(":").map(Number);
-  const nowMinsRaw = (nowH % 24) * 60 + nowM;
-  const nowMins = nowMinsRaw < 16 * 60 ? nowMinsRaw + 24 * 60 : nowMinsRaw;
+  const nowMins = minutesFrom8am(nowH, nowM);
 
   let startMins: number;
 
   if (slotTime) {
     const [h, m] = slotTime.split(":").map(Number);
-    const rawMins = h * 60 + m;
-    startMins = rawMins < 16 * 60 ? rawMins + 24 * 60 : rawMins;
+    startMins = minutesFrom8am(h, m);
   } else if (checkedInAt) {
     const checkInDate = new Date(checkedInAt);
     const checkInTimeString = checkInDate.toLocaleTimeString("en-US", {
@@ -47,8 +50,7 @@ function getSlotStatus(
       minute: "2-digit",
     });
     const [h, m] = checkInTimeString.split(":").map(Number);
-    const rawMins = (h % 24) * 60 + m;
-    startMins = rawMins < 16 * 60 ? rawMins + 24 * 60 : rawMins;
+    startMins = minutesFrom8am(h, m);
   } else {
     return "ongoing";
   }
