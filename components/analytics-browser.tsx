@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { lastSpaDays, spaDayNow, spaMonthNow, toSpaDay, toSpaMonth } from "@/lib/analytics/spa-day";
 
 export type AnalyticsSale = {
@@ -67,6 +67,22 @@ export function AnalyticsBrowser({
   onViewCommission?: (therapistId: string, therapistName: string) => void;
 }) {
   const [salesView, setSalesView] = useState<"day" | "month">("day");
+
+  // Top Clients pagination state
+  const [topClientsPageSize, setTopClientsPageSize] = useState<number>(10);
+  const [topClientsPage, setTopClientsPage] = useState<number>(1);
+
+  // Top Thera pagination state
+  const [topTheraPageSize, setTopTheraPageSize] = useState<number>(10);
+  const [topTheraPage, setTopTheraPage] = useState<number>(1);
+
+  useEffect(() => {
+    setTopClientsPage(1);
+  }, [topClientsPageSize]);
+
+  useEffect(() => {
+    setTopTheraPage(1);
+  }, [topTheraPageSize]);
 
   const computed = useMemo(() => {
     const today = spaDayNow();
@@ -309,19 +325,27 @@ export function AnalyticsBrowser({
   }
 
   if (section === "top-clients") {
+    const totalClients = computed.topClients.length;
+    const totalPages = Math.ceil(totalClients / topClientsPageSize) || 1;
+    const startIndex = (topClientsPage - 1) * topClientsPageSize;
+    const paginatedTopClients = computed.topClients.slice(
+      startIndex,
+      startIndex + topClientsPageSize
+    );
+
     return (
-      <section>
-        <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">
+      <section className="space-y-4">
+        <h2 className="text-sm font-medium text-muted uppercase tracking-wide">
           Top Clients
         </h2>
         <div className="rounded-lg border border-border bg-surface divide-y divide-border">
           {computed.topClients.length === 0 && (
             <p className="p-4 text-sm text-muted">No registered-client sales yet.</p>
           )}
-          {computed.topClients.map((c, i) => (
-            <div key={c.name + i} className="flex items-center justify-between p-3 px-4">
+          {paginatedTopClients.map((c, i) => (
+            <div key={c.name + (startIndex + i)} className="flex items-center justify-between p-3 px-4">
               <span className="text-sm text-fg">
-                {i + 1}. {c.name}
+                {startIndex + i + 1}. {c.name}
               </span>
               <span className="text-sm text-muted">
                 {c.visits} visit{c.visits === 1 ? "" : "s"} · {peso(c.amount)} ·{" "}
@@ -330,9 +354,68 @@ export function AnalyticsBrowser({
             </div>
           ))}
         </div>
+
+        {totalClients > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-lg border border-border bg-surface p-4 text-sm">
+            <div className="text-xs text-muted">
+              Showing <span className="font-medium text-foreground">{startIndex + 1}</span>–
+              <span className="font-medium text-foreground">
+                {Math.min(startIndex + topClientsPageSize, totalClients)}
+              </span>{" "}
+              of <span className="font-medium text-foreground">{totalClients}</span> clients
+            </div>
+
+            <div className="flex flex-wrap items-center gap-6">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted">Rows per page:</span>
+                <select
+                  value={topClientsPageSize}
+                  onChange={(e) => setTopClientsPageSize(Number(e.target.value))}
+                  className="rounded-md border border-[#292524] bg-[#141210] px-2.5 py-1 text-xs text-[#f5f5f4] focus:border-gold/50 focus:outline-none"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={topClientsPage <= 1}
+                  onClick={() => setTopClientsPage((p) => Math.max(1, p - 1))}
+                  className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-muted">
+                  Page <span className="font-medium text-foreground">{topClientsPage}</span> of{" "}
+                  <span className="font-medium text-foreground">{totalPages}</span>
+                </span>
+                <button
+                  type="button"
+                  disabled={topClientsPage >= totalPages}
+                  onClick={() => setTopClientsPage((p) => Math.min(totalPages, p + 1))}
+                  className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     );
   }
+
+  const totalTherapists = computed.therapistRanking.length;
+  const totalTheraPages = Math.ceil(totalTherapists / topTheraPageSize) || 1;
+  const theraStartIndex = (topTheraPage - 1) * topTheraPageSize;
+  const paginatedTopThera = computed.therapistRanking.slice(
+    theraStartIndex,
+    theraStartIndex + topTheraPageSize
+  );
 
   return (
     <div className="space-y-8">
@@ -347,16 +430,16 @@ export function AnalyticsBrowser({
         </div>
       </section>
 
-      <section>
+      <section className="space-y-4">
         <div className="rounded-lg border border-border bg-surface divide-y divide-border">
           {computed.therapistRanking.length === 0 && (
             <p className="p-4 text-sm text-muted">No bookings recorded yet.</p>
           )}
-          {computed.therapistRanking.map((t, i) => (
-            <div key={t.name + i} className="p-3 px-4 space-y-2">
+          {paginatedTopThera.map((t, i) => (
+            <div key={t.name + (theraStartIndex + i)} className="p-3 px-4 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-fg">
-                  {i + 1}. {t.name}
+                  {theraStartIndex + i + 1}. {t.name}
                   {t.archived && <span className="text-muted"> (Archived)</span>}
                 </span>
                 <div className="flex items-center gap-3">
@@ -388,6 +471,58 @@ export function AnalyticsBrowser({
             </div>
           ))}
         </div>
+
+        {totalTherapists > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-lg border border-border bg-surface p-4 text-sm">
+            <div className="text-xs text-muted">
+              Showing <span className="font-medium text-foreground">{theraStartIndex + 1}</span>–
+              <span className="font-medium text-foreground">
+                {Math.min(theraStartIndex + topTheraPageSize, totalTherapists)}
+              </span>{" "}
+              of <span className="font-medium text-foreground">{totalTherapists}</span> therapists
+            </div>
+
+            <div className="flex flex-wrap items-center gap-6">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted">Rows per page:</span>
+                <select
+                  value={topTheraPageSize}
+                  onChange={(e) => setTopTheraPageSize(Number(e.target.value))}
+                  className="rounded-md border border-[#292524] bg-[#141210] px-2.5 py-1 text-xs text-[#f5f5f4] focus:border-gold/50 focus:outline-none"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={topTheraPage <= 1}
+                  onClick={() => setTopTheraPage((p) => Math.max(1, p - 1))}
+                  className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-muted">
+                  Page <span className="font-medium text-foreground">{topTheraPage}</span> of{" "}
+                  <span className="font-medium text-foreground">{totalTheraPages}</span>
+                </span>
+                <button
+                  type="button"
+                  disabled={topTheraPage >= totalTheraPages}
+                  onClick={() => setTopTheraPage((p) => Math.min(totalTheraPages, p + 1))}
+                  className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <p className="mt-2 text-xs text-muted">
           Redemption-only bookings (₱0 cash / points-redeemed) are counted in bookings but excluded from revenue and avg revenue.
         </p>

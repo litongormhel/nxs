@@ -20,7 +20,7 @@ just relocated.
 - **Most Availed Services / Top Clients / Top Thera tabs**: each is the
   corresponding old section (`serviceRanking`/`topClients`/
   `therapistRanking`) rendered alone. "Top Thera" is the renamed
-  "Therapist Ranking" section — same data/ranking logic.
+  "Therapist Ranking" section — same data/ranking logic. Top Clients and Top Thera cards feature client-side pagination (`pageSize` defaulting to 10, options 10, 20, 50, 100) with preserved rank indexing (`startIndex + i + 1`) across pages (`ohm#walkinpagination`, 2026-09-17).
 - **Top Thera → Commission deep link**: each Top Thera row has a "View
   Commission →" button (`therapistRanking` map entries gained an `id`
   field to support this — ranking values/order unchanged). Clicking it

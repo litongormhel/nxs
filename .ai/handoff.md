@@ -5,6 +5,27 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Add Pagination and Page Size Selector to Logs, Top Clients, and Top Thera Tables — complete**
+  (`ohm#walkinpagination`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Activity Logs (`components/logs-browser.tsx`)**: Added `pageSize` (default 10) and `currentPage` (default 1) state with auto-reset on action/date/staff filter or page size changes. Rendered paginated slice (`paginatedLogs`) and added dark token pagination bar (`Showing X–Y of Z log entries`).
+  - **Analytics Top Clients & Top Thera (`components/analytics-browser.tsx`)**: Added independent `pageSize` (default 10) and `currentPage` (default 1) states for Top Clients and Top Thera sections. Preserved rank indexing across pages (`startIndex + i + 1`) and appended responsive dark token pagination bars below both cards.
+  - `npm run build` clean. See [[logs_state]], [[analytics_state]], and `.ai/briefing.md`.
+
+- **Add Pagination and Page Size Selector to Walk-In Without Account Table — complete**
+  (`ohm#walkinpagination`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **State Management & Slicing (`components/client-browser.tsx`)**:
+    - Added `pageSize` (default `10`, options `10`, `20`, `50`, `100`) and `currentPage` (default `1`) state.
+    - Added `useEffect` to reset `currentPage` to `1` whenever `search` query or `pageSize` changes.
+    - Computed paginated slice `paginatedWalkIns = filteredWalkIns.slice(startIndex, startIndex + pageSize)` and rendered it in table rows.
+  - **Pagination Controls Bar (`components/client-browser.tsx`)**:
+    - Placed below the Walk-In table.
+    - Status indicator: `Showing {startIndex + 1}–{Math.min(startIndex + pageSize, total)} of {total} guests`.
+    - Dropdown selector for rows per page (`bg-[#141210] border-[#292524] text-[#f5f5f4]`).
+    - Page indicator (`Page {currentPage} of {totalPages}`) and navigation buttons (`Previous` & `Next`) with proper disabled states.
+  - `npm run build` clean. See [[clients_state]] and `.ai/briefing.md`.
+
 - **Restrict Members Tab strictly to Clients with Portal Accounts & Purge Non-Portal Client Rows — complete**
   (`ohm#clienttabsandpurge`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

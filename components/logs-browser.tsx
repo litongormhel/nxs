@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStaffSim } from "@/lib/staff-context";
 import { formatLogDetail, formatActionLabel, type Lookups } from "@/lib/logs/format-detail";
 import { spaDayNow, toSpaDay } from "@/lib/analytics/spa-day";
@@ -34,6 +34,15 @@ export function LogsBrowser({
   const [dateFilter, setDateFilter] = useState(() => spaDayNow());
   const [staffFilter, setStaffFilter] = useState("all");
 
+  // Pagination state
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Reset currentPage to 1 whenever filters or pageSize change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [actionFilter, dateFilter, staffFilter, pageSize]);
+
   const distinctActions = useMemo(
     () => [...new Set(initialLogs.map((l) => l.action))].sort(),
     [initialLogs]
@@ -49,6 +58,13 @@ export function LogsBrowser({
     if (staffFilter !== "all" && l.staff_name !== staffFilter) return false;
     return true;
   });
+
+  const totalLogs = filtered.length;
+  const totalPages = Math.ceil(totalLogs / pageSize) || 1;
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedLogs = useMemo(() => {
+    return filtered.slice(startIndex, startIndex + pageSize);
+  }, [filtered, startIndex, pageSize]);
 
   if (currentRole !== "Owner") {
     return (
@@ -128,7 +144,7 @@ export function LogsBrowser({
         {filtered.length === 0 ? (
           <div className="px-4 py-4 text-sm text-muted">No matching log entries.</div>
         ) : (
-          filtered.map((l) => {
+          paginatedLogs.map((l) => {
             const { sentence, technicalIds } = formatLogDetail(l.action, l.detail, lookups);
             return (
               <div
@@ -156,6 +172,61 @@ export function LogsBrowser({
           })
         )}
       </div>
+
+      {filtered.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-xl border border-border bg-surface p-4 text-sm">
+          {/* Left side: status indicator */}
+          <div className="text-xs text-muted">
+            Showing <span className="font-medium text-foreground">{startIndex + 1}</span>–
+            <span className="font-medium text-foreground">
+              {Math.min(startIndex + pageSize, totalLogs)}
+            </span>{" "}
+            of <span className="font-medium text-foreground">{totalLogs}</span> log entries
+          </div>
+
+          {/* Right side: controls */}
+          <div className="flex flex-wrap items-center gap-6">
+            {/* Rows per page selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted">Rows per page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="rounded-md border border-[#292524] bg-[#141210] px-2.5 py-1 text-xs text-[#f5f5f4] focus:border-gold/50 focus:outline-none"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+
+            {/* Navigation Buttons */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+              >
+                Previous
+              </button>
+              <span className="text-xs text-muted">
+                Page <span className="font-medium text-foreground">{currentPage}</span> of{" "}
+                <span className="font-medium text-foreground">{totalPages}</span>
+              </span>
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

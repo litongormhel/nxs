@@ -33,11 +33,8 @@ on UPDATE/DELETE attempts, not a real permission.
   `lib/staff-context.tsx`) — no placeholder picker or Simulate Staff
   fallback remains.
 - **Activity Logs tab** (`app/logs/page.tsx`, `components/logs-browser.tsx`,
-  `ohm#3z8k1p6d`) — first reader of this table. Server-fetches
-  `action_logs` ordered `created_at desc` with a flat `LIMIT 500` (current
-  volume: a few dozen rows across every phase since Core Loop — revisit
-  with real pagination if growth makes 500 a meaningful cap; no pagination
-  UI exists yet). Staff names are joined in app code (a separate `staff`
+  `ohm#3z8k1p6d`, updated in `ohm#walkinpagination` 2026-09-17) — first reader of this table. Server-fetches
+  `action_logs` ordered `created_at desc` with a flat `LIMIT 500`. Client-side pagination is implemented in `components/logs-browser.tsx` (`pageSize` defaulting to 10, options 10, 20, 50, 100, and `currentPage` resetting to 1 on filter or page size changes), displaying log count status indicators and navigation controls. Staff names are joined in app code (a separate `staff`
   fetch mapped by `staff_id`), not via a PostgREST embedded select —
   `action_logs.staff_id` carries two FKs in the generated types (to
   `staff` and to the `loginable_staff` view over the same table), which

@@ -149,6 +149,15 @@ export function ClientBrowser({
   // Walk-In drawer state
   const [selectedWalkInCodename, setSelectedWalkInCodename] = useState<string | null>(null);
 
+  // Walk-In pagination state
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Reset currentPage to 1 whenever search query or pageSize changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, pageSize]);
+
   // Modal states
   const [showLogVisit, setShowLogVisit] = useState(false);
   const [logVisitServiceId, setLogVisitServiceId] = useState<string | null>(null);
@@ -220,6 +229,14 @@ export function ClientBrowser({
       );
     });
   }, [groupedWalkIns, search]);
+
+  // Paginated Walk-In slice calculations
+  const totalWalkIns = filteredWalkIns.length;
+  const totalPages = Math.ceil(totalWalkIns / pageSize) || 1;
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedWalkIns = useMemo(() => {
+    return filteredWalkIns.slice(startIndex, startIndex + pageSize);
+  }, [filteredWalkIns, startIndex, pageSize]);
 
   // Selected Walk-In drawer record
   const activeWalkInGroup = useMemo(() => {
@@ -667,84 +684,140 @@ export function ClientBrowser({
               {search.trim() ? "No walk-in guests match your search." : "No walk-in guest records found."}
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-border bg-surface">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-border bg-surface-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
-                  <tr>
-                    <th className="px-4 py-3">Codename</th>
-                    <th className="px-4 py-3">Last Visit Date</th>
-                    <th className="px-4 py-3">Total Visits</th>
-                    <th className="px-4 py-3">Latest Service</th>
-                    <th className="px-4 py-3">Latest Therapist</th>
-                    <th className="px-4 py-3">Locker</th>
-                    <th className="px-4 py-3">Amount Paid</th>
-                    <th className="px-4 py-3 text-right">History</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border text-foreground">
-                  {filteredWalkIns.map((g) => {
-                    const latest = g.latestVisit;
-                    return (
-                      <tr
-                        key={g.codename}
-                        className="hover:bg-gold/5 transition-colors cursor-pointer"
-                        onClick={() => setSelectedWalkInCodename(g.codename)}
-                      >
-                        <td className="px-4 py-3 font-semibold text-gold">
-                          {g.codename}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-muted">
-                          {formatDisplayDate(g.lastVisitDate)}
-                        </td>
-                        <td className="px-4 py-3 text-xs">
-                          <span className="rounded bg-surface-accent px-2 py-0.5 font-mono text-[11px] font-medium text-foreground">
-                            {g.visitCount} visit{g.visitCount > 1 ? "s" : ""}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-xs font-medium">
-                          {latest.service_name ?? <span className="text-muted italic">Wet Area / None</span>}
-                        </td>
-                        <td className="px-4 py-3 text-xs">
-                          {latest.therapist_name ?? <span className="text-muted italic">Unassigned</span>}
-                        </td>
-                        <td className="px-4 py-3 text-xs font-mono">
-                          {latest.locker_number ? (
-                            <span className="rounded border border-gold/30 bg-gold/10 px-1.5 py-0.5 text-gold">
-                              Locker {latest.locker_number}
+            <div className="space-y-4">
+              <div className="overflow-hidden rounded-lg border border-border bg-surface">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-border bg-surface-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                    <tr>
+                      <th className="px-4 py-3">Codename</th>
+                      <th className="px-4 py-3">Last Visit Date</th>
+                      <th className="px-4 py-3">Total Visits</th>
+                      <th className="px-4 py-3">Latest Service</th>
+                      <th className="px-4 py-3">Latest Therapist</th>
+                      <th className="px-4 py-3">Locker</th>
+                      <th className="px-4 py-3">Amount Paid</th>
+                      <th className="px-4 py-3 text-right">History</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border text-foreground">
+                    {paginatedWalkIns.map((g) => {
+                      const latest = g.latestVisit;
+                      return (
+                        <tr
+                          key={g.codename}
+                          className="hover:bg-gold/5 transition-colors cursor-pointer"
+                          onClick={() => setSelectedWalkInCodename(g.codename)}
+                        >
+                          <td className="px-4 py-3 font-semibold text-gold">
+                            {g.codename}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted">
+                            {formatDisplayDate(g.lastVisitDate)}
+                          </td>
+                          <td className="px-4 py-3 text-xs">
+                            <span className="rounded bg-surface-accent px-2 py-0.5 font-mono text-[11px] font-medium text-foreground">
+                              {g.visitCount} visit{g.visitCount > 1 ? "s" : ""}
                             </span>
-                          ) : (
-                            <span className="text-muted italic">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-xs font-medium">
-                          {latest.amount !== null ? (
-                            <span>
-                              ₱{latest.amount.toLocaleString()}{" "}
-                              {latest.payment_method && (
-                                <span className="text-muted text-[10px]">({latest.payment_method})</span>
-                              )}
-                            </span>
-                          ) : (
-                            <span className="text-muted italic">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right text-xs">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedWalkInCodename(g.codename);
-                            }}
-                            className="rounded border border-gold/40 bg-gold/10 px-2.5 py-1 font-medium text-gold hover:bg-gold/20 transition-colors"
-                          >
-                            View Past Stays →
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                          <td className="px-4 py-3 text-xs font-medium">
+                            {latest.service_name ?? <span className="text-muted italic">Wet Area / None</span>}
+                          </td>
+                          <td className="px-4 py-3 text-xs">
+                            {latest.therapist_name ?? <span className="text-muted italic">Unassigned</span>}
+                          </td>
+                          <td className="px-4 py-3 text-xs font-mono">
+                            {latest.locker_number ? (
+                              <span className="rounded border border-gold/30 bg-gold/10 px-1.5 py-0.5 text-gold">
+                                Locker {latest.locker_number}
+                              </span>
+                            ) : (
+                              <span className="text-muted italic">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-xs font-medium">
+                            {latest.amount !== null ? (
+                              <span>
+                                ₱{latest.amount.toLocaleString()}{" "}
+                                {latest.payment_method && (
+                                  <span className="text-muted text-[10px]">({latest.payment_method})</span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-muted italic">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right text-xs">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedWalkInCodename(g.codename);
+                              }}
+                              className="rounded border border-gold/40 bg-gold/10 px-2.5 py-1 font-medium text-gold hover:bg-gold/20 transition-colors"
+                            >
+                              View Past Stays →
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls Bar */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-lg border border-border bg-surface p-4 text-sm">
+                {/* Left side: status indicator */}
+                <div className="text-xs text-muted">
+                  Showing <span className="font-medium text-foreground">{startIndex + 1}</span>–
+                  <span className="font-medium text-foreground">
+                    {Math.min(startIndex + pageSize, totalWalkIns)}
+                  </span>{" "}
+                  of <span className="font-medium text-foreground">{totalWalkIns}</span> guests
+                </div>
+
+                {/* Right side: controls */}
+                <div className="flex flex-wrap items-center gap-6">
+                  {/* Rows per page selector */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted">Rows per page:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => setPageSize(Number(e.target.value))}
+                      className="rounded-md border border-[#292524] bg-[#141210] px-2.5 py-1 text-xs text-[#f5f5f4] focus:border-gold/50 focus:outline-none"
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+
+                  {/* Navigation Buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={currentPage <= 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs text-muted">
+                      Page <span className="font-medium text-foreground">{currentPage}</span> of{" "}
+                      <span className="font-medium text-foreground">{totalPages}</span>
+                    </span>
+                    <button
+                      type="button"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

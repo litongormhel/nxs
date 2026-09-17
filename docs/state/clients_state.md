@@ -2,6 +2,11 @@
 
 ## Implemented
 
+- **Walk-In Without Account Table Pagination (`ohm#walkinpagination`, 2026-09-17)**:
+  - Added state management for pagination in `components/client-browser.tsx`: `pageSize` (default 10, options: 10, 20, 50, 100) and `currentPage` (default 1).
+  - Automatically resets `currentPage` to 1 whenever search query or `pageSize` changes.
+  - Slices filtered guest records (`paginatedWalkIns = filteredWalkIns.slice(startIndex, startIndex + pageSize)`) for rendering.
+  - Added pagination control bar below the table featuring status indicator (`Showing X–Y of Z guests`), dark token rows per page dropdown (`bg-[#141210] border-[#292524] text-[#f5f5f4]`), page indicator (`Page X of Y`), and page navigation buttons (`Previous` & `Next`).
 - **Strict Portal Account Member Guard (`ohm#clienttabsandpurge`, 2026-09-17)**:
   - `app/(staff)/clients/page.tsx` filters `registeredMembers` strictly to clients who have a matching row in `client_portal_accounts` (`has_portal_account === true`). Prevents clients without portal credentials from polluting the **Members** tab.
   - Migration `supabase/migrations/20260917160000_purge_clients_without_portal_account.sql` purges non-portal clients from `clients` while disassociating `client_id` (`NULL`) and setting `guest_label = c.codename` across historical `bookings`, `sales`, and `locker_occupancy`, ensuring past stays appear under **Walk-In Without Account**.

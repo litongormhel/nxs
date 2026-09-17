@@ -80,31 +80,33 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-17 — Restrict Members Tab strictly to Clients with Portal Accounts & Purge Non-Portal Client Rows**
+1. **2026-09-17 — Add Pagination and Page Size Selector to Logs, Top Clients, and Top Thera Tables**
+   (`ohm#walkinpagination`). Implementation plan presented and approved before code execution.
+   - **Activity Logs Pagination (`components/logs-browser.tsx`)**: Added `pageSize` (default 10) and `currentPage` (default 1) state with auto-reset on action/date/staff filter or page size changes. Rendered paginated slice (`paginatedLogs`) and added dark token pagination bar.
+   - **Analytics Top Clients & Top Thera Pagination (`components/analytics-browser.tsx`)**: Added independent `pageSize` (default 10) and `currentPage` (default 1) states for Top Clients and Top Thera sections. Preserved rank indexing across pages (`startIndex + i + 1`) and appended responsive dark token pagination bars below both cards.
+   - `npm run build` clean. See [[logs_state]], [[analytics_state]], and `.ai/handoff.md`.
+
+2. **2026-09-17 — Add Pagination and Page Size Selector to Walk-In Without Account Table**
+   (`ohm#walkinpagination`). Implementation plan presented and approved before code execution.
+   - **Pagination State & Slicing (`components/client-browser.tsx`)**: Added `pageSize` (default 10) and `currentPage` (default 1) state with auto-reset to page 1 on search or page size changes. Computed paginated slice of filtered walk-ins (`paginatedWalkIns`).
+   - **Responsive Pagination Controls Bar (`components/client-browser.tsx`)**: Placed below the walk-in table. Includes status indicator (`Showing X–Y of Z guests`), dark token rows per page dropdown (`bg-[#141210] border-[#292524] text-[#f5f5f4]` with options 10, 20, 50, 100), page indicator (`Page X of Y`), and page navigation buttons (`Previous` & `Next`).
+   - `npm run build` clean. See [[clients_state]] and `.ai/handoff.md`.
+
+3. **2026-09-17 — Restrict Members Tab strictly to Clients with Portal Accounts & Purge Non-Portal Client Rows**
    (`ohm#clienttabsandpurge`). Implementation plan presented and approved before code execution.
    - **Strict Portal Account Filtering (`app/(staff)/clients/page.tsx`)**: Filtered `registeredMembers` in `ClientsPage` to strictly require `portalAccountClientIds.has(c.id)` (`has_portal_account === true`). Prevents mock/legacy clients without portal credentials from polluting the **Members** tab.
    - **Data Cleanup Migration (`supabase/migrations/20260917160000_purge_clients_without_portal_account.sql`)**: Created safe SQL cleanup script that purges clients without a `client_portal_accounts` row from `clients` table. Safely converts their historical `bookings`, `sales`, and `locker_occupancy` into non-account walk-in records (`guest_label = c.codename`, `client_id = NULL`), preserving revenue and operational reporting history.
    - `npm run build` clean. See [[clients_state]] and `.ai/handoff.md`.
 
-2. **2026-09-17 — Separate "Members" and "Walk-In Without Account" tabs in Client Profile + Purge legacy clients without bookings today**
+4. **2026-09-17 — Separate "Members" and "Walk-In Without Account" tabs in Client Profile + Purge legacy clients without bookings today**
    (`ohm#clienttabsandpurge`). Implementation plan presented and approved before code execution.
    - **Database Migration (`supabase/migrations/20260917150000_purge_legacy_clients.sql`)**: Safe SQL cleanup script preserving active clients with bookings or locker occupancy on today's operating date (`2026-09-17` Manila time). Disassociates `client_id` (`NULL`) while copying client `codename` to `guest_label` across historical `bookings`, `sales`, and `locker_occupancy` rows for purged clients, preserving revenue and operational reporting integrity.
    - **Backend Data Sourcing (`app/(staff)/clients/page.tsx`)**: Queries registered members for the **Members** tab and non-member walk-in guest visits from `bookings` (`client_id IS NULL` & `guest_label IS NOT NULL`) joining `services`, `therapists`, `sales`, and `locker_occupancy` for the **Walk-In Without Account** tab.
    - **Top-Level Two Tabs Layout & Walk-In View (`components/client-browser.tsx`)**: Added top-level tab switcher (**Members** vs **Walk-In Without Account**). Search bar filters registered members by `@username`, codename, or member code on **Members**, and filters walk-ins by guest codename or date on **Walk-Ins**. Added structured table for non-account walk-in guests (`Codename`, `Last Visit Date`, `Total Visits`, `Latest Service`, `Latest Therapist`, `Locker`, `Amount Paid`) with a slide-over drawer to inspect full past visit history for any walk-in guest codename.
    - `npm run build` clean. See [[clients_state]] and `.ai/handoff.md`.
 
-3. **2026-09-17 — Remove ACTION column and Check Out buttons from Call Sheet**
+5. **2026-09-17 — Remove ACTION column and Check Out buttons from Call Sheet**
    (`ohm#remcallsheetact`). Implementation plan presented and approved before code execution.
    - **Operational Read-Only Separation (`components/call-sheet-browser.tsx`, `app/(staff)/call-sheet/page.tsx`)**: Converted Call Sheet view into a strictly operational read-only display for floor dispatching (Locker, Room, Service, Thera, Client, Time, Status). Removed `ACTION` table header (`<th>ACTION</th>`), row-level `Check Out` buttons, `CheckoutConfirmModal` import and bindings, and stale `needsCheckout` section.
    - **Clean Horizontal Grid Alignment (`components/call-sheet-browser.tsx`)**: Re-aligned grid columns cleanly: 7 columns on `"All"` tab (`LOCKER` | `ROOM` | `SERVICE` | `THERA` | `CLIENT` | `TIME` | `STATUS`, `"0.8fr 0.8fr 1.5fr 1fr 1.2fr 1fr 1.1fr"`), and 5 columns on specific time slot tabs (`LOCKER` | `ROOM` | `SERVICE` | `THERA` | `CLIENT`, `"0.8fr 0.8fr 1.5fr 1fr 1.2fr"`).
    - `npm run build` clean. See [[operations_state]] and `.ai/handoff.md`.
-
-4. **2026-09-17 — Add Check-out Confirmation Modal with Early/Pre-Massage Alert**
-   (`ohm#checkoutconfirm`). Implementation plan presented and approved before code execution.
-   - **Check-Out Confirmation Dialog (`components/checkout-confirm-modal.tsx`)**: Created reusable `CheckoutConfirmModal` component displaying Client Codename, Assigned Locker, and Room & Service. Evaluates client operating status (`getSlotStatus`). Displays high-visibility amber warning box `⚠ Scheduled Massage Alert: Client has a massage scheduled for [Start Time] with [Therapist]. Are you sure you want to check them out early?` when current time is before or during the 90-minute massage window.
-   - `npm run build` clean. See [[operations_state]] and `.ai/handoff.md`.
-
-5. **2026-09-17 — Link all Room dropdowns to configured Room Capacity (18) instead of hardcoded 20**
-   (`ohm#roomcapdynamic`). Implementation plan presented and approved before code execution.
-   - **Frontend Dynamic Sourcing (`app/(staff)/bookings/page.tsx`, `components/booking-browser.tsx`, `components/booking-form-modal.tsx`, `components/quick-walkin-modal.tsx`)**: Query active rooms from Supabase `rooms` table (`active = true`). Compute `effectiveRooms` fallback defaulting strictly to 18 (1 to 18) when room queries are empty or loading.
-   - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
