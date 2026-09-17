@@ -1,7 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
 import { SalesBrowser } from "@/components/sales-browser";
+import { spaDayNow, getSpaDayBounds } from "@/lib/analytics/spa-day";
 
-export default async function SalesPage() {
+export default async function SalesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
+  const params = await searchParams;
+  const selectedDate = params?.date || spaDayNow();
+  const bounds = getSpaDayBounds(selectedDate);
+
   const supabase = await createClient();
 
   const [{ data: sales }, { data: therapists }, { data: staff }, { data: authorizers }] = await Promise.all([
@@ -10,6 +19,8 @@ export default async function SalesPage() {
       .select(
         "id, client_id, guest_label, amount, payment_method, payment_ref, therapist_id, voided, voided_at, voided_by, edited_by, edited_at, created_at, clients(codename), services(name), therapists(name), promos(label)"
       )
+      .gte("created_at", bounds.startIso)
+      .lte("created_at", bounds.endIso)
       .order("created_at", { ascending: false }),
     supabase.from("therapists").select("id, name").eq("archived", false).order("name", { ascending: true }),
     supabase.from("staff").select("id, name"),
@@ -23,11 +34,10 @@ export default async function SalesPage() {
   const staffNameById = new Map((staff ?? []).map((s) => [s.id, s.name]));
 
   return (
-    <div className="p-8">
-      <h1 className="text-xl font-semibold text-gold animate-fade-in mb-6">
-        Sales
-      </h1>
+    <div className="p-6 md:p-8">
       <SalesBrowser
+        key={selectedDate}
+        selectedDate={selectedDate}
         initialSales={(sales ?? []).map((s) => ({
           id: s.id,
           client_name: s.clients?.codename ?? s.guest_label ?? "Walk-in",
@@ -50,3 +60,4 @@ export default async function SalesPage() {
     </div>
   );
 }
+

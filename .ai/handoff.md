@@ -5,8 +5,23 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Daily Sales Remittance Page Redesign using SpaDay Window (4:00 PM – 2:00 AM) — complete**
+  (`ohm#slsremit`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Spa Day Date Filter & Bounds**:
+    - Added `getSpaDayBounds(spaDateStr)` in `lib/analytics/spa-day.ts` to compute exact UTC ISO bounds for 4:00 PM PHT (`16:00:00+08`) to 2:00 AM PHT next day (`02:00:00+08`), ensuring 1:00 AM transactions correctly belong to the preceding Spa Day.
+    - Added `shiftSpaDay(spaDateStr, days)` in `lib/analytics/spa-day.ts` to navigate Spa Days cleanly.
+    - Updated `app/(staff)/sales/page.tsx` server query to read `searchParams` for date (defaulting to `spaDayNow()`) and filter `sales` table using `.gte("created_at", bounds.startIso)` and `.lte("created_at", bounds.endIso)`.
+  - **Shift Remittance Summary Bar**:
+    - Replaced global lifetime total with per-shift KPI summary cards: Cash Remit (sum of non-voided Cash payments), Online / E-Wallet (sum of non-voided GCash, Card, Points payments), and Total Shift Sales (overall non-voided total for the Spa Day).
+  - **Table Presentation & Enhancements**:
+    - Enhanced table to format transaction time in PHT using `fmtPhtTime` (e.g. `04:30 PM`, `01:15 AM (+1d)`).
+    - Displayed Client codename / guest label, Service, Amount (`font-mono text-gold`), Payment Method (+ GCash Ref), Promo, Therapist, and preserved Edit/Void actions per row.
+  - `npm run build` clean.
+
 - **Fix EditBookingModal Self-Locker False Conflict & Therapist Availability Dropdown — complete**
   (`ohm#edtmodbfix`, 2026-09-17).
+
   - Implementation plan presented and approved before code execution.
   - **Self-Locker False Conflict Fix**:
     - Client-side: Updated `EditBookingModal` (`components/booking-browser.tsx`) `occupiedLockers` fetch to exclude self-occupancy rows matching `booking.id`, `initialOccupancy.id`, or `initialOccupancy.locker_number`. Set `<option disabled={occupied && !isCurrent}>` so leaving the assigned locker unchanged remains valid.

@@ -67,3 +67,27 @@ export function lastSpaDays(days: number): Set<string> {
   }
   return out;
 }
+
+/**
+ * Returns UTC ISO bounds for a given spa-day (YYYY-MM-DD).
+ * Start: YYYY-MM-DD 16:00:00+08:00 (08:00:00 UTC)
+ * End:   (YYYY-MM-DD + 1 day) 02:00:00+08:00 (18:00:00 UTC)
+ */
+export function getSpaDayBounds(spaDateStr: string): { startIso: string; endIso: string } {
+  const [year, month, day] = spaDateStr.split("-").map(Number);
+  const startMs = Date.UTC(year, month - 1, day, 8, 0, 0);
+  const endMs = Date.UTC(year, month - 1, day, 18, 0, 0);
+  return {
+    startIso: new Date(startMs).toISOString(),
+    endIso: new Date(endMs).toISOString(),
+  };
+}
+
+/** Adds or subtracts days from a spa-day string (YYYY-MM-DD). */
+export function shiftSpaDay(spaDateStr: string, days: number): string {
+  const [year, month, day] = spaDateStr.split("-").map(Number);
+  const ms = Date.UTC(year, month - 1, day + days, 12, 0, 0);
+  const d = new Date(ms);
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+

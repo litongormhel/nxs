@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStaffSim } from "@/lib/staff-context";
 import { editSale, voidSale, voidSaleWithCode } from "@/app/(staff)/sales/actions";
+import { spaDayNow, shiftSpaDay } from "@/lib/analytics/spa-day";
 
 export type Sale = {
   id: string;
@@ -27,22 +28,39 @@ type Authorizer = { id: string; name: string };
 
 const PAYMENT_METHODS = ["Cash", "GCash", "Card", "Points"] as const;
 
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+function fmtPhtTime(isoString: string, selectedSpaDate: string): string {
+  const d = new Date(isoString);
+  const phtMs = d.getTime() + 8 * 60 * 60 * 1000;
+  const phtDate = new Date(phtMs);
+
+  const y = phtDate.getUTCFullYear();
+  const m = String(phtDate.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(phtDate.getUTCDate()).padStart(2, "0");
+  const manilaDateStr = `${y}-${m}-${day}`;
+
+  let hours = phtDate.getUTCHours();
+  const minutes = String(phtDate.getUTCMinutes()).padStart(2, "0");
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
+
+  const timeStr = `${String(hours).padStart(2, "0")}:${minutes} ${ampm}`;
+  if (manilaDateStr > selectedSpaDate) {
+    return `${timeStr} (+1d)`;
+  }
+  return timeStr;
 }
 
-const GRID_COLS = "1fr 1fr 1fr .8fr 1.1fr .9fr 1fr 1.6fr";
+const GRID_COLS = "1.1fr 1fr 1fr .9fr 1.1fr .9fr 1fr 1.6fr";
 
 export function SalesBrowser({
   initialSales,
+  selectedDate,
   therapists,
   authorizers,
 }: {
   initialSales: Sale[];
+  selectedDate: string;
   therapists: Therapist[];
   authorizers: Authorizer[];
 }) {
@@ -68,10 +86,28 @@ export function SalesBrowser({
   const editAllowed = currentRole === "Supervisor" || currentRole === "Owner";
   const directVoidAllowed = currentRole === "Supervisor" || currentRole === "Owner";
 
-  const total = useMemo(
-    () => sales.reduce((sum, s) => (s.voided ? sum : sum + s.amount), 0),
-    [sales]
-  );
+  const { cashRemit, onlineRemit, totalShiftSales, validSalesCount } = useMemo(() => {
+    let cash = 0;
+    let online = 0;
+    let total = 0;
+    let count = 0;
+    for (const s of sales) {
+      if (s.voided) continue;
+      total += s.amount;
+      count += 1;
+      if (s.payment_method === "Cash") {
+        cash += s.amount;
+      } else {
+        online += s.amount;
+      }
+    }
+    return { cashRemit: cash, onlineRemit: online, totalShiftSales: total, validSalesCount: count };
+  }, [sales]);
+
+  const handleDateChange = (newDate: string) => {
+    if (!newDate) return;
+    router.push(`/sales?date=${newDate}`);
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -215,22 +251,119 @@ export function SalesBrowser({
   };
 
   return (
-    <div className="max-w-6xl space-y-4">
-      <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2.5">
-        <div className="text-[10.5px] font-bold tracking-[0.13em] uppercase text-muted">
-          Sales Log
+    <div className="max-w-6xl space-y-6">
+      {/* Top Header & Spa Day Date Selector */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5">
+        <div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-serif font-bold text-foreground tracking-tight">
+              Daily Sales Remittance
+            </h1>
+            <span className="inline-flex items-center rounded-full border border-[#C97A3E]/40 bg-[#C97A3E]/10 px-2.5 py-0.5 text-[11px] font-medium text-[#C97A3E]">
+              Spa Operational Window (4:00 PM – 2:00 AM)
+            </span>
+          </div>
+          <p className="text-xs text-muted mt-1">
+            Cash shift remittance and transaction tally for Spa Day operational window.
+          </p>
         </div>
-        <div className="text-[13px] font-bold text-accent-gold">
-          Total: ₱{total.toLocaleString()}
+
+        {/* Date Selector Navigation */}
+        <div className="flex items-center gap-1.5 self-start sm:self-auto bg-surface-2 p-1.5 rounded-xl border border-border">
+          <button
+            onClick={() => handleDateChange(shiftSpaDay(selectedDate, -1))}
+            title="Previous Spa Day"
+            className="px-2.5 py-1 text-xs font-semibold text-muted hover:text-foreground hover:bg-surface rounded-lg transition-colors cursor-pointer"
+          >
+            &larr; Prev
+          </button>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => handleDateChange(e.target.value)}
+            className="bg-surface border border-border px-2.5 py-1 text-xs font-mono font-medium text-foreground rounded-lg outline-none focus:border-gold"
+          />
+          <button
+            onClick={() => handleDateChange(spaDayNow())}
+            disabled={selectedDate === spaDayNow()}
+            className="px-2.5 py-1 text-xs font-semibold text-muted hover:text-foreground hover:bg-surface rounded-lg disabled:opacity-40 disabled:hover:bg-transparent transition-colors cursor-pointer disabled:cursor-not-allowed"
+          >
+            Today
+          </button>
+          <button
+            onClick={() => handleDateChange(shiftSpaDay(selectedDate, 1))}
+            title="Next Spa Day"
+            className="px-2.5 py-1 text-xs font-semibold text-muted hover:text-foreground hover:bg-surface rounded-lg transition-colors cursor-pointer"
+          >
+            Next &rarr;
+          </button>
         </div>
       </div>
 
+      {/* Shift Remittance Summary Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Cash Remit Card */}
+        <div className="rounded-2xl border border-border bg-surface p-4 space-y-1 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold tracking-wider uppercase text-muted">
+              Cash Remit
+            </span>
+            <span className="text-[10px] font-medium text-accent-green bg-accent-green/10 px-2 py-0.5 rounded-md">
+              Physical Cash
+            </span>
+          </div>
+          <div className="text-2xl font-bold font-mono text-accent-green">
+            ₱{cashRemit.toLocaleString()}
+          </div>
+          <div className="text-[11px] text-muted">
+            Sum of cash payment transactions
+          </div>
+        </div>
+
+        {/* Online / E-Wallet Card */}
+        <div className="rounded-2xl border border-border bg-surface p-4 space-y-1 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold tracking-wider uppercase text-muted">
+              Online / E-Wallet
+            </span>
+            <span className="text-[10px] font-medium text-muted bg-surface-2 px-2 py-0.5 rounded-md">
+              GCash / Card / Points
+            </span>
+          </div>
+          <div className="text-2xl font-bold font-mono text-foreground">
+            ₱{onlineRemit.toLocaleString()}
+          </div>
+          <div className="text-[11px] text-muted">
+            Sum of digital/non-cash sales
+          </div>
+        </div>
+
+        {/* Total Shift Sales Card */}
+        <div className="rounded-2xl border border-gold/40 bg-surface-accent p-4 space-y-1 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold tracking-wider uppercase text-gold">
+              Total Shift Sales
+            </span>
+            <span className="text-[10px] font-medium text-accent-gold bg-gold/15 px-2 py-0.5 rounded-md">
+              {validSalesCount} {validSalesCount === 1 ? "Sale" : "Sales"}
+            </span>
+          </div>
+          <div className="text-2xl font-bold font-mono text-accent-gold">
+            ₱{totalShiftSales.toLocaleString()}
+          </div>
+          <div className="text-[11px] text-muted">
+            Overall total for {selectedDate} Spa Day
+          </div>
+        </div>
+      </div>
+
+      {/* Sales Log Table */}
       <div className="rounded-xl border border-border bg-surface overflow-hidden overflow-x-auto">
         <div
           className="grid gap-3 border-b border-border px-4 py-2.5 text-[10px] font-bold tracking-wider uppercase text-muted min-w-[900px]"
           style={{ gridTemplateColumns: GRID_COLS }}
         >
-          <div>Date</div>
+          <div>Time</div>
           <div>Client</div>
           <div>Service</div>
           <div>Amount</div>
@@ -240,18 +373,22 @@ export function SalesBrowser({
           <div>Actions</div>
         </div>
         {sales.length === 0 ? (
-          <div className="px-4 py-4 text-sm text-muted">No sales recorded yet.</div>
+          <div className="px-4 py-6 text-center text-sm text-muted">
+            No sales recorded for Spa Day {selectedDate}.
+          </div>
         ) : (
           sales.map((s) => (
             <div
               key={s.id}
-              className={`grid gap-3 border-b border-border px-4 py-3 text-[12px] last:border-b-0 min-w-[900px] ${
+              className={`grid gap-3 border-b border-border px-4 py-3 text-[12px] last:border-b-0 min-w-[900px] items-center ${
                 s.voided ? "opacity-50" : ""
               }`}
               style={{ gridTemplateColumns: GRID_COLS }}
             >
-              <div className="text-muted">{fmtDate(s.created_at)}</div>
-              <div className="text-foreground">{s.client_name}</div>
+              <div className="font-mono text-muted">
+                {fmtPhtTime(s.created_at, selectedDate)}
+              </div>
+              <div className="text-foreground font-medium">{s.client_name}</div>
               <div className="text-foreground">
                 {s.service_name}
                 {s.voided && (
@@ -260,7 +397,9 @@ export function SalesBrowser({
                   </span>
                 )}
               </div>
-              <div className="font-semibold text-accent-gold">₱{s.amount.toLocaleString()}</div>
+              <div className="font-mono font-semibold text-accent-gold">
+                ₱{s.amount.toLocaleString()}
+              </div>
               <div className="text-muted">
                 {s.payment_method}
                 {s.payment_ref && (
@@ -278,13 +417,13 @@ export function SalesBrowser({
                       disabled={!editAllowed}
                       title={editAllowed ? undefined : "Supervisor or Owner only"}
                       onClick={() => editAllowed && openEdit(s)}
-                      className="rounded-md border border-border px-2 py-1 text-[10.5px] font-semibold text-foreground hover:border-gold disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="rounded-md border border-border px-2 py-1 text-[10.5px] font-semibold text-foreground hover:border-gold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleVoid(s)}
-                      className="rounded-md border border-[#6b2b2b] px-2 py-1 text-[10.5px] font-semibold text-accent-red hover:bg-accent-red/10"
+                      className="rounded-md border border-[#6b2b2b] px-2 py-1 text-[10.5px] font-semibold text-accent-red hover:bg-accent-red/10 cursor-pointer"
                     >
                       Void
                     </button>
@@ -299,6 +438,7 @@ export function SalesBrowser({
         )}
       </div>
 
+      {/* Edit Sale Modal */}
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4">
@@ -318,7 +458,7 @@ export function SalesBrowser({
                   min={0}
                   value={editAmount}
                   onChange={(e) => setEditAmount(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold font-mono"
                 />
               </div>
               <div>
@@ -346,7 +486,7 @@ export function SalesBrowser({
                     type="text"
                     value={editRef}
                     onChange={(e) => setEditRef(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                    className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold font-mono"
                   />
                 </div>
               )}
@@ -375,7 +515,7 @@ export function SalesBrowser({
               <button
                 type="button"
                 onClick={closeEdit}
-                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground"
+                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground cursor-pointer"
               >
                 Cancel
               </button>
@@ -383,7 +523,7 @@ export function SalesBrowser({
                 type="button"
                 disabled={busy}
                 onClick={confirmEdit}
-                className="flex-1 rounded-lg bg-gold py-2 text-xs font-bold text-black hover:brightness-110 disabled:opacity-50"
+                className="flex-1 rounded-lg bg-gold py-2 text-xs font-bold text-black hover:brightness-110 disabled:opacity-50 cursor-pointer"
               >
                 Save Changes
               </button>
@@ -392,6 +532,7 @@ export function SalesBrowser({
         </div>
       )}
 
+      {/* Void Step Up Modal */}
       {voidStepUp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4">
@@ -441,7 +582,7 @@ export function SalesBrowser({
               <button
                 type="button"
                 onClick={closeVoidStepUp}
-                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground"
+                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground cursor-pointer"
               >
                 Cancel
               </button>
@@ -449,7 +590,7 @@ export function SalesBrowser({
                 type="button"
                 disabled={voidBusy}
                 onClick={confirmVoidStepUp}
-                className="flex-1 rounded-lg bg-accent-red py-2 text-xs font-bold text-black hover:brightness-110 disabled:opacity-50"
+                className="flex-1 rounded-lg bg-accent-red py-2 text-xs font-bold text-black hover:brightness-110 disabled:opacity-50 cursor-pointer"
               >
                 Void Sale
               </button>
@@ -458,6 +599,7 @@ export function SalesBrowser({
         </div>
       )}
 
+      {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-[#a97e2e] bg-surface-2 px-5 py-2.5 font-mono text-xs font-semibold text-accent-gold shadow-2xl animate-fade-in">
           {toastMessage}

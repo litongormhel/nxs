@@ -50,20 +50,16 @@
 
 ## Implemented (app level) — Operations Phase (`ohm#9h4c7x2m`, 2026-08-28)
 
-- **Sales tab** (`app/sales/page.tsx`, real page replacing the 8-line
-  stub; `components/sales-browser.tsx`, new): table — Date, Client,
-  Service, Amount, Payment (+ GCash ref when present), Promo, Therapist,
-  Actions. `sales` is embedded-joined to `clients(codename)`,
-  `services(name)`, `therapists(name)`, `promos(label)` (all single-FK,
-  safe for a PostgREST embedded select); `processed_by`/`edited_by`/
-  `voided_by` are resolved from a separately-fetched `staff` list mapped
-  in app code — `sales` carries three distinct FKs to `staff`, which makes
-  those three ambiguous to embed directly (same reason Logs' `staff_id`
-  join is done in app code). Running total excludes voided sales.
-  **Walk-in/no-account distinction**: `client_id IS NULL` (with
-  `guest_label` set) — confirmed directly against the live check
-  constraint, matches the mockup's `clientKey===null` exactly. Walk-in
-  rows show "No action — walk-in, no account" instead of Edit/Void.
+- **Sales tab / Daily Sales Remittance** (`app/sales/page.tsx`, `components/sales-browser.tsx`, updated `ohm#slsremit`, 2026-09-17):
+  - **Spa Day Bounds & Filtering**: `app/(staff)/sales/page.tsx` reads `searchParams` for `date` (defaulting to `spaDayNow()`) and queries `sales` strictly bounded by `getSpaDayBounds(date)` (`16:00:00+08` on selected date to `02:00:00+08` next day). `getSpaDayBounds` converts to UTC (`08:00:00Z` to `18:00:00Z`), ensuring 1:00 AM transactions correctly belong to the preceding Spa Day remittance.
+  - **Shift Remittance Summary Bar**: 3 KPI summary cards replacing the lifetime total:
+    - **Cash Remit**: Sum of `payment_method = 'Cash'` (non-voided).
+    - **Online / E-Wallet**: Sum of non-Cash payments (`GCash`, `Card`, `Points`, non-voided).
+    - **Total Shift Sales**: Overall total shift sales for the selected Spa Day (non-voided).
+  - **Table Presentation**: Transaction time formatted in PHT via `fmtPhtTime(created_at, selectedDate)` (e.g. `04:30 PM`, `01:15 AM (+1d)`). Displays `Time`, `Client` (`codename` / `guest_label`), `Service`, `Amount` (`font-mono text-gold`), `Payment` (+ Ref if GCash), `Promo`, `Therapist`, and `Actions`.
+  - `sales` is embedded-joined to `clients(codename)`, `services(name)`, `therapists(name)`, `promos(label)`; `processed_by`/`edited_by`/`voided_by` are resolved from a separately-fetched `staff` list mapped in app code.
+  - **Walk-in/no-account distinction**: `client_id IS NULL` (with `guest_label` set) shows "No action — walk-in, no account" instead of Edit/Void.
+
 - **Edit** (`app/sales/actions.ts::editSale`, real modal in
   `sales-browser.tsx` — not `window.prompt()`): edits amount, payment
   method, GCash ref (shown only when payment method is GCash), and
