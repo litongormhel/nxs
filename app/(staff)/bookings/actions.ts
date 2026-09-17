@@ -394,7 +394,7 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
     .eq("booking_id", input.bookingId)
     .order("checked_in_at", { ascending: false });
 
-  const existingOcc = occupancyRows?.[0] ?? null;
+  const existingOcc = occupancyRows?.find((o) => !o.checked_out_at) ?? occupancyRows?.[0] ?? null;
 
   // Locker conflict check
   if (input.lockerNumber !== null) {
@@ -402,12 +402,16 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
     if (lockerChanged) {
       const { data: activeOcc } = await supabase
         .from("locker_occupancy")
-        .select("id")
+        .select("id, booking_id")
         .eq("locker_number", input.lockerNumber)
         .is("checked_out_at", null)
         .maybeSingle();
 
-      if (activeOcc && (!existingOcc || activeOcc.id !== existingOcc.id)) {
+      if (
+        activeOcc &&
+        activeOcc.booking_id !== input.bookingId &&
+        (!existingOcc || activeOcc.id !== existingOcc.id)
+      ) {
         return {
           ok: false,
           field: "locker",

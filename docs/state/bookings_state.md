@@ -387,6 +387,16 @@ Day-Off therapist (Leo) could be saved from New Booking.
 - Updates `bookings.status = 'Cancelled'` and inserts `action_logs` audit entries with `action = 'auto_cancel_lapsed_booking'`.
 - Created Route Handler `/api/cron/auto-cancel-bookings` (`app/api/cron/auto-cancel-bookings/route.ts`) registered in `vercel.json` with schedule `0 18 * * *` (2:00 AM Manila time / UTC+8).
 
+**Correction, `ohm#edtmodbfix` (2026-09-17)** — Fix EditBookingModal Self-Locker False Conflict & Therapist Availability Dropdown.
+
+- **Self-Locker False Conflict Fix**:
+  - Client-side: Updated `EditBookingModal` (`components/booking-browser.tsx`) `occupiedLockers` fetch to exclude self-occupancy rows matching `booking.id`, `initialOccupancy.id`, or `initialOccupancy.locker_number`. Set `<option disabled={occupied && !isCurrent}>` so leaving the assigned locker unchanged remains valid.
+  - Server-side: Updated `editBooking` action (`app/(staff)/bookings/actions.ts`) to resolve `existingOcc` to active occupancy (`!checked_out_at`), skip conflict check when locker is unchanged (`lockerChanged === false`), and exclude `activeOcc.booking_id !== input.bookingId` / `activeOcc.id !== existingOcc.id` from triggering a conflict.
+- **Therapist Availability & Weekday Math**:
+  - Formatted therapist options in `EditBookingModal` dropdown to display availability suffixes (`Akio - Day Off`, `Josh - On Leave`, `Name - Absent`) for `booking.booking_date`.
+  - Set `<option disabled className="text-stone-500">` to prevent selecting unavailable therapists unless currently assigned to that booking (`booking.therapist_id === t.id`).
+  - Evaluated recurring day-off weekday via `new Date('${date}T00:00:00').getDay()` (0 = Sunday ... 6 = Saturday), aligning JS `getDay()` with Postgres `extract(dow from booking_date)`.
+
 **Correction, `ohm#bkgchkedt` (2026-09-17)** — Fix Check-in Time & Locker missing data + Add leftmost Edit Booking action & modal.
 
 - **Check-in Time & Locker # Fix**: Updated `BookingBrowser` (`components/booking-browser.tsx`) day-view query to fetch `bookings` alongside active `locker_occupancy` records with fallback resolution for unlinked `booking_id` rows, resolving blank `-` displays on Check-in and Check-out tabs.

@@ -31,6 +31,7 @@ export type Promo = { id: string; label: string; discount: number };
 export type Addon = { id: string; name: string; price: number };
 
 type LockerOccupancyRow = {
+  id?: string;
   checked_in_at: string;
   checked_out_at: string | null;
   locker_number: number;
@@ -782,24 +783,56 @@ function EditBookingModal({
 
   const [availabilityMap, setAvailabilityMap] = useState<Record<string, boolean>>({});
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [unavailableTherapists, setUnavailableTherapists] = useState<Map<string, string>>(new Map());
   const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const supabase = createClient();
     supabase
       .from("locker_occupancy")
-      .select("locker_number, booking_id")
+      .select("id, locker_number, booking_id")
       .is("checked_out_at", null)
       .then(({ data }) => {
         const occSet = new Set<number>();
         for (const row of data ?? []) {
-          if (row.booking_id !== booking.id) {
+          const isSelf =
+            row.booking_id === booking.id ||
+            (initialOccupancy?.id && row.id === initialOccupancy.id) ||
+            (initialOccupancy?.locker_number && row.locker_number === initialOccupancy.locker_number);
+          if (!isSelf) {
             occSet.add(row.locker_number);
           }
         }
         setOccupiedLockers(occSet);
       });
-  }, [booking.id]);
+  }, [booking.id, initialOccupancy]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const date = booking.booking_date;
+    const weekday = new Date(`${date}T00:00:00`).getDay();
+    Promise.all([
+      supabase.from("therapist_day_off").select("therapist_id, weekday"),
+      supabase.from("therapist_absence").select("therapist_id, absent_date").eq("absent_date", date),
+      supabase
+        .from("therapist_leave")
+        .select("therapist_id, start_date, end_date")
+        .lte("start_date", date)
+        .gte("end_date", date),
+    ]).then(([dayOff, absence, leave]) => {
+      const map = new Map<string, string>();
+      for (const row of dayOff.data ?? []) {
+        if (row.weekday === weekday) map.set(row.therapist_id, "Day Off");
+      }
+      for (const row of absence.data ?? []) {
+        map.set(row.therapist_id, "Absent");
+      }
+      for (const row of leave.data ?? []) {
+        map.set(row.therapist_id, "On Leave");
+      }
+      setUnavailableTherapists(map);
+    });
+  }, [booking.booking_date]);
 
   useEffect(() => {
     if (!therapistId) {
@@ -918,11 +951,21 @@ function EditBookingModal({
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
           >
             <option value="">— Unassigned —</option>
-            {therapists.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
+            {therapists.map((t) => {
+              const unavailableReason = unavailableTherapists.get(t.id);
+              const isAssigned = booking.therapist_id === t.id;
+              const disabled = !!unavailableReason && !isAssigned;
+              return (
+                <option
+                  key={t.id}
+                  value={t.id}
+                  disabled={disabled}
+                  className={disabled ? "text-stone-500" : undefined}
+                >
+                  {t.name}{unavailableReason ? ` - ${unavailableReason}` : ""}
+                </option>
+              );
+            })}
           </select>
           {availabilityLoading && (
             <p className="text-[10px] text-muted">Checking availability…</p>
@@ -976,8 +1019,9 @@ function EditBookingModal({
             {lockers.map((num) => {
               const occupied = occupiedLockers.has(num);
               const isCurrent = initialOccupancy?.locker_number === num;
+              const disabled = occupied && !isCurrent;
               return (
-                <option key={num} value={num} disabled={occupied}>
+                <option key={num} value={num} disabled={disabled}>
                   Locker #{num} {isCurrent ? " (Current)" : occupied ? " (Occupied)" : ""}
                 </option>
               );
