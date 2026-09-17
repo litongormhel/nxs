@@ -88,6 +88,7 @@ Full invariant list: [[nxs-architecture-locks]].
      - Therapist Actions (`therapist_mark_on_leave`, `therapist_archive`, `therapist_unarchive`): Server-side lookup of therapist names via UUID batch collection in `app/(staff)/logs/page.tsx`. Formatted e.g., `Marked [Therapist Name] on leave from [Start] to [End]`, `Archived [Therapist Name]`, `Unarchived [Therapist Name]`.
      - `edit_booking`: Formatted diffs into human phrasing e.g. `Updated booking: Locker 19 assigned (4:00 PM)`. Stripped raw `booking_id=uuid`.
      - `locker_checkout`: Formatted to concise `Checked out Locker [Number]`. Stripped technical IDs.
+   - **Default Date Filter to Current Date (`components/logs-browser.tsx`)**: Defaulted `dateFilter` state to `spaDayNow()`, filtering logs against `toSpaDay(created_at)`. Added interactive "All Dates" / "Today" toggle buttons enabling easy clearing or switching back to current date.
    - **Visual Hierarchy**: Primary detail text styled in crisp `text-foreground text-[12px]`.
    - `npm run build` clean. See [[logs_state]] and `.ai/handoff.md`.
 

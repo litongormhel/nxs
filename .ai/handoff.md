@@ -17,8 +17,10 @@ This file tracks only what's in flight right now.
     - Therapist Actions (`therapist_mark_on_leave`, `therapist_archive`, `therapist_unarchive`): Batch-collected therapist UUIDs in `app/(staff)/logs/page.tsx` for server-side lookup of therapist names. Formatted e.g., `Marked [Therapist Name] on leave from [Start] to [End]`, `Archived [Therapist Name]`, `Unarchived [Therapist Name]`.
     - `edit_booking`: Formatted technical diffs into human phrasing e.g. `Updated booking: Locker 19 assigned (4:00 PM)`. Stripped raw `booking_id=uuid`.
     - `locker_checkout`: Formatted to concise `Checked out Locker [Number]`. Stripped technical IDs.
-  - **Visual Hierarchy (`components/logs-browser.tsx`)**:
-    - Styled primary detail text in crisp `text-foreground text-[12px]`.
+  - **Default Date Filter to Current Date (`components/logs-browser.tsx`)**:
+    - Defaulted `dateFilter` state to `spaDayNow()` (current Asia/Manila spa date).
+    - Updated date filtering logic to evaluate `toSpaDay(l.created_at) === dateFilter`.
+    - Added interactive "All Dates" / "Today" toggle buttons allowing users to clear date filtering or jump back to today's logs.
   - `npm run build` clean. See [[logs_state]] and `.ai/briefing.md`.
 
 - **Exclude Self-Booking in Room Collision Check & Gray Out Occupied Lockers in Log Visit Modal — complete**

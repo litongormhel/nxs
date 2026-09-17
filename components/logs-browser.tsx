@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useStaffSim } from "@/lib/staff-context";
 import { formatLogDetail, formatActionLabel, type Lookups } from "@/lib/logs/format-detail";
+import { spaDayNow, toSpaDay } from "@/lib/analytics/spa-day";
 
 export type LogEntry = {
   id: string;
@@ -30,7 +31,7 @@ export function LogsBrowser({
   const { currentRole } = useStaffSim();
 
   const [actionFilter, setActionFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState(() => spaDayNow());
   const [staffFilter, setStaffFilter] = useState("all");
 
   const distinctActions = useMemo(
@@ -44,7 +45,7 @@ export function LogsBrowser({
 
   const filtered = initialLogs.filter((l) => {
     if (actionFilter !== "all" && l.action !== actionFilter) return false;
-    if (dateFilter && l.created_at.slice(0, 10) !== dateFilter) return false;
+    if (dateFilter && toSpaDay(l.created_at) !== dateFilter) return false;
     if (staffFilter !== "all" && l.staff_name !== staffFilter) return false;
     return true;
   });
@@ -60,7 +61,7 @@ export function LogsBrowser({
 
   return (
     <div className="max-w-5xl space-y-4">
-      <div className="flex flex-wrap gap-2.5">
+      <div className="flex flex-wrap items-center gap-2.5">
         <select
           value={actionFilter}
           onChange={(e) => setActionFilter(e.target.value)}
@@ -73,12 +74,33 @@ export function LogsBrowser({
             </option>
           ))}
         </select>
-        <input
-          type="date"
-          value={dateFilter}
-          onChange={(e) => setDateFilter(e.target.value)}
-          className="rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
-        />
+        <div className="flex items-center gap-1.5">
+          <input
+            type="date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
+          />
+          {dateFilter ? (
+            <button
+              type="button"
+              onClick={() => setDateFilter("")}
+              className="rounded-lg border border-border bg-surface-2 px-2 py-2 text-xs text-muted hover:text-foreground hover:border-gold transition-colors"
+              title="Show all dates"
+            >
+              All Dates
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setDateFilter(spaDayNow())}
+              className="rounded-lg border border-border bg-surface-2 px-2 py-2 text-xs text-muted hover:text-foreground hover:border-gold transition-colors"
+              title="Show today's logs"
+            >
+              Today
+            </button>
+          )}
+        </div>
         <select
           value={staffFilter}
           onChange={(e) => setStaffFilter(e.target.value)}
