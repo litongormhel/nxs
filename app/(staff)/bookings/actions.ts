@@ -72,10 +72,31 @@ function therapistUnavailableError(message: string): string | null {
   return `That therapist is ${match[1]} on the selected date.`;
 }
 
+async function getMaxRoomCapacity(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<number> {
+  const { count } = await supabase
+    .from("rooms")
+    .select("*", { count: "exact", head: true })
+    .eq("active", true);
+  return count && count > 0 ? count : 18;
+}
+
 export async function createBooking(
   input: CreateBookingInput
 ): Promise<CreateBookingResult> {
   const supabase = await createClient();
+
+  if (input.roomNumber !== null) {
+    const maxRoom = await getMaxRoomCapacity(supabase);
+    if (input.roomNumber > maxRoom || input.roomNumber < 1) {
+      return {
+        ok: false,
+        field: "room",
+        error: `Room ${input.roomNumber} exceeds room capacity of ${maxRoom}.`,
+      };
+    }
+  }
 
   const { data, error } = await supabase
     .from("bookings")
@@ -159,6 +180,17 @@ export async function quickWalkin(
   input: QuickWalkinInput
 ): Promise<QuickWalkinResult> {
   const supabase = await createClient();
+
+  if (input.roomNumber !== null) {
+    const maxRoom = await getMaxRoomCapacity(supabase);
+    if (input.roomNumber > maxRoom || input.roomNumber < 1) {
+      return {
+        ok: false,
+        field: "room",
+        error: `Room ${input.roomNumber} exceeds room capacity of ${maxRoom}.`,
+      };
+    }
+  }
 
   let pointsAwarded: number | null = null;
   if (input.clientId) {
@@ -430,6 +462,17 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
       ok: false,
       error: "Both Therapist and Room are required for massage services.",
     };
+  }
+
+  if (finalRoomNumber !== null) {
+    const maxRoom = await getMaxRoomCapacity(supabase);
+    if (finalRoomNumber > maxRoom || finalRoomNumber < 1) {
+      return {
+        ok: false,
+        field: "room",
+        error: `Room ${finalRoomNumber} exceeds room capacity of ${maxRoom}.`,
+      };
+    }
   }
 
   // Fetch existing occupancy for this booking

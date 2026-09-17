@@ -804,6 +804,10 @@ function EditBookingModal({
     [services, serviceId]
   );
   const isMassageService = selectedService?.name !== "Wet Area";
+  const effectiveRooms = useMemo(
+    () => (rooms && rooms.length > 0 ? rooms : Array.from({ length: 18 }, (_, i) => i + 1)),
+    [rooms]
+  );
 
   useEffect(() => {
     const supabase = createClient();
@@ -942,7 +946,7 @@ function EditBookingModal({
       setRoomNumber("");
     } else {
       if (roomNumber === "") {
-        const freeRoom = rooms.find((r) => !occupiedRooms.has(r)) ?? rooms[0] ?? "";
+        const freeRoom = effectiveRooms.find((r) => !occupiedRooms.has(r)) ?? effectiveRooms[0] ?? "";
         setRoomNumber(freeRoom);
       }
     }
@@ -1078,7 +1082,7 @@ function EditBookingModal({
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
             >
               <option value="">— Select Room —</option>
-              {rooms.map((num) => {
+              {effectiveRooms.map((num) => {
                 const occupied = occupiedRooms.has(num);
                 const isCurrent = booking.room_number === num;
                 const disabled = occupied && !isCurrent;

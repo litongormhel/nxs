@@ -173,6 +173,11 @@ export function QuickWalkinModal({
     return taken;
   }, [conflicts, time, duration]);
 
+  const effectiveRooms = useMemo(
+    () => (rooms && rooms.length > 0 ? rooms : Array.from({ length: 18 }, (_, i) => i + 1)),
+    [rooms]
+  );
+
   // Taken slots in the slot grid (therapist busy or no rooms available)
   const takenSlots = useMemo(() => {
     const taken = new Set<string>();
@@ -192,14 +197,14 @@ export function QuickWalkinModal({
           takenRooms.add(row.room_number);
         }
       }
-      const freeRoomCount = rooms.filter((r) => !takenRooms.has(r)).length;
+      const freeRoomCount = effectiveRooms.filter((r) => !takenRooms.has(r)).length;
 
       if (therapistBusy || freeRoomCount === 0) {
         taken.add(slot);
       }
     }
     return taken;
-  }, [conflicts, therapistId, duration, rooms, timeSlots]);
+  }, [conflicts, therapistId, duration, effectiveRooms, timeSlots]);
 
   // Therapists with zero free slots anywhere in the day's slot grid
   const fullyBookedTherapists = useMemo(() => {
@@ -228,8 +233,8 @@ export function QuickWalkinModal({
         taken.add(row.room_number);
       }
     }
-    return rooms.filter((r) => !taken.has(r));
-  }, [conflicts, time, duration, rooms]);
+    return effectiveRooms.filter((r) => !taken.has(r));
+  }, [conflicts, time, duration, effectiveRooms]);
 
   const freeLockers = useMemo(
     () => lockers.filter((n) => !occupiedLockers.has(n)),

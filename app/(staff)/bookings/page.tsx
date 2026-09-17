@@ -69,6 +69,11 @@ export default async function BookingsPage() {
     has_portal_account: portalAccountClientIds.has(c.id),
   }));
 
+  const activeRooms =
+    rooms && rooms.length > 0
+      ? rooms.map((r) => r.number)
+      : Array.from({ length: 18 }, (_, i) => i + 1);
+
   return (
     <div className="p-8">
       <h1 className="text-xl font-semibold text-gold animate-fade-in">Bookings</h1>
@@ -82,7 +87,7 @@ export default async function BookingsPage() {
           clients={clientsWithPortalFlag}
           services={services ?? []}
           therapists={therapists ?? []}
-          rooms={(rooms ?? []).map((r) => r.number)}
+          rooms={activeRooms}
           staff={staff ?? []}
           promos={promos ?? []}
           addons={addons ?? []}

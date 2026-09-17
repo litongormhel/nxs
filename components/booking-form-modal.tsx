@@ -152,6 +152,11 @@ export function BookingFormModal({
   const isPastDate = date < todayIso();
   const time = useCustomTime ? customTime : slotTime;
 
+  const effectiveRooms = useMemo(
+    () => (rooms && rooms.length > 0 ? rooms : Array.from({ length: 18 }, (_, i) => i + 1)),
+    [rooms]
+  );
+
   // Taken slots in the slot grid (therapist busy or no rooms available)
   const takenSlots = useMemo(() => {
     const taken = new Set<string>();
@@ -171,14 +176,14 @@ export function BookingFormModal({
           takenRooms.add(row.room_number);
         }
       }
-      const freeRoomCount = rooms.filter((r) => !takenRooms.has(r)).length;
+      const freeRoomCount = effectiveRooms.filter((r) => !takenRooms.has(r)).length;
 
       if (therapistBusy || freeRoomCount === 0) {
         taken.add(slot);
       }
     }
     return taken;
-  }, [conflicts, therapistId, duration, rooms, timeSlots]);
+  }, [conflicts, therapistId, duration, effectiveRooms, timeSlots]);
 
   // Conflicting therapists at current time
   const conflictingTherapists = useMemo(() => {
@@ -203,8 +208,8 @@ export function BookingFormModal({
         taken.add(row.room_number);
       }
     }
-    return rooms.filter((r) => !taken.has(r));
-  }, [conflicts, time, duration, rooms]);
+    return effectiveRooms.filter((r) => !taken.has(r));
+  }, [conflicts, time, duration, effectiveRooms]);
 
   // Therapists with zero free slots anywhere in the day's slot grid
   const fullyBookedTherapists = useMemo(() => {
@@ -539,7 +544,7 @@ export function BookingFormModal({
                     </span>
                     {" · "}Rooms free:{" "}
                     <span className={freeRooms.length > 0 ? "text-emerald-400 font-semibold" : "text-red-400 font-semibold"}>
-                      {freeRooms.length} of {rooms.length}
+                      {freeRooms.length} of {effectiveRooms.length}
                     </span>
                   </p>
                 </div>
@@ -566,7 +571,7 @@ export function BookingFormModal({
                 {!time ? (
                   <option value="">— pick a time first —</option>
                 ) : (
-                  rooms.map((r) => {
+                  effectiveRooms.map((r) => {
                     const isFree = freeRooms.includes(r);
                     return (
                       <option key={r} value={r} disabled={!isFree}>

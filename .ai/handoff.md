@@ -5,6 +5,18 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Link all Room dropdowns to configured Room Capacity (18) instead of hardcoded 20 — complete**
+  (`ohm#roomcapdynamic`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Frontend Dynamic Sourcing (`app/(staff)/bookings/page.tsx`, `components/booking-browser.tsx`, `components/booking-form-modal.tsx`, `components/quick-walkin-modal.tsx`)**:
+    - Query active rooms from Supabase `rooms` table (`active = true`).
+    - Compute `effectiveRooms` fallback defaulting strictly to 18 (1 to 18) when room queries are empty or loading instead of hardcoding 20 rooms.
+    - Updated free room availability checks and option dropdown mappings across all modals (`New Booking`, `Quick Walkin`, `Edit Booking`).
+  - **Backend Server Action Guard (`app/(staff)/bookings/actions.ts`)**:
+    - Added `getMaxRoomCapacity(supabase)` helper to retrieve active room count (defaulting to 18).
+    - Enforced room capacity validation guard in `createBooking`, `quickWalkin`, and `editBooking` server actions to reject any assigned `room_number` exceeding configured room capacity (or `< 1`).
+  - `npm run build` clean. See [[bookings_state]] and `.ai/briefing.md`.
+
 - **Hide Massage Time / Schedule Picker when Service Downgraded to Wet Area in Edit Booking Modal — complete**
   (`ohm#editbkgwettimehide`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

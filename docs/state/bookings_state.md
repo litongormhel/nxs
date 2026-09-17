@@ -78,7 +78,10 @@
 
 - `app/bookings/page.tsx` — server component, real (was an 8-line stub).
   Fetches clients (`id, codename, username`), active services, non-archived
-  therapists, active rooms, active staff, active promos, active addons, and lockers; renders `BookingBrowser`.
+  therapists, active rooms (`active = true`, fallback 1 to 18), active staff, active promos, active addons, and lockers; renders `BookingBrowser`.
+- **Dynamic Room Capacity (18) Sourcing & Server Action Guard (`ohm#roomcapdynamic`, 2026-09-17)**:
+  - **Frontend Dynamic Sourcing (`app/(staff)/bookings/page.tsx`, `components/booking-browser.tsx`, `components/booking-form-modal.tsx`, `components/quick-walkin-modal.tsx`)**: Queries active rooms from Supabase `rooms` table (`active = true`). Computes `effectiveRooms` with fallback defaulting strictly to 18 (1 to 18) when room queries are empty or loading, replacing hardcoded 20-room arrays. Dynamic room capacity feeds room availability calculations and option dropdown mappings across `New Booking`, `Quick Walkin`, and `Edit Booking` modals.
+  - **Backend Server Action Guard (`app/(staff)/bookings/actions.ts`)**: Added `getMaxRoomCapacity(supabase)` helper returning count of active rooms (defaulting to 18). Enforces validation guard in `createBooking`, `quickWalkin`, and `editBooking` server actions to reject any assigned `room_number` exceeding configured room capacity (or `< 1`).
 - `components/booking-browser.tsx` — client component. Date picker plus a
   live day-view list of active-status bookings for that date (client-side
   Supabase query, re-run on date change or after a create). "New Booking"
