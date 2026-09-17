@@ -19,7 +19,12 @@ async function logAction(
 }
 
 function fail(error: unknown): ActionResult {
-  return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  const message =
+    typeof error === "string"
+      ? error
+      : (error as any)?.message || String(error);
+  console.error("[Sales Action Error]:", error);
+  return { ok: false, error: message };
 }
 
 export async function editSale(
@@ -96,11 +101,19 @@ export async function voidSale(
     p_staff_id: staffId,
   });
 
-  if (error) return fail(error);
+  if (error) {
+    console.error("[voidSale RPC Error]:", error);
+    return { ok: false, error: error.message || String(error) };
+  }
 
-  const res = data as { ok: boolean; error?: string };
-  if (!res.ok) {
-    return { ok: false, error: res.error ?? "Failed to void sale." };
+  const res = data as { ok?: boolean; success?: boolean; error?: string | { message?: string } } | null;
+  if (!res || (res.ok !== true && res.success !== true)) {
+    const errMsg =
+      typeof res?.error === "string"
+        ? res.error
+        : res?.error?.message || "Failed to void sale.";
+    console.error("[voidSale Failed]:", res);
+    return { ok: false, error: errMsg };
   }
 
   revalidatePath("/sales");
@@ -126,11 +139,19 @@ export async function restoreSale(
     p_staff_id: input.staffId,
   });
 
-  if (error) return fail(error);
+  if (error) {
+    console.error("[restoreSale RPC Error]:", error);
+    return { ok: false, error: error.message || String(error) };
+  }
 
-  const res = data as { ok: boolean; error?: string };
-  if (!res.ok) {
-    return { ok: false, error: res.error ?? "Failed to restore sale." };
+  const res = data as { ok?: boolean; success?: boolean; error?: string | { message?: string } } | null;
+  if (!res || (res.ok !== true && res.success !== true)) {
+    const errMsg =
+      typeof res?.error === "string"
+        ? res.error
+        : res?.error?.message || "Failed to restore sale.";
+    console.error("[restoreSale Failed]:", res);
+    return { ok: false, error: errMsg };
   }
 
   revalidatePath("/sales");

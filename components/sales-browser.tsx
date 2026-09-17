@@ -157,7 +157,11 @@ export function SalesBrowser({
     );
     setBusy(false);
     if (!res.ok) {
-      setEditError(res.error);
+      const errMsg =
+        typeof res.error === "string"
+          ? res.error
+          : (res.error as any)?.message || "An unexpected error occurred.";
+      setEditError(errMsg);
       return;
     }
     setSales((prev) =>
@@ -233,7 +237,11 @@ export function SalesBrowser({
       setPinModalBusy(false);
 
       if (!res.ok) {
-        setPinModalError(res.error);
+        const errMsg =
+          typeof res.error === "string"
+            ? res.error
+            : (res.error as any)?.message || "An unexpected error occurred.";
+        setPinModalError(errMsg);
         return;
       }
 
@@ -262,7 +270,11 @@ export function SalesBrowser({
       setPinModalBusy(false);
 
       if (!res.ok) {
-        setPinModalError(res.error);
+        const errMsg =
+          typeof res.error === "string"
+            ? res.error
+            : (res.error as any)?.message || "An unexpected error occurred.";
+        setPinModalError(errMsg);
         return;
       }
 
