@@ -5,6 +5,18 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Remove ACTION column and Check Out buttons from Call Sheet — complete**
+  (`ohm#remcallsheetact`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Operational Read-Only Separation (`components/call-sheet-browser.tsx`, `app/(staff)/call-sheet/page.tsx`)**:
+    - Converted Call Sheet view into a strictly operational read-only display for floor dispatching (Locker, Room, Service, Thera, Client, Time, Status).
+    - Removed `ACTION` table header (`<th>ACTION</th>`), row-level `Check Out` buttons, `CheckoutConfirmModal` import and state bindings, and stale `needsCheckout` section.
+  - **Clean Horizontal Grid Alignment (`components/call-sheet-browser.tsx`)**:
+    - Re-aligned table grid columns cleanly: 7 columns on `"All"` tab (`LOCKER` | `ROOM` | `SERVICE` | `THERA` | `CLIENT` | `TIME` | `STATUS`, `"0.8fr 0.8fr 1.5fr 1fr 1.2fr 1fr 1.1fr"`), and 5 columns on specific time slot tabs (`LOCKER` | `ROOM` | `SERVICE` | `THERA` | `CLIENT`, `"0.8fr 0.8fr 1.5fr 1fr 1.2fr"`).
+  - **Protected Check-out Functionality (`components/locker-board.tsx`)**:
+    - Confirmed that locker check-out functionality remains fully accessible and protected by `CheckoutConfirmModal` under the **Lockers Tab** (`components/locker-board.tsx`) and **Bookings Check-in tab** (`components/booking-browser.tsx`).
+  - `npm run build` clean. See [[operations_state]] and `.ai/briefing.md`.
+
 - **Add Check-out Confirmation Modal with Early/Pre-Massage Alert — complete**
   (`ohm#checkoutconfirm`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

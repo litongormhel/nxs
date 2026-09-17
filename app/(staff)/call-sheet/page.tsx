@@ -59,7 +59,6 @@ export default async function CallSheetPage() {
     });
 
   const inProgress = entries.filter((e) => !e.stale);
-  const needsCheckout = entries.filter((e) => e.stale);
 
   const availableSlots = sortSlotTimes(
     (weekendSlots ?? []).map((s) => s.slot_time.slice(0, 5))
@@ -72,7 +71,6 @@ export default async function CallSheetPage() {
       </h1>
       <CallSheetBrowser
         inProgress={inProgress}
-        needsCheckout={needsCheckout}
         availableSlots={availableSlots}
       />
     </div>

@@ -80,35 +80,35 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-17 — Add Check-out Confirmation Modal with Early/Pre-Massage Alert**
+1. **2026-09-17 — Remove ACTION column and Check Out buttons from Call Sheet**
+   (`ohm#remcallsheetact`). Implementation plan presented and approved before code execution.
+   - **Operational Read-Only Separation (`components/call-sheet-browser.tsx`, `app/(staff)/call-sheet/page.tsx`)**: Converted Call Sheet view into a strictly operational read-only display for floor dispatching (Locker, Room, Service, Thera, Client, Time, Status). Removed `ACTION` table header (`<th>ACTION</th>`), row-level `Check Out` buttons, `CheckoutConfirmModal` import and bindings, and stale `needsCheckout` section.
+   - **Clean Horizontal Grid Alignment (`components/call-sheet-browser.tsx`)**: Re-aligned grid columns cleanly: 7 columns on `"All"` tab (`LOCKER` | `ROOM` | `SERVICE` | `THERA` | `CLIENT` | `TIME` | `STATUS`, `"0.8fr 0.8fr 1.5fr 1fr 1.2fr 1fr 1.1fr"`), and 5 columns on specific time slot tabs (`LOCKER` | `ROOM` | `SERVICE` | `THERA` | `CLIENT`, `"0.8fr 0.8fr 1.5fr 1fr 1.2fr"`).
+   - **Protected Check-out Functionality (`components/locker-board.tsx`)**: Retained full locker check-out functionality protected by `CheckoutConfirmModal` under the **Lockers Tab** and Bookings Check-in tab.
+   - `npm run build` clean. See [[operations_state]] and `.ai/handoff.md`.
+
+2. **2026-09-17 — Add Check-out Confirmation Modal with Early/Pre-Massage Alert**
    (`ohm#checkoutconfirm`). Implementation plan presented and approved before code execution.
    - **Check-Out Confirmation Dialog (`components/checkout-confirm-modal.tsx`)**: Created reusable `CheckoutConfirmModal` component displaying Client Codename, Assigned Locker, and Room & Service. Evaluates client operating status (`getSlotStatus`). Displays high-visibility amber warning box `⚠ Scheduled Massage Alert: Client has a massage scheduled for [Start Time] with [Therapist]. Are you sure you want to check them out early?` when current time is before or during the 90-minute massage window. Displays standard confirmation prompt for Wet Area or completed massages.
    - **Cross-View Trigger Interceptors (`components/booking-browser.tsx`, `components/call-sheet-browser.tsx`, `components/locker-board.tsx`, `app/(staff)/lockers/page.tsx`, `app/(staff)/call-sheet/page.tsx`)**: Intercepted Check Out button clicks on Bookings Check-in tab, Call Sheet (In Progress & Needs Checkout tables), and Locker Board cards. Expanded server queries to pass room, service, start_time, duration_minutes, and therapist details to feed the modal dialog.
    - `npm run build` clean. See [[operations_state]] and `.ai/handoff.md`.
 
-2. **2026-09-17 — Link all Room dropdowns to configured Room Capacity (18) instead of hardcoded 20**
+3. **2026-09-17 — Link all Room dropdowns to configured Room Capacity (18) instead of hardcoded 20**
    (`ohm#roomcapdynamic`). Implementation plan presented and approved before code execution.
    - **Frontend Dynamic Sourcing (`app/(staff)/bookings/page.tsx`, `components/booking-browser.tsx`, `components/booking-form-modal.tsx`, `components/quick-walkin-modal.tsx`)**: Query active rooms from Supabase `rooms` table (`active = true`). Compute `effectiveRooms` fallback defaulting strictly to 18 (1 to 18) when room queries are empty or loading instead of hardcoding 20 rooms. Updated free room availability checks and option dropdown mappings across all modals (`New Booking`, `Quick Walkin`, `Edit Booking`).
    - **Backend Server Action Guard (`app/(staff)/bookings/actions.ts`)**: Added `getMaxRoomCapacity(supabase)` helper to retrieve active room count (defaulting to 18). Enforced room capacity validation guard in `createBooking`, `quickWalkin`, and `editBooking` server actions to reject any assigned `room_number` exceeding configured room capacity (or `< 1`).
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-17 — Hide Massage Time / Schedule Picker when Service Downgraded to Wet Area in Edit Booking Modal**
+4. **2026-09-17 — Hide Massage Time / Schedule Picker when Service Downgraded to Wet Area in Edit Booking Modal**
    (`ohm#editbkgwettimehide`). Implementation plan presented and approved before code execution.
    - **Conditional Schedule Picker Rendering (`components/booking-browser.tsx`)**: Wrapped **Massage Time / Schedule** section in `{isMassageService && (...)}`. When service is changed to "Wet Area", the schedule slot selector is completely hidden. Updated form payload in `handleConfirmSave` to pass `startTime: isMassageService ? startTime : null`.
    - **Server Action Handling (`app/(staff)/bookings/actions.ts`)**: Updated `EditBookingInput.startTime` type to `string | null`. Computed `finalStartTime` in `editBooking` action. When downgraded to Wet Area, clearing `therapist_id` and `room_number` immediately releases the booking from the `no_double_book_therapist` and `no_double_book_room` GiST exclusion constraints, freeing up the massage slot immediately for other bookings on that day.
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-17 — Dynamic Room/Therapist Handling & Sales Adjustment in Edit Booking Modal**
+5. **2026-09-17 — Dynamic Room/Therapist Handling & Sales Adjustment in Edit Booking Modal**
    (`ohm#editbkgsvcroom`). Implementation plan presented and approved before code execution.
    - **Dynamic Form Fields (`components/booking-browser.tsx`)**: Extended `EditBookingModal` to inspect selected service (`isMassageService = selectedService.name !== "Wet Area"`). Renders `Assign Room` dropdown when Massage is selected, computes same-day room availability at `startTime`, marks occupied rooms, and requires selecting both a **Room** and a **Therapist**. Automatically resets `room_number = null` and `therapist_id = null` when downgraded to Wet Area. Added **Price & Remittance Banner** showing original service price vs new service price, price difference (+₱X / -₱X), and updated sales remittance total. Passed `rooms={rooms}` from `BookingBrowser`.
    - **Backend Action & Sales Sync (`app/(staff)/bookings/actions.ts`)**: Updated `editBooking` server action to accept `roomNumber`. Enforces required Room and Therapist for massage services and clears them for Wet Area. Updates `bookings.room_number` and `locker_occupancy.room_number` simultaneously so Call Sheet immediately reflects room changes. Automatically adjusts active non-voided `sales.amount` by the price difference when service changes and updates `sales.service_id` and `sales.therapist_id`.
-   - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
-
-5. **2026-09-17 — Add Pre-Confirmation Summary Dialog in Log Visit Modal**
-   (`ohm#logvstsummary`). Implementation plan presented and approved before code execution.
-   - **Two-Step Form Validation & Review Flow (`components/log-visit-modal.tsx`)**: Updated primary "Confirm" button to validate required inputs (therapist unless Wet Area, locker assignment, split payment balance equality, and client portal account check) and transition to `showSummary = true` pre-confirmation view.
-   - **Compact Scannable Receipt Card (`components/log-visit-modal.tsx`)**: Displayed client receipt card styled with `#0c0a09` charcoal background, `#292524` borders, and Gold/Ember font accents. Summarizes Client Codename (adhering strictly to client privacy rules), Therapist name (or `None (Wet Area)`), Massage Time (`fmtTime`), Locker number, Room number, Service Availed (with upgrade and add-ons formatted), and Total Payment with formatted payment method breakdown (`₱X (Cash)`, `₱X (GCash - Ref: Y)`, or `₱X (Cash: ₱A | GCash: ₱B)`).
-   - **Action Buttons (`components/log-visit-modal.tsx`)**: Added "Back / Edit" button to return staff to form view with all inputs preserved, and "Finalize Check-in" primary gold button to trigger `logVisitBooking` server action with `isPending` loading state.
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
 

@@ -2,7 +2,6 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckoutConfirmModal, type CheckoutTarget } from "@/components/checkout-confirm-modal";
 
 type Entry = {
   id: string;
@@ -66,28 +65,6 @@ export function getSlotStatus(
     return "done";
   }
   return "ongoing";
-}
-
-export type NeedsCheckoutEntry = {
-  id: string;
-  locker_number: number;
-  room_number: number | null;
-  service_name: string;
-  guest_or_client: string;
-  checked_in_at: string;
-  slot_time?: string | null;
-  duration_minutes?: number | null;
-  therapist_name?: string | null;
-  client_codename?: string | null;
-};
-
-function fmtCheckedInAt(ts: string): string {
-  return new Date(ts).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 export function fmtTime(hhmm: string): string {
@@ -198,16 +175,13 @@ function drawCallSheetJpeg(rows: Entry[], label: string): string {
 
 export function CallSheetBrowser({
   inProgress,
-  needsCheckout,
   availableSlots,
 }: {
   inProgress: Entry[];
-  needsCheckout: NeedsCheckoutEntry[];
   availableSlots: string[];
 }) {
   const router = useRouter();
   const [timeFilter, setTimeFilter] = useState<string>("all");
-  const [checkoutTarget, setCheckoutTarget] = useState<CheckoutTarget | null>(null);
   const downloadRef = useRef<HTMLAnchorElement>(null);
 
   const filtered = useMemo(
@@ -269,8 +243,8 @@ export function CallSheetBrowser({
           className="grid gap-4 border-b border-border px-6 py-4 text-sm font-bold tracking-wider uppercase text-muted items-center"
           style={{
             gridTemplateColumns: isAllTab
-              ? "0.8fr 0.8fr 1.5fr 1fr 1.2fr 1fr 1.1fr 0.9fr"
-              : "1fr 1fr 1.6fr 1fr 1.2fr 0.9fr",
+              ? "0.8fr 0.8fr 1.5fr 1fr 1.2fr 1fr 1.1fr"
+              : "0.8fr 0.8fr 1.5fr 1fr 1.2fr",
           }}
         >
           <div>Locker</div>
@@ -280,7 +254,6 @@ export function CallSheetBrowser({
           <div>Client</div>
           {isAllTab && <div>Time</div>}
           {isAllTab && <div>Status</div>}
-          <div>Action</div>
         </div>
         {filtered.length === 0 ? (
           <div className="px-6 py-8 text-lg text-muted">No massages match this time.</div>
@@ -296,8 +269,8 @@ export function CallSheetBrowser({
                 }
                 style={{
                   gridTemplateColumns: isAllTab
-                    ? "0.8fr 0.8fr 1.5fr 1fr 1.2fr 1fr 1.1fr 0.9fr"
-                    : "1fr 1fr 1.6fr 1fr 1.2fr 0.9fr",
+                    ? "0.8fr 0.8fr 1.5fr 1fr 1.2fr 1fr 1.1fr"
+                    : "0.8fr 0.8fr 1.5fr 1fr 1.2fr",
                 }}
               >
                 <div className="text-foreground">{e.locker_number}</div>
@@ -330,28 +303,6 @@ export function CallSheetBrowser({
                     )}
                   </div>
                 )}
-                <div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCheckoutTarget({
-                        occupancyId: e.id,
-                        clientCodename: e.client_codename ?? "Walk-in",
-                        lockerNumber: e.locker_number,
-                        roomNumber: e.room_number,
-                        serviceName: e.service_name,
-                        startTime: e.slot_time,
-                        durationMinutes: e.duration_minutes,
-                        therapistName: e.therapist_name,
-                        checkedInAt: e.checked_in_at,
-                        isWetArea: e.service_name === "Wet Area",
-                      })
-                    }
-                    className="rounded-md border border-[#5e3c3c] bg-surface-2 px-2.5 py-1 text-xs font-bold text-accent-red hover:brightness-125 transition-all"
-                  >
-                    Check Out
-                  </button>
-                </div>
               </div>
             );
           })
@@ -374,73 +325,6 @@ export function CallSheetBrowser({
       </div>
       {/* Hidden anchor used to trigger the JPEG download */}
       <a ref={downloadRef} className="hidden" />
-
-      {needsCheckout.length > 0 && (
-        <div className="rounded-xl border border-[#5e3c3c] bg-surface overflow-hidden">
-          <div className="flex items-center gap-2 border-b border-[#5e3c3c] bg-surface-2 px-6 py-3.5">
-            <span className="h-2 w-2 rounded-full bg-accent-red" />
-            <span className="text-sm font-bold text-accent-red">
-              Needs checkout — {needsCheckout.length} from a prior spa-day
-            </span>
-          </div>
-          <div
-            className="grid gap-4 border-b border-border px-6 py-3 text-[10px] font-bold uppercase tracking-wider text-muted items-center"
-            style={{ gridTemplateColumns: "0.8fr 0.8fr 1.3fr 1.4fr 1.2fr 1fr" }}
-          >
-            <div>Locker</div>
-            <div>Room</div>
-            <div>Service</div>
-            <div>Guest / Client</div>
-            <div>Checked in</div>
-            <div>Action</div>
-          </div>
-          {needsCheckout.map((e) => (
-            <div
-              key={e.id}
-              className="grid gap-4 border-b border-border px-6 py-4 text-sm last:border-b-0 items-center"
-              style={{ gridTemplateColumns: "0.8fr 0.8fr 1.3fr 1.4fr 1.2fr 1fr" }}
-            >
-              <div className="text-foreground">{e.locker_number}</div>
-              <div className="text-muted">{e.room_number ?? "—"}</div>
-              <div className="font-semibold text-accent-gold">{e.service_name}</div>
-              <div className="text-foreground">{e.guest_or_client}</div>
-              <div className="font-mono text-xs text-muted">{fmtCheckedInAt(e.checked_in_at)}</div>
-              <div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCheckoutTarget({
-                      occupancyId: e.id,
-                      clientCodename: e.client_codename ?? e.guest_or_client,
-                      lockerNumber: e.locker_number,
-                      roomNumber: e.room_number,
-                      serviceName: e.service_name,
-                      startTime: e.slot_time,
-                      durationMinutes: e.duration_minutes,
-                      therapistName: e.therapist_name,
-                      checkedInAt: e.checked_in_at,
-                      isWetArea: e.service_name === "Wet Area",
-                    })
-                  }
-                  className="rounded-md border border-[#5e3c3c] bg-surface-2 px-2.5 py-1 text-xs font-bold text-accent-red hover:brightness-125 transition-all"
-                >
-                  Check Out
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {checkoutTarget && (
-        <CheckoutConfirmModal
-          target={checkoutTarget}
-          onClose={() => setCheckoutTarget(null)}
-          onSuccess={() => {
-            router.refresh();
-          }}
-        />
-      )}
     </div>
   );
 }
