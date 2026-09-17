@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { ClientBrowser } from "@/components/client-browser";
+import { ClientBrowser, WalkInVisit } from "@/components/client-browser";
 
 export default async function ClientsPage() {
   const supabase = await createClient();
@@ -14,6 +14,7 @@ export default async function ClientsPage() {
     { data: lockers },
     { data: occupancy },
     { data: portalAccounts },
+    { data: rawWalkIns },
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -54,6 +55,24 @@ export default async function ClientsPage() {
       .is("checked_out_at", null)
       .not("client_id", "is", null),
     supabase.from("client_portal_accounts").select("client_id"),
+    supabase
+      .from("bookings")
+      .select(`
+        id,
+        guest_label,
+        booking_date,
+        start_time,
+        status,
+        created_at,
+        services ( name ),
+        therapists ( name ),
+        sales ( amount, payment_method ),
+        locker_occupancy ( locker_number )
+      `)
+      .is("client_id", null)
+      .not("guest_label", "is", null)
+      .order("booking_date", { ascending: false })
+      .order("start_time", { ascending: false }),
   ]);
 
   // Build map: clientId → active locker number
@@ -71,6 +90,41 @@ export default async function ClientsPage() {
     has_portal_account: portalAccountClientIds.has(c.id),
   }));
 
+  // Parse Walk-In visits
+  type RawWalkInRow = {
+    id: string;
+    guest_label: string | null;
+    booking_date: string;
+    start_time: string;
+    status: string;
+    created_at: string;
+    services: { name: string } | { name: string }[] | null;
+    therapists: { name: string } | { name: string }[] | null;
+    sales: { amount: number; payment_method: string } | { amount: number; payment_method: string }[] | null;
+    locker_occupancy: { locker_number: number } | { locker_number: number }[] | null;
+  };
+
+  const walkInVisits: WalkInVisit[] = ((rawWalkIns ?? []) as RawWalkInRow[]).map((row) => {
+    const svc = Array.isArray(row.services) ? row.services[0] : row.services;
+    const thera = Array.isArray(row.therapists) ? row.therapists[0] : row.therapists;
+    const sale = Array.isArray(row.sales) ? row.sales[0] : row.sales;
+    const occ = Array.isArray(row.locker_occupancy) ? row.locker_occupancy[0] : row.locker_occupancy;
+
+    return {
+      id: row.id,
+      guest_label: row.guest_label ?? "Walk-in Guest",
+      booking_date: row.booking_date,
+      start_time: row.start_time,
+      status: row.status,
+      created_at: row.created_at,
+      service_name: svc?.name ?? null,
+      therapist_name: thera?.name ?? null,
+      locker_number: occ?.locker_number ?? null,
+      amount: sale?.amount ?? null,
+      payment_method: sale?.payment_method ?? null,
+    };
+  });
+
   return (
     <div className="p-8">
       <h1 className="text-xl font-semibold text-gold animate-fade-in">Client Profile</h1>
@@ -79,13 +133,10 @@ export default async function ClientsPage() {
         <div className="mt-6 rounded-lg border border-border bg-surface p-5 text-sm text-muted">
           Could not load clients: {error.message}
         </div>
-      ) : !clients || clients.length === 0 ? (
-        <div className="mt-6 rounded-lg border border-border bg-surface p-5 text-sm text-muted">
-          No clients yet.
-        </div>
       ) : (
         <ClientBrowser
           clients={clientsWithPortalFlag}
+          walkInVisits={walkInVisits}
           services={services ?? []}
           staff={staff ?? []}
           therapists={therapists ?? []}

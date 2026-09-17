@@ -5,6 +5,21 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Separate "Members" and "Walk-In Without Account" tabs in Client Profile + Purge legacy clients without bookings today — complete**
+  (`ohm#clienttabsandpurge`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Database Cleanup Migration (`supabase/migrations/20260917150000_purge_legacy_clients.sql`)**:
+    - Created safe SQL cleanup script preserving active clients with bookings or locker occupancy on today's operating date (`2026-09-17` Manila time).
+    - Disassociates `client_id` (`NULL`) while copying client `codename` to `guest_label` across historical `bookings`, `sales`, and `locker_occupancy` rows for purged clients, preserving revenue and operational reporting integrity.
+    - Deletes orphaned `client_portal_accounts` and `point_transactions` (temporarily disabling `trg_block_ledger_delete`), then deletes purged legacy clients from `clients`.
+  - **Backend Data Sourcing (`app/(staff)/clients/page.tsx`)**:
+    - Queries registered members for the **Members** tab and non-member walk-in guest visits from `bookings` (`client_id IS NULL` & `guest_label IS NOT NULL`) joining `services`, `therapists`, `sales`, and `locker_occupancy` for the **Walk-In Without Account** tab.
+  - **Top-Level Two Tabs Layout & Walk-In View (`components/client-browser.tsx`)**:
+    - Added top-level tab switcher (**Members** vs **Walk-In Without Account**).
+    - Search bar filters registered members by `@username`, codename, or member code on **Members**, and filters walk-ins by guest codename or date on **Walk-Ins**.
+    - Added structured table for non-account walk-in guests (`Codename`, `Last Visit Date`, `Total Visits`, `Latest Service`, `Latest Therapist`, `Locker`, `Amount Paid`) with a slide-over drawer to inspect full past visit history for any walk-in guest codename.
+  - `npm run build` clean. See [[clients_state]] and `.ai/briefing.md`.
+
 - **Remove ACTION column and Check Out buttons from Call Sheet — complete**
   (`ohm#remcallsheetact`, 2026-09-17).
   - Implementation plan presented and approved before code execution.
