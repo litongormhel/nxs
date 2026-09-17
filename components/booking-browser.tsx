@@ -737,6 +737,7 @@ export function BookingBrowser({
           clients={clients}
           services={services}
           therapists={therapists}
+          rooms={rooms}
           lockers={lockers}
           timeSlots={timeSlots}
           initialOccupancy={occupancyOf(editBookingRow)}
@@ -757,6 +758,7 @@ function EditBookingModal({
   clients,
   services,
   therapists,
+  rooms,
   lockers,
   timeSlots,
   initialOccupancy,
@@ -767,6 +769,7 @@ function EditBookingModal({
   clients: Client[];
   services: Service[];
   therapists: Therapist[];
+  rooms: number[];
   lockers: number[];
   timeSlots: string[];
   initialOccupancy: LockerOccupancyRow | null;
@@ -776,6 +779,7 @@ function EditBookingModal({
   const { sessionStaff } = useStaffSim();
   const [serviceId, setServiceId] = useState(booking.service_id);
   const [therapistId, setTherapistId] = useState(booking.therapist_id ?? "");
+  const [roomNumber, setRoomNumber] = useState<number | "">(booking.room_number ?? "");
   const [startTime, setStartTime] = useState(booking.start_time);
   const [lockerNumber, setLockerNumber] = useState<number | "">(
     initialOccupancy?.locker_number ?? ""
@@ -788,6 +792,33 @@ function EditBookingModal({
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [unavailableTherapists, setUnavailableTherapists] = useState<Map<string, string>>(new Map());
   const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
+  const [occupiedRooms, setOccupiedRooms] = useState<Set<number>>(new Set());
+  const [salePaidAmount, setSalePaidAmount] = useState<number | null>(null);
+
+  const currentService = useMemo(
+    () => services.find((s) => s.id === booking.service_id),
+    [services, booking.service_id]
+  );
+  const selectedService = useMemo(
+    () => services.find((s) => s.id === serviceId),
+    [services, serviceId]
+  );
+  const isMassageService = selectedService?.name !== "Wet Area";
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("sales")
+      .select("amount")
+      .eq("booking_id", booking.id)
+      .eq("voided", false)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setSalePaidAmount(data.amount);
+        }
+      });
+  }, [booking.id]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -809,6 +840,32 @@ function EditBookingModal({
         setOccupiedLockers(occSet);
       });
   }, [booking.id, initialOccupancy]);
+
+  useEffect(() => {
+    if (!isMassageService) {
+      setOccupiedRooms(new Set());
+      return;
+    }
+    const supabase = createClient();
+    const duration = selectedService?.duration_minutes ?? 60;
+    supabase
+      .from("bookings")
+      .select("id, room_number, start_time, duration_minutes")
+      .eq("booking_date", booking.booking_date)
+      .in("status", ["Booked", "Completed", "Needs Reassignment"])
+      .neq("id", booking.id)
+      .then(({ data }) => {
+        const occSet = new Set<number>();
+        for (const b of data ?? []) {
+          if (b.room_number != null) {
+            if (slotsOverlap(startTime, duration, b.start_time, b.duration_minutes ?? 60)) {
+              occSet.add(b.room_number);
+            }
+          }
+        }
+        setOccupiedRooms(occSet);
+      });
+  }, [booking.id, booking.booking_date, startTime, isMassageService, selectedService]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -838,7 +895,7 @@ function EditBookingModal({
   }, [booking.booking_date]);
 
   useEffect(() => {
-    if (!therapistId) {
+    if (!therapistId || !isMassageService) {
       setAvailabilityMap({});
       return;
     }
@@ -857,7 +914,6 @@ function EditBookingModal({
         .neq("id", booking.id);
 
       if (cancelled) return;
-      const selectedService = services.find((s) => s.id === serviceId);
       const duration = selectedService?.duration_minutes ?? 60;
       const map: Record<string, boolean> = {};
 
@@ -875,17 +931,45 @@ function EditBookingModal({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [booking.id, booking.booking_date, therapistId, serviceId, timeSlots, services]);
+  }, [booking.id, booking.booking_date, therapistId, serviceId, timeSlots, isMassageService, selectedService]);
+
+  function handleServiceChange(nextServiceId: string) {
+    setServiceId(nextServiceId);
+    const nextService = services.find((s) => s.id === nextServiceId);
+    const isNextMassage = nextService?.name !== "Wet Area";
+    if (!isNextMassage) {
+      setTherapistId("");
+      setRoomNumber("");
+    } else {
+      if (roomNumber === "") {
+        const freeRoom = rooms.find((r) => !occupiedRooms.has(r)) ?? rooms[0] ?? "";
+        setRoomNumber(freeRoom);
+      }
+    }
+  }
 
   async function handleConfirmSave() {
     if (!sessionStaff) return;
-    setSaving(true);
     setError(null);
+
+    if (isMassageService) {
+      if (!therapistId) {
+        setError("Please select a therapist for massage service.");
+        return;
+      }
+      if (roomNumber === "") {
+        setError("Please select an available room for massage service.");
+        return;
+      }
+    }
+
+    setSaving(true);
 
     const res = await editBooking({
       bookingId: booking.id,
       serviceId,
-      therapistId: therapistId || null,
+      therapistId: isMassageService && therapistId ? therapistId : null,
+      roomNumber: isMassageService && roomNumber !== "" ? Number(roomNumber) : null,
       startTime,
       lockerNumber: lockerNumber === "" ? null : Number(lockerNumber),
       staffId: sessionStaff.id,
@@ -923,6 +1007,45 @@ function EditBookingModal({
           </button>
         </div>
 
+        {/* Price Difference & Remittance Banner */}
+        {currentService && selectedService && (
+          <div className="rounded-lg border border-border bg-background/60 p-3 text-xs space-y-1">
+            <div className="flex justify-between text-muted">
+              <span>Original: {currentService.name} (₱{currentService.price.toLocaleString()})</span>
+              {salePaidAmount !== null && <span>Paid: ₱{salePaidAmount.toLocaleString()}</span>}
+            </div>
+            <div className="flex justify-between font-medium text-foreground">
+              <span>New: {selectedService.name} (₱{selectedService.price.toLocaleString()})</span>
+              {(() => {
+                const diff = selectedService.price - currentService.price;
+                return (
+                  <span
+                    className={
+                      diff > 0
+                        ? "text-accent-gold font-bold"
+                        : diff < 0
+                        ? "text-accent-green font-bold"
+                        : "text-muted"
+                    }
+                  >
+                    {diff > 0
+                      ? `+₱${diff.toLocaleString()} (Upgrade)`
+                      : diff < 0
+                      ? `-₱${Math.abs(diff).toLocaleString()} (Downgrade)`
+                      : "No Price Change"}
+                  </span>
+                );
+              })()}
+            </div>
+            {salePaidAmount !== null && selectedService.price !== currentService.price && (
+              <p className="text-[10.5px] text-muted border-t border-border/50 pt-1 mt-1">
+                Updated sales remittance total: ₱
+                {Math.max(0, salePaidAmount + (selectedService.price - currentService.price)).toLocaleString()}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Service */}
         <div className="space-y-1">
           <label className="text-xs font-semibold text-muted" htmlFor="edit-service">
@@ -931,7 +1054,7 @@ function EditBookingModal({
           <select
             id="edit-service"
             value={serviceId}
-            onChange={(e) => setServiceId(e.target.value)}
+            onChange={(e) => handleServiceChange(e.target.value)}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
           >
             {services.map((s) => (
@@ -942,38 +1065,71 @@ function EditBookingModal({
           </select>
         </div>
 
+        {/* Assign Room */}
+        {isMassageService ? (
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-muted" htmlFor="edit-room">
+              Assign Room
+            </label>
+            <select
+              id="edit-room"
+              value={roomNumber}
+              onChange={(e) => setRoomNumber(e.target.value === "" ? "" : Number(e.target.value))}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+            >
+              <option value="">— Select Room —</option>
+              {rooms.map((num) => {
+                const occupied = occupiedRooms.has(num);
+                const isCurrent = booking.room_number === num;
+                const disabled = occupied && !isCurrent;
+                return (
+                  <option key={num} value={num} disabled={disabled}>
+                    Room {num} {isCurrent ? " (Current)" : occupied ? " (Occupied)" : ""}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        ) : (
+          <div className="rounded-md border border-border/60 bg-background/30 p-2.5 text-xs text-muted">
+            Room & Therapist assignment not required for Wet Area.
+          </div>
+        )}
+
         {/* Therapist */}
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-muted" htmlFor="edit-therapist">
-            Therapist
-          </label>
-          <select
-            id="edit-therapist"
-            value={therapistId}
-            onChange={(e) => setTherapistId(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
-          >
-            <option value="">— Unassigned —</option>
-            {therapists.map((t) => {
-              const unavailableReason = unavailableTherapists.get(t.id);
-              const isAssigned = booking.therapist_id === t.id;
-              const disabled = !!unavailableReason && !isAssigned;
-              return (
-                <option
-                  key={t.id}
-                  value={t.id}
-                  disabled={disabled}
-                  className={disabled ? "text-stone-500" : undefined}
-                >
-                  {t.name}{unavailableReason ? ` - ${unavailableReason}` : ""}
-                </option>
-              );
-            })}
-          </select>
-          {availabilityLoading && (
-            <p className="text-[10px] text-muted">Checking availability…</p>
-          )}
-        </div>
+        {isMassageService && (
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-muted" htmlFor="edit-therapist">
+              Therapist
+            </label>
+            <select
+              id="edit-therapist"
+              value={therapistId}
+              onChange={(e) => setTherapistId(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+            >
+              <option value="">— Select Therapist —</option>
+              {therapists.map((t) => {
+                const unavailableReason = unavailableTherapists.get(t.id);
+                const isAssigned = booking.therapist_id === t.id;
+                const disabled = !!unavailableReason && !isAssigned;
+                return (
+                  <option
+                    key={t.id}
+                    value={t.id}
+                    disabled={disabled}
+                    className={disabled ? "text-stone-500" : undefined}
+                  >
+                    {t.name}{unavailableReason ? ` - ${unavailableReason}` : ""}
+                  </option>
+                );
+              })}
+            </select>
+            {availabilityLoading && (
+              <p className="text-[10px] text-muted">Checking availability…</p>
+            )}
+          </div>
+        )}
 
         {/* Massage Time / Schedule */}
         <div className="space-y-1.5">
@@ -983,7 +1139,7 @@ function EditBookingModal({
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-40 overflow-y-auto p-1 border border-border/50 rounded-lg">
               {timeSlots.map((s) => {
-                const available = therapistId ? (availabilityMap[s] ?? true) : true;
+                const available = therapistId && isMassageService ? (availabilityMap[s] ?? true) : true;
                 const selected = startTime === s;
                 return (
                   <button

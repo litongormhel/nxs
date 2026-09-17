@@ -423,6 +423,12 @@ Day-Off therapist (Leo) could be saved from New Booking.
 - **Database Migration (`20260917130000_drop_room_occupancy_unique_index.sql`)**: Dropped partial unique index `public.one_active_occupant_per_room` on `locker_occupancy(room_number) WHERE checked_out_at IS NULL`. Intact: `one_active_occupant_per_locker`.
 - **Server Actions (`app/(staff)/bookings/actions.ts`)**: Removed dead `one_active_occupant_per_room` unique violation error checks from `quickWalkin` and `logVisitBooking` (both update and insert paths). Decoupled physical 90-minute massage room session windows from all-day locker stays so consecutive clients in different time slots can occupy the same room on the same day without triggering false "That room is already occupied" errors.
 
+**Correction, `ohm#editbkgsvcroom` (2026-09-17)** — Dynamic Room/Therapist Handling & Sales Adjustment when switching between Wet Area and Massage in Edit Booking Modal.
+
+- **Dynamic Form Fields (`components/booking-browser.tsx`)**: Extended `EditBookingModal` to inspect selected service (`isMassageService = selectedService.name !== "Wet Area"`). Renders `Assign Room` dropdown when Massage is selected, computes same-day room availability at `startTime`, marks occupied rooms, and requires selecting both a **Room** and a **Therapist**. Automatically resets `room_number = null` and `therapist_id = null` when downgraded to Wet Area. Added **Price & Remittance Banner** showing original service price vs new service price, price difference (+₱X / -₱X), and updated sales remittance total. Passed `rooms={rooms}` from `BookingBrowser`.
+- **Backend Action & Sales Sync (`app/(staff)/bookings/actions.ts`)**: Updated `editBooking` server action to accept `roomNumber`. Enforces required Room and Therapist for massage services and clears them for Wet Area. Updates `bookings.room_number` and `locker_occupancy.room_number` simultaneously so Call Sheet immediately reflects room changes. Automatically adjusts active non-voided `sales.amount` by the price difference when service changes and updates `sales.service_id` and `sales.therapist_id`.
+
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - Therapist options are not filtered by `therapist_services` (which

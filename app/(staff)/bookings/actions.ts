@@ -382,6 +382,7 @@ export type EditBookingInput = {
   bookingId: string;
   serviceId: string;
   therapistId: string | null;
+  roomNumber: number | null;
   startTime: string;
   lockerNumber: number | null;
   staffId: string;
@@ -408,10 +409,32 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
     return { ok: false, error: "Cannot edit a Cancelled booking." };
   }
 
+  // Fetch service details to determine whether it's a Massage service or Wet Area only
+  const serviceIds = Array.from(new Set([booking.service_id, input.serviceId]));
+  const { data: servicesData } = await supabase
+    .from("services")
+    .select("id, name, price")
+    .in("id", serviceIds);
+
+  const oldService = servicesData?.find((s) => s.id === booking.service_id);
+  const newService = servicesData?.find((s) => s.id === input.serviceId);
+
+  const isMassageService = newService ? newService.name !== "Wet Area" : true;
+
+  const finalTherapistId = isMassageService ? input.therapistId : null;
+  const finalRoomNumber = isMassageService ? input.roomNumber : null;
+
+  if (isMassageService && (!finalTherapistId || finalRoomNumber == null)) {
+    return {
+      ok: false,
+      error: "Both Therapist and Room are required for massage services.",
+    };
+  }
+
   // Fetch existing occupancy for this booking
   const { data: occupancyRows } = await supabase
     .from("locker_occupancy")
-    .select("id, locker_number, checked_out_at")
+    .select("id, locker_number, checked_out_at, room_number")
     .eq("booking_id", input.bookingId)
     .order("checked_in_at", { ascending: false });
 
@@ -443,11 +466,12 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
   }
 
   const serviceChanged = booking.service_id !== input.serviceId;
-  const therapistChanged = booking.therapist_id !== input.therapistId;
+  const therapistChanged = (booking.therapist_id ?? null) !== finalTherapistId;
+  const roomChanged = (booking.room_number ?? null) !== finalRoomNumber;
   const timeChanged = booking.start_time !== input.startTime;
   const lockerChanged = (existingOcc?.locker_number ?? null) !== input.lockerNumber;
 
-  if (!serviceChanged && !therapistChanged && !timeChanged && !lockerChanged) {
+  if (!serviceChanged && !therapistChanged && !roomChanged && !timeChanged && !lockerChanged) {
     return { ok: false, error: "No changes were made." };
   }
 
@@ -456,7 +480,8 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
     .from("bookings")
     .update({
       service_id: input.serviceId,
-      therapist_id: input.therapistId,
+      therapist_id: finalTherapistId,
+      room_number: finalRoomNumber,
       start_time: input.startTime,
       ...(booking.status === "Needs Reassignment" ? { status: "Booked" } : {}),
     })
@@ -468,59 +493,95 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
       return { ok: false, field: "therapist", error: unavailable };
     }
     if (updateErr.code === EXCLUSION_VIOLATION) {
-      return {
-        ok: false,
-        field: "therapist",
-        error: "That therapist is already booked for the selected time.",
-      };
+      if (updateErr.message.includes("no_double_book_room")) {
+        return {
+          ok: false,
+          field: "room",
+          error: "That room is already booked for the selected time.",
+        };
+      }
+      if (updateErr.message.includes("no_double_book_therapist")) {
+        return {
+          ok: false,
+          field: "therapist",
+          error: "That therapist is already booked for the selected time.",
+        };
+      }
+      return { ok: false, error: "This booking conflicts with an existing one." };
     }
     return { ok: false, error: updateErr.message };
   }
 
-  // Update or insert locker_occupancy if lockerNumber is supplied
-  if (input.lockerNumber !== null) {
-    if (existingOcc) {
-      if (lockerChanged || serviceChanged) {
-        const { error: occErr } = await supabase
-          .from("locker_occupancy")
-          .update({
-            locker_number: input.lockerNumber,
-            service_id: input.serviceId,
-          })
-          .eq("id", existingOcc.id);
-
-        if (occErr) {
-          if (occErr.code === UNIQUE_VIOLATION) {
-            return {
-              ok: false,
-              field: "locker",
-              error: `Locker #${input.lockerNumber} is already occupied.`,
-            };
-          }
-          return { ok: false, error: occErr.message };
-        }
-      }
-    } else {
-      const { error: occErr } = await supabase.from("locker_occupancy").insert({
-        locker_number: input.lockerNumber,
-        client_id: booking.client_id,
-        guest_label: booking.guest_label,
-        room_number: booking.room_number,
+  // Update or insert locker_occupancy if existingOcc exists or lockerNumber is supplied
+  if (existingOcc) {
+    const { error: occErr } = await supabase
+      .from("locker_occupancy")
+      .update({
+        ...(input.lockerNumber !== null ? { locker_number: input.lockerNumber } : {}),
         service_id: input.serviceId,
-        checked_in_by: input.staffId,
-        booking_id: booking.id,
-      });
+        room_number: finalRoomNumber,
+      })
+      .eq("id", existingOcc.id);
 
-      if (occErr) {
-        if (occErr.code === UNIQUE_VIOLATION) {
-          return {
-            ok: false,
-            field: "locker",
-            error: `Locker #${input.lockerNumber} is already occupied.`,
-          };
-        }
-        return { ok: false, error: occErr.message };
+    if (occErr) {
+      if (occErr.code === UNIQUE_VIOLATION) {
+        return {
+          ok: false,
+          field: "locker",
+          error: `Locker #${input.lockerNumber} is already occupied.`,
+        };
       }
+      return { ok: false, error: occErr.message };
+    }
+  } else if (input.lockerNumber !== null) {
+    const { error: occErr } = await supabase.from("locker_occupancy").insert({
+      locker_number: input.lockerNumber,
+      client_id: booking.client_id,
+      guest_label: booking.guest_label,
+      room_number: finalRoomNumber,
+      service_id: input.serviceId,
+      checked_in_by: input.staffId,
+      booking_id: booking.id,
+    });
+
+    if (occErr) {
+      if (occErr.code === UNIQUE_VIOLATION) {
+        return {
+          ok: false,
+          field: "locker",
+          error: `Locker #${input.lockerNumber} is already occupied.`,
+        };
+      }
+      return { ok: false, error: occErr.message };
+    }
+  }
+
+  // Handle Sales adjustment if existing sales records exist for this booking
+  const { data: existingSales } = await supabase
+    .from("sales")
+    .select("id, amount, payment_method")
+    .eq("booking_id", input.bookingId)
+    .eq("voided", false);
+
+  if (existingSales && existingSales.length > 0) {
+    const priceDiff = (newService?.price ?? 0) - (oldService?.price ?? 0);
+    for (let i = 0; i < existingSales.length; i++) {
+      const sale = existingSales[i];
+      const updatedAmount =
+        serviceChanged && priceDiff !== 0 && i === 0
+          ? Math.max(0, sale.amount + priceDiff)
+          : sale.amount;
+
+      await supabase
+        .from("sales")
+        .update({
+          service_id: input.serviceId,
+          therapist_id: finalTherapistId,
+          amount: updatedAmount,
+          edited_by: input.staffId,
+          edited_at: new Date().toISOString(),
+        })
+        .eq("id", sale.id);
     }
   }
 
@@ -528,23 +589,27 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
   const logParts: string[] = [`booking_id=${input.bookingId} date=${booking.booking_date}`];
 
   if (serviceChanged) {
-    const { data: svcs } = await supabase
-      .from("services")
-      .select("id, name")
-      .in("id", [booking.service_id, input.serviceId]);
-    const oldSvc = svcs?.find((s) => s.id === booking.service_id)?.name ?? booking.service_id;
-    const newSvc = svcs?.find((s) => s.id === input.serviceId)?.name ?? input.serviceId;
+    const oldSvc = oldService?.name ?? booking.service_id;
+    const newSvc = newService?.name ?? input.serviceId;
     logParts.push(`old_service="${oldSvc}" new_service="${newSvc}"`);
+    if (oldService && newService && oldService.price !== newService.price) {
+      const diff = newService.price - oldService.price;
+      logParts.push(`price_diff=${diff >= 0 ? "+" : ""}${diff}`);
+    }
   }
 
   if (therapistChanged) {
-    const ids = [booking.therapist_id, input.therapistId].filter((id): id is string => !!id);
+    const ids = [booking.therapist_id, finalTherapistId].filter((id): id is string => !!id);
     const { data: tRows } = ids.length
       ? await supabase.from("therapists").select("id, name").in("id", ids)
       : { data: [] };
     const oldT = tRows?.find((t) => t.id === booking.therapist_id)?.name ?? "Unassigned";
-    const newT = tRows?.find((t) => t.id === input.therapistId)?.name ?? "Unassigned";
+    const newT = tRows?.find((t) => t.id === finalTherapistId)?.name ?? "Unassigned";
     logParts.push(`old_therapist="${oldT}" new_therapist="${newT}"`);
+  }
+
+  if (roomChanged) {
+    logParts.push(`old_room=${booking.room_number ?? "none"} new_room=${finalRoomNumber ?? "none"}`);
   }
 
   if (timeChanged) {
@@ -565,6 +630,7 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
   revalidatePath("/dashboard");
   revalidatePath("/call-sheet");
   revalidatePath("/lockers");
+  revalidatePath("/sales");
 
   return { ok: true };
 }

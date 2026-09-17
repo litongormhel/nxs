@@ -5,6 +5,22 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Dynamic Room/Therapist Handling & Sales Adjustment in Edit Booking Modal — complete**
+  (`ohm#editbkgsvcroom`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Dynamic Form Fields (`components/booking-browser.tsx`)**:
+    - Extended `EditBookingModal` to inspect selected service (`isMassageService = selectedService.name !== "Wet Area"`).
+    - Renders `Assign Room` dropdown when Massage is selected, computes same-day room availability at `startTime`, marks occupied rooms, and requires selecting both a **Room** and a **Therapist**.
+    - Automatically resets `room_number = null` and `therapist_id = null` when downgraded to Wet Area.
+    - Added **Price & Remittance Banner** showing original service price vs new service price, price difference (+₱X / -₱X), and updated sales remittance total.
+    - Passed `rooms={rooms}` from `BookingBrowser`.
+  - **Backend Action & Sales Sync (`app/(staff)/bookings/actions.ts`)**:
+    - Updated `editBooking` server action to accept `roomNumber`.
+    - Enforces required Room and Therapist for massage services and clears them for Wet Area.
+    - Updates `bookings.room_number` and `locker_occupancy.room_number` simultaneously so Call Sheet immediately reflects room changes.
+    - Automatically adjusts active non-voided `sales.amount` by the price difference when service changes and updates `sales.service_id` and `sales.therapist_id`.
+  - `npm run build` clean. See [[bookings_state]] and `.ai/briefing.md`.
+
 - **Add Pre-Confirmation Summary Dialog in Log Visit Modal — complete**
   (`ohm#logvstsummary`, 2026-09-17).
   - Implementation plan presented and approved before code execution.
