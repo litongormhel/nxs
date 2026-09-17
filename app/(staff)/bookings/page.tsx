@@ -19,8 +19,7 @@ export default async function BookingsPage() {
   ] = await Promise.all([
     supabase
       .from("clients")
-      .select("id, codename, username, member_code, archived_at, is_archived, status, is_active, archived")
-      .is("archived_at", null)
+      .select("id, codename, username, member_code")
       .order("codename", { ascending: true }),
     supabase
       .from("services")
