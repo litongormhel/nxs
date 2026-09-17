@@ -260,7 +260,7 @@ export function SalesBrowser({
               Daily Sales Remittance
             </h1>
             <span className="inline-flex items-center rounded-full border border-[#C97A3E]/40 bg-[#C97A3E]/10 px-2.5 py-0.5 text-[11px] font-medium text-[#C97A3E]">
-              Spa Operational Window (4:00 PM – 2:00 AM)
+              Spa Operational Window (8:00 AM – 2:00 AM)
             </span>
           </div>
           <p className="text-xs text-muted mt-1">

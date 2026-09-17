@@ -5,6 +5,17 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Fix Daily Sales Remittance Window to Include Daytime Check-Ins (8:00 AM – 2:00 AM) — complete**
+  (`ohm#slswndw8am`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Spa Day Bounds Update (`lib/analytics/spa-day.ts`)**:
+    - Shifted `getSpaDayBounds(spaDateStr)` start bound calculation from `08:00:00Z` (16:00:00+08 / 4:00 PM PHT) to `00:00:00Z` (08:00:00+08 / 8:00 AM PHT), aligning with the 8:00 AM Spa Day turnover rule (`ohm#spaday8am`).
+    - End bound remains `18:00:00Z` (02:00:00+08 next day / 2:00 AM PHT).
+  - **Header Badge Update (`components/sales-browser.tsx`)**:
+    - Updated badge label to `Spa Operational Window (8:00 AM – 2:00 AM)`.
+  - **Verification**:
+    - Verified all daytime check-in and walk-in sales created from 8:00 AM onwards up to 2:00 AM cutoff are included in the daily remittance query. `npm run build` clean. See [[sales_state]] and `.ai/briefing.md`.
+
 - **Display Therapist Availability Suffixes & Grayed-Out Disabled States in Quick Walk-In Modal Dropdown — complete**
   (`ohm#j4m8v2xq`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

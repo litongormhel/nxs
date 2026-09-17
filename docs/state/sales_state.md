@@ -50,8 +50,8 @@
 
 ## Implemented (app level) — Operations Phase (`ohm#9h4c7x2m`, 2026-08-28)
 
-- **Sales tab / Daily Sales Remittance** (`app/sales/page.tsx`, `components/sales-browser.tsx`, updated `ohm#slsremit`, 2026-09-17):
-  - **Spa Day Bounds & Filtering**: `app/(staff)/sales/page.tsx` reads `searchParams` for `date` (defaulting to `spaDayNow()`) and queries `sales` strictly bounded by `getSpaDayBounds(date)` (`16:00:00+08` on selected date to `02:00:00+08` next day). `getSpaDayBounds` converts to UTC (`08:00:00Z` to `18:00:00Z`), ensuring 1:00 AM transactions correctly belong to the preceding Spa Day remittance.
+- **Sales tab / Daily Sales Remittance** (`app/sales/page.tsx`, `components/sales-browser.tsx`, updated `ohm#slsremit` & `ohm#slswndw8am`, 2026-09-17):
+  - **Spa Day Bounds & Filtering**: `app/(staff)/sales/page.tsx` reads `searchParams` for `date` (defaulting to `spaDayNow()`) and queries `sales` strictly bounded by `getSpaDayBounds(date)` (`08:00:00+08` on selected date to `02:00:00+08` next day). `getSpaDayBounds` converts to UTC (`00:00:00Z` to `18:00:00Z`), ensuring all daytime check-ins / sales logged from 8:00 AM onwards and late-night transactions up to 2:00 AM belong to that Spa Day remittance.
   - **Shift Remittance Summary Bar**: 3 KPI summary cards replacing the lifetime total:
     - **Cash Remit**: Sum of `payment_method = 'Cash'` (non-voided).
     - **Online / E-Wallet**: Sum of non-Cash payments (`GCash`, `Card`, `Points`, non-voided).
