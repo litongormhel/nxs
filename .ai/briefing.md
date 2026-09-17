@@ -80,13 +80,24 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ## Last Completed Tasks
 
-1. **2026-09-17 — Exclude Self-Booking in Room Collision Check & Gray Out Occupied Lockers in Log Visit Modal**
+1. **2026-09-17 — Format Activity Logs Action and Detail into Clean Human-Readable Entries**
+   (`ohm#actloghuman`). Implementation plan presented and approved before code execution.
+   - **Clean Action Labels**: Mapped raw snake_case database function keys (`quick_walkin`, `edit_booking`, `therapist_mark_on_leave`, `therapist_unarchive`, `therapist_archive`, `therapist_toggle_day_off`, `locker_checkout`, etc.) to clean Title Case labels with fallback. Displayed in Action filter options and inside subtle gold badges (`inline-flex items-center rounded-md bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20`).
+   - **Refined Detail Templates**:
+     - `quick_walkin`: Stripped technical IDs (`sale_id=...`, `booking_id=...`). Output formatted `Walk-in: [Client Codename] — [Service], [₱Amount]`.
+     - Therapist Actions (`therapist_mark_on_leave`, `therapist_archive`, `therapist_unarchive`): Server-side lookup of therapist names via UUID batch collection in `app/(staff)/logs/page.tsx`. Formatted e.g., `Marked [Therapist Name] on leave from [Start] to [End]`, `Archived [Therapist Name]`, `Unarchived [Therapist Name]`.
+     - `edit_booking`: Formatted diffs into human phrasing e.g. `Updated booking: Locker 19 assigned (4:00 PM)`. Stripped raw `booking_id=uuid`.
+     - `locker_checkout`: Formatted to concise `Checked out Locker [Number]`. Stripped technical IDs.
+   - **Visual Hierarchy**: Primary detail text styled in crisp `text-foreground text-[12px]`.
+   - `npm run build` clean. See [[logs_state]] and `.ai/handoff.md`.
+
+2. **2026-09-17 — Exclude Self-Booking in Room Collision Check & Gray Out Occupied Lockers in Log Visit Modal**
    (`ohm#logvstconflict`). Implementation plan presented and approved before code execution.
    - **Fix Self-Collision in Room Validation (`app/(staff)/bookings/actions.ts`)**: Updated `logVisitBooking` server action to check for an existing active occupancy record (`checked_out_at IS NULL`) matching `input.bookingId` in `locker_occupancy`. If present, it updates the existing record instead of attempting a duplicate insert, avoiding false positive `one_active_occupant_per_room` collisions with itself.
    - **Locker Availability Dropdown (`components/log-visit-modal.tsx`)**: Updated `LogVisitModal` to query `locker_number, booking_id, client_id` from active `locker_occupancy`. Rendered occupied lockers as `Locker X - Unavailable` with `disabled={true}` and `text-stone-500` styling, while auto-selecting and enabling pre-assigned lockers for the active booking/client.
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-2. **2026-09-17 — Split Payment (Cash + GCash), Restrict Methods to Cash/GCash, and Remove Redundant Staff Input**
+3. **2026-09-17 — Split Payment (Cash + GCash), Restrict Methods to Cash/GCash, and Remove Redundant Staff Input**
    (`ohm#spltpaylog`). Implementation plan presented and approved before code execution.
    - **Restricted Payment Dropdown Options (`components/log-visit-modal.tsx`)**: Restricted payment method options strictly to `Cash`, `GCash`, and `Split (Cash + GCash)`, removing obsolete `Card` and `Points` options.
    - **Split Payment Controls & Smart Auto-Balance**: Added numerical inputs for **Cash Amount (₱)** and **GCash Amount (₱)** side-by-side when `Split (Cash + GCash)` is selected. Editing one field automatically balances the remainder into the other field against `computedAmount`.
@@ -94,25 +105,19 @@ Full invariant list: [[nxs-architecture-locks]].
    - **Removed Redundant Staff Field**: Removed visible "Logged by (staff)" field from modal UI while retaining staff attribution in server action via `useStaffSim()`.
    - **Split Payment Sales Recording (`app/(staff)/bookings/actions.ts`)**: Updated `logVisitBooking` (and `quickWalkin`) server action to insert **two distinct rows** in `public.sales` (`payment_method: 'Cash'` with `splitCashAmount` and `payment_method: 'GCash'` with `splitGcashAmount`) for split payment visits. Preserved schema while guaranteeing Daily Sales Remittance KPI cards (`Cash Remit` vs `Online / E-Wallet`) tally split payments accurately. `npm run build` clean. See [[sales_state]] and `.ai/handoff.md`.
 
-3. **2026-09-17 — Default Call Sheet to 'All' Tab, Add Time-based Status Badges, and Fix Missing Client Codename**
+4. **2026-09-17 — Default Call Sheet to 'All' Tab, Add Time-based Status Badges, and Fix Missing Client Codename**
    (`ohm#cllshtstat`). Implementation plan presented and approved before code execution.
    - Updated `app/(staff)/call-sheet/page.tsx` query and mapping to use `extractCodename()` helper, robustly extracting `client_codename` across direct `locker_occupancy.client_id` and linked `bookings.client_id`, with fallback to `guest_label`. Passed `duration_minutes` to browser.
    - Updated `components/call-sheet-browser.tsx` default active tab state to `"all"`.
    - Added `getSlotStatus(slotTime, durationMinutes, checkedInAt)` to compute Asia/Manila status (In Progress, Done, Upcoming).
    - Rendered `TIME` and `STATUS` columns exclusively on the `"All"` tab view. Specific time slot tabs retain the standard 5-column layout. Canvas JPEG download export remains clean. `npm run build` clean. See [[operations_state]] and `.ai/handoff.md`.
 
-4. **2026-09-17 — Add Client Codename Column to Call Sheet Table**
+5. **2026-09-17 — Add Client Codename Column to Call Sheet Table**
    (`ohm#cllshtclnt`). Implementation plan presented and approved before code execution.
    - Updated `app/(staff)/call-sheet/page.tsx` query to include `bookings(start_time, therapists(name), clients(codename))` in addition to `clients(codename)`, resolving `client_codename` via `o.clients?.codename ?? o.bookings?.clients?.codename ?? null`.
    - Updated `components/call-sheet-browser.tsx` subtitle to `CALL SHEET — LOCKER / ROOM / SERVICE / THERA / CLIENT`.
    - Added `CLIENT` header column (`<div>CLIENT</div>`) to the right of `THERA`, rendered `client_codename` styled with `font-semibold text-foreground` or fallback `—`.
    - Updated Canvas JPEG drawer `drawCallSheetJpeg` to render the `CLIENT` header and column values in downloaded images. `npm run build` clean. See [[operations_state]] and `.ai/handoff.md`.
-
-5. **2026-09-17 — Fix Daily Sales Remittance Window to Include Daytime Check-Ins (8:00 AM – 2:00 AM)**
-   (`ohm#slswndw8am`). Implementation plan presented and approved before code execution.
-   - Updated `getSpaDayBounds(spaDateStr)` in `lib/analytics/spa-day.ts` start bound from `08:00:00Z` (16:00:00+08 / 4:00 PM PHT) to `00:00:00Z` (08:00:00+08 / 8:00 AM PHT), matching the 8:00 AM Spa Day turnover rule (`ohm#spaday8am`).
-   - Updated badge in `components/sales-browser.tsx` to `Spa Operational Window (8:00 AM – 2:00 AM)`.
-   - Ensures daytime check-in and walk-in sales logged from 8:00 AM onwards up to the 2:00 AM closing cutoff are included in the remittance tally. `npm run build` clean. See [[sales_state]] and `.ai/handoff.md`.
 
 
 

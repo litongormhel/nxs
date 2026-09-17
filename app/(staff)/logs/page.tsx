@@ -39,13 +39,10 @@ export default async function LogsPage() {
   const collectIds = (predicate: (row: { action: string; fields: Record<string, string> }) => string | undefined) =>
     [...new Set(detailFields.map(predicate).filter((id): id is string => !!id))];
 
-  const therapistIds = collectIds((r) =>
-    r.action === "therapist_toggle_day_off" ||
-    r.action === "therapist_mark_absent" ||
-    r.action === "therapist_toggle_service"
-      ? r.fields.therapist
-      : undefined
-  );
+  const therapistIds = collectIds((r) => {
+    const v = r.fields.therapist;
+    return v && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v) ? v : undefined;
+  });
   const serviceIds = collectIds((r) =>
     r.action === "settings_update_service_points" ||
     r.action === "settings_delete_service" ||

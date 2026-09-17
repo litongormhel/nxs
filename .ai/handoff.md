@@ -5,6 +5,22 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Format Activity Logs Action and Detail into Clean Human-Readable Entries — complete**
+  (`ohm#actloghuman`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Clean Action Labels (`lib/logs/format-detail.ts`, `components/logs-browser.tsx`)**:
+    - Mapped raw snake_case database keys (`quick_walkin`, `edit_booking`, `therapist_mark_on_leave`, `therapist_unarchive`, `therapist_archive`, `therapist_toggle_day_off`, `locker_checkout`, etc.) to clean Title Case labels with fallback.
+    - Updated Action filter dropdown options to display clean labels.
+    - Styled Action column values as subtle gold badges (`inline-flex items-center rounded-md bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20`).
+  - **Refined Detail Templates (`lib/logs/format-detail.ts`)**:
+    - `quick_walkin`: Stripped technical IDs (`sale_id=...`, `booking_id=...`). Output formatted `Walk-in: [Client Codename] — [Service], [₱Amount]`.
+    - Therapist Actions (`therapist_mark_on_leave`, `therapist_archive`, `therapist_unarchive`): Batch-collected therapist UUIDs in `app/(staff)/logs/page.tsx` for server-side lookup of therapist names. Formatted e.g., `Marked [Therapist Name] on leave from [Start] to [End]`, `Archived [Therapist Name]`, `Unarchived [Therapist Name]`.
+    - `edit_booking`: Formatted technical diffs into human phrasing e.g. `Updated booking: Locker 19 assigned (4:00 PM)`. Stripped raw `booking_id=uuid`.
+    - `locker_checkout`: Formatted to concise `Checked out Locker [Number]`. Stripped technical IDs.
+  - **Visual Hierarchy (`components/logs-browser.tsx`)**:
+    - Styled primary detail text in crisp `text-foreground text-[12px]`.
+  - `npm run build` clean. See [[logs_state]] and `.ai/briefing.md`.
+
 - **Exclude Self-Booking in Room Collision Check & Gray Out Occupied Lockers in Log Visit Modal — complete**
   (`ohm#logvstconflict`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

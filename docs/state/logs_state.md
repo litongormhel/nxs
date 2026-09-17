@@ -48,30 +48,23 @@ on UPDATE/DELETE attempts, not a real permission.
   so the Action filter only ever shows actions that have really occurred.
   Filters operate on the raw `action`/`staff_name`/`created_at` fields,
   never on the formatted detail sentence below.
-- **Human-readable detail formatting** (`ohm#i35wdbgr`, 2026-09-02) —
+- **Human-readable detail formatting & clean action labels** (`ohm#i35wdbgr` 2026-09-02, updated in `ohm#actloghuman` 2026-09-17) —
   display-layer only, no writer/schema/RLS change. `detail` is still
   stored as raw `key=value` text by every writer; `lib/logs/format-detail.ts`
   (`formatLogDetail(action, detail, lookups)`) parses it and renders a
-  human sentence per `action`, with a small monospace secondary line for
-  any `sale_id`/`booking_id`/`occupancy_id` (kept for audit trace, not
-  removed). `parseDetail()` splits on **key boundaries**
-  (`/(?:^|\s)([a-z_]+)=/g`), not spaces — a value can legitimately contain
-  spaces (`service=Combi Massage`, `position=Front Desk`).
+  human sentence per `action`. Raw snake_case `action` strings are mapped
+  via `formatActionLabel(action)` to clean Title Case labels and rendered
+  inside subtle gold badges in `components/logs-browser.tsx`.
+  `parseDetail()` splits on **key boundaries** (`/(?:^|\s)([a-z_]+)=/g`), not spaces.
   `app/(staff)/logs/page.tsx` batch-fetches (once per page load, not
   per-row) only the id sets each present action type actually references,
   against `therapists`/`services`/`addons`/`clients`/`locker_occupancy`.
-  19 action types have real templates (the 17 confirmed live at prompt
-  time, plus `therapist_toggle_service`/`staff_archive` found live during
-  verification); any other `action` value falls back to rendering the raw
-  `detail` string unchanged, so a brand-new/rare action never crashes or
-  shows `undefined`. Two writer-shape nuances the templates account for:
-  `log_visit`'s two writers (`log_visit()` RPC vs. the direct-insert
-  branch in `logVisitBooking()`) put different fields in `detail`, and the
-  direct-insert one's `client=` value can be a client UUID **or** a raw
-  guest-label string — detected via UUID-pattern test before attempting
-  the `clients` join; `change_therapist`'s writer only logs fields that
-  actually changed, so the therapist-change and time-change clauses are
-  each independently optional in the rendered sentence.
+  `therapistIds` collection extracts therapist UUIDs for all therapist-related
+  actions (`therapist_mark_on_leave`, `therapist_archive`, `therapist_unarchive`, etc.)
+  to resolve therapist names via server-side lookup.
+  Formatters strip raw technical ID dumps (`sale_id=...`, `booking_id=...`, `occupancy_id=...`)
+  for user-facing entries (`quick_walkin`, `edit_booking`, `locker_checkout`, etc.),
+  presenting concise, crisp business details (`text-foreground text-[12px]`).
 - **Owner-only**: hidden from nav (`lib/nav.ts`'s `ownerOnly` flag,
   gated by `currentRole` from `lib/staff-context.tsx`) and the page
   itself renders a blocking message if visited directly by URL as a

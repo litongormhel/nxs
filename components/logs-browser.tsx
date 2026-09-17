@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useStaffSim } from "@/lib/staff-context";
-import { formatLogDetail, type Lookups } from "@/lib/logs/format-detail";
+import { formatLogDetail, formatActionLabel, type Lookups } from "@/lib/logs/format-detail";
 
 export type LogEntry = {
   id: string;
@@ -69,7 +69,7 @@ export function LogsBrowser({
           <option value="all">All Actions</option>
           {distinctActions.map((a) => (
             <option key={a} value={a}>
-              {a}
+              {formatActionLabel(a)}
             </option>
           ))}
         </select>
@@ -116,9 +116,13 @@ export function LogsBrowser({
               >
                 <div className="text-muted">{fmtWhen(l.created_at)}</div>
                 <div className="text-foreground">{l.staff_name}</div>
-                <div className="font-semibold text-accent-gold">{l.action}</div>
                 <div>
-                  <div className="text-muted">{sentence}</div>
+                  <span className="inline-flex items-center rounded-md bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20">
+                    {formatActionLabel(l.action)}
+                  </span>
+                </div>
+                <div>
+                  <div className="text-foreground text-[12px]">{sentence}</div>
                   {technicalIds.length > 0 && (
                     <div className="mt-0.5 font-mono text-[10px] text-muted/60">
                       {technicalIds.join(" ")}
