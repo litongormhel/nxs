@@ -6,12 +6,13 @@ This file tracks only what's in flight right now.
 ## In progress
 
 - **Universal Edit/Void/Restore with Mandatory Manager PIN on Daily Sales Remittance — complete**
-  (`ohm#salesvoidrestorepin`, 2026-09-17).
+  (`ohm#salesvoidrestorepin`, `ohm#fixmissingsales`, 2026-09-17).
   - Implementation plan presented and approved before code execution.
   - **Header Clean Up (`components/sales-browser.tsx`)**: Removed `(Spa Operational Window 8:00 AM – 2:00 AM)` pill/badge from title header.
   - **Universal Row Actions (`components/sales-browser.tsx`)**: Removed `is_walkin` action blocking (`No action — walk-in, no account`). All sales rows (members & walk-ins) feature `[Edit]` and `[Void]` buttons when active, and `[Restore]` button when voided.
   - **Mandatory Manager PIN Modal (`components/sales-browser.tsx`)**: Triggers a Security PIN Confirmation Modal before executing `Void` or `Restore`, prompting for 4 to 6 digit Manager/Owner PIN and required reason string.
   - **Backend Actions & RPC (`app/(staff)/sales/actions.ts` & `20260917170000_sales_void_restore_pin.sql`)**: Implemented `voidSale` and `restoreSale` server actions backed by SECURITY DEFINER RPCs (`void_sale_with_pin`, `restore_sale_with_pin`) validating PIN against `app_settings.void_auth_code_hash`, auditing into `action_logs`, and updating sales void status & `void_reason`.
+  - **Query Resilience & Fallback (`app/(staff)/sales/page.tsx`)**: Added `salesResFirstTry.error` logging and automated fallback query without `void_reason` when column is unapplied on DB, guaranteeing sales records are never hidden.
   - `npm run build` clean. See [[sales_state]] and `.ai/briefing.md`.
   (`ohm#quickwalkinpaymethods`, 2026-09-17).
   - **Dropdown Options Restricted (`components/quick-walkin-modal.tsx`)**: Removed `Card` and `Maya` options from Quick Walk-In payment method `<select>` dropdown, strictly restricting choices to `Cash`, `GCash`, and `Split (Cash + GCash)`. Updated reference number input label span to `(optional — GCash)`.

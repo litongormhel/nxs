@@ -13,7 +13,12 @@ export default async function SalesPage({
 
   const supabase = await createClient();
 
-  const [{ data: sales }, { data: therapists }, { data: staff }, { data: authorizers }] = await Promise.all([
+  const [
+    salesResFirstTry,
+    { data: therapists },
+    { data: staff },
+    { data: authorizers },
+  ] = await Promise.all([
     supabase
       .from("sales")
       .select(
@@ -30,6 +35,23 @@ export default async function SalesPage({
       .in("position", ["Supervisor", "Owner"])
       .order("name", { ascending: true }),
   ]);
+
+  let sales = salesResFirstTry.data;
+  if (salesResFirstTry.error) {
+    console.error("Sales query error (attempting fallback without void_reason):", salesResFirstTry.error);
+    const fallbackRes = await supabase
+      .from("sales")
+      .select(
+        "id, client_id, guest_label, amount, payment_method, payment_ref, therapist_id, voided, voided_at, voided_by, edited_by, edited_at, created_at, clients(codename), services(name), therapists(name), promos(label)"
+      )
+      .gte("created_at", bounds.startIso)
+      .lte("created_at", bounds.endIso)
+      .order("created_at", { ascending: false });
+    if (fallbackRes.error) {
+      console.error("Sales fallback query error:", fallbackRes.error);
+    }
+    sales = (fallbackRes.data ?? []).map((s) => ({ ...s, void_reason: null }));
+  }
 
   const staffNameById = new Map((staff ?? []).map((s) => [s.id, s.name]));
 

@@ -81,11 +81,12 @@ Full invariant list: [[nxs-architecture-locks]].
 ### Last Completed Tasks
 
 1. **2026-09-17 — Universal Edit/Void/Restore with Mandatory Manager PIN on Daily Sales Remittance**
-   (`ohm#salesvoidrestorepin`). Implementation plan presented and approved before code execution.
+   (`ohm#salesvoidrestorepin`, `ohm#fixmissingsales`). Implementation plan presented and approved before code execution.
    - **Header Clean Up (`components/sales-browser.tsx`)**: Removed `(Spa Operational Window 8:00 AM – 2:00 AM)` pill/badge from title header.
    - **Universal Row Actions (`components/sales-browser.tsx`)**: Removed `is_walkin` action blocking (`No action — walk-in, no account`). All sales rows (members & walk-ins) feature `[Edit]` and `[Void]` buttons when active, and `[Restore]` button when voided.
    - **Mandatory Manager PIN Modal (`components/sales-browser.tsx`)**: Triggers a Security PIN Confirmation Modal before executing `Void` or `Restore`, prompting for 4 to 6 digit Manager/Owner PIN and required reason string.
    - **Backend Actions & RPC (`app/(staff)/sales/actions.ts` & `20260917170000_sales_void_restore_pin.sql`)**: Implemented `voidSale` and `restoreSale` server actions backed by SECURITY DEFINER RPCs (`void_sale_with_pin`, `restore_sale_with_pin`) validating PIN against `app_settings.void_auth_code_hash`, auditing into `action_logs`, and updating sales void status & `void_reason`.
+   - **Query Resilience & Fallback (`app/(staff)/sales/page.tsx`)**: Added `salesResFirstTry.error` logging and automated fallback query without `void_reason`, ensuring sales records are never hidden even if DB migrations are unapplied.
    - `npm run build` clean. See [[sales_state]] and `.ai/handoff.md`.
 
 2. **2026-09-17 — Restrict Payment Method dropdown options & remove Logged by Staff in Quick Walk-In**
