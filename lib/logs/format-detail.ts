@@ -126,14 +126,36 @@ export function formatActionLabel(action: string): string {
     .join(" ");
 }
 
+function formatFallbackDetail(detail: string | null): string {
+  if (!detail) return "No details.";
+  const fields = parseDetail(detail);
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(fields)) {
+    if (
+      key.endsWith("_id") ||
+      key === "id" ||
+      key === "therapist" ||
+      key === "client" ||
+      key === "service" ||
+      key === "addon" ||
+      key === "occupancy" ||
+      isUuid(value)
+    ) {
+      continue;
+    }
+    const cleanKey = key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    parts.push(`${cleanKey}: ${value}`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : "Completed.";
+}
+
 type Formatter = (fields: Record<string, string>, lookups: Lookups) => FormattedDetail;
 
 const FORMATTERS: Record<string, Formatter> = {
   locker_checkout: (f, lookups) => {
     const occupancyId = f.occupancy_id ?? "";
     const lockerNumber = lookups.lockerNumberByOccupancyId.get(occupancyId);
-    const lockerText =
-      lockerNumber !== undefined ? `Locker ${lockerNumber}` : "Locker";
+    const lockerText = lockerNumber !== undefined ? `Locker ${lockerNumber}` : "Locker";
     return { sentence: `Checked out ${lockerText}.`, technicalIds: [] };
   },
 
@@ -166,8 +188,9 @@ const FORMATTERS: Record<string, Formatter> = {
 
   therapist_archive: (f, lookups) => {
     const name = therapistName(f.therapist ?? "", lookups, f.name);
+    const reasonNote = f.reason ? ` (${f.reason})` : "";
     return {
-      sentence: `Archived ${name}.`,
+      sentence: `Archived ${name}${reasonNote}.`,
       technicalIds: [],
     };
   },
@@ -176,6 +199,23 @@ const FORMATTERS: Record<string, Formatter> = {
     const name = therapistName(f.therapist ?? "", lookups, f.name);
     return {
       sentence: `Unarchived ${name}.`,
+      technicalIds: [],
+    };
+  },
+
+  therapist_create: (f, lookups) => {
+    const name = f.name ?? therapistName(f.therapist ?? "", lookups);
+    return {
+      sentence: `Created therapist ${name}.`,
+      technicalIds: [],
+    };
+  },
+
+  therapist_rename: (f, lookups) => {
+    const oldOrId = therapistName(f.therapist ?? "", lookups);
+    const newName = f.name ?? oldOrId;
+    return {
+      sentence: `Renamed therapist to ${newName}.`,
       technicalIds: [],
     };
   },
@@ -190,7 +230,12 @@ const FORMATTERS: Record<string, Formatter> = {
 
   sale_edit: (f) => ({
     sentence: `Updated sale to ${fmtPeso(f.amount ?? "0")} (${f.payment ?? "?"}).`,
-    technicalIds: f.sale_id ? [`sale_id=${f.sale_id}`] : [],
+    technicalIds: [],
+  }),
+
+  sale_void: () => ({
+    sentence: "Voided sale.",
+    technicalIds: [],
   }),
 
   change_therapist: (f) => {
@@ -204,6 +249,15 @@ const FORMATTERS: Record<string, Formatter> = {
     const body = parts.length ? parts.join("; ") : "updated";
     return {
       sentence: `Updated booking: ${body}.`,
+      technicalIds: [],
+    };
+  },
+
+  cancel_reassignment_booking: (f) => {
+    const dateStr = f.date ? ` on ${f.date}` : "";
+    const reasonStr = f.reason ? ` (${f.reason})` : "";
+    return {
+      sentence: `Cancelled reassignment for booking${dateStr}${reasonStr}.`,
       technicalIds: [],
     };
   },
@@ -248,6 +302,31 @@ const FORMATTERS: Record<string, Formatter> = {
     technicalIds: [],
   }),
 
+  staff_edit: (f) => ({
+    sentence: `Updated staff member ${f.name ?? "?"}.`,
+    technicalIds: [],
+  }),
+
+  staff_archive: (f) => ({
+    sentence: `Archived staff member ${f.name ?? "?"}${f.reason ? ` (${f.reason})` : ""}.`,
+    technicalIds: [],
+  }),
+
+  staff_restore: (f) => ({
+    sentence: `Restored staff member ${f.name ?? "?"}.`,
+    technicalIds: [],
+  }),
+
+  staff_reset_password: (f) => ({
+    sentence: `Reset password for staff member ${f.name ?? "?"}.`,
+    technicalIds: [],
+  }),
+
+  settings_add_service: (f) => ({
+    sentence: `Added service ${f.name ?? "?"} at ${fmtPeso(f.price ?? "0")}.`,
+    technicalIds: [],
+  }),
+
   settings_update_room_count: (f) => {
     if (f.added) {
       const numbers = f.added.split(",").filter(Boolean);
@@ -265,6 +344,11 @@ const FORMATTERS: Record<string, Formatter> = {
 
   settings_add_weekend_slot: (f) => ({
     sentence: `Added weekend slot at ${fmtTime(f.slot ?? "?")}.`,
+    technicalIds: [],
+  }),
+
+  settings_delete_weekend_slot: (f) => ({
+    sentence: `Deleted weekend slot at ${fmtTime(f.slot ?? "?")}.`,
     technicalIds: [],
   }),
 
@@ -291,6 +375,21 @@ const FORMATTERS: Record<string, Formatter> = {
     technicalIds: [],
   }),
 
+  settings_add_promo: (f) => ({
+    sentence: `Added promo ${f.code ?? "?"}${f.discount ? ` (${f.discount}% off)` : ""}.`,
+    technicalIds: [],
+  }),
+
+  settings_update_promo_discount: (f) => ({
+    sentence: `Updated promo discount for ${f.code ?? f.promo ?? "?"}.`,
+    technicalIds: [],
+  }),
+
+  settings_delete_promo: (f) => ({
+    sentence: `Deleted promo ${f.code ?? f.promo ?? "?"}.`,
+    technicalIds: [],
+  }),
+
   log_visit: (f, lookups) => {
     const who = clientLabel(f.client ?? "", lookups);
     const isRedemption = f.redemption === "t" || f.redemption === "true";
@@ -304,6 +403,11 @@ const FORMATTERS: Record<string, Formatter> = {
 
   settings_add_addon: (f) => ({
     sentence: `Added add-on ${f.name ?? "?"} at ${fmtPeso(f.price ?? "0")}.`,
+    technicalIds: [],
+  }),
+
+  settings_update_addon_price: (f, lookups) => ({
+    sentence: `Set ${addonName(f.addon ?? "", lookups)} price to ${fmtPeso(f.price ?? "0")}.`,
     technicalIds: [],
   }),
 
@@ -321,11 +425,6 @@ const FORMATTERS: Record<string, Formatter> = {
       technicalIds: [],
     };
   },
-
-  staff_archive: (f) => ({
-    sentence: `Archived staff member ${f.name ?? "?"}.`,
-    technicalIds: [],
-  }),
 
   settings_update_loyalty_formula: (f) => ({
     sentence: `Set loyalty formula to ${f.mode ?? "?"}${
@@ -350,8 +449,9 @@ const FORMATTERS: Record<string, Formatter> = {
 export function formatLogDetail(action: string, detail: string | null, lookups: Lookups): FormattedDetail {
   const formatter = FORMATTERS[action];
   if (!formatter) {
-    return { sentence: detail ?? "", technicalIds: [] };
+    return { sentence: formatFallbackDetail(detail), technicalIds: [] };
   }
   const fields = parseDetail(detail);
   return formatter(fields, lookups);
 }
+

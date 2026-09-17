@@ -82,12 +82,16 @@ Full invariant list: [[nxs-architecture-locks]].
 
 1. **2026-09-17 — Format Activity Logs Action and Detail into Clean Human-Readable Entries**
    (`ohm#actloghuman`). Implementation plan presented and approved before code execution.
-   - **Clean Action Labels**: Mapped raw snake_case database function keys (`quick_walkin`, `edit_booking`, `therapist_mark_on_leave`, `therapist_unarchive`, `therapist_archive`, `therapist_toggle_day_off`, `locker_checkout`, etc.) to clean Title Case labels with fallback. Displayed in Action filter options and inside subtle gold badges (`inline-flex items-center rounded-md bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20`).
-   - **Refined Detail Templates**:
+   - **Clean Action Labels**: Mapped raw snake_case database function keys (`quick_walkin`, `edit_booking`, `therapist_mark_on_leave`, `therapist_unarchive`, `therapist_archive`, `therapist_toggle_day_off`, `locker_checkout`, `cancel_reassignment_booking`, `therapist_create`, `sale_edit`, `sale_void`, etc.) to clean Title Case labels with fallback. Displayed in Action filter options and inside subtle gold badges (`inline-flex items-center rounded-md bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20`).
+   - **Refined Detail Templates & Zero Technical ID Dumps**:
+     - `cancel_reassignment_booking`: Formatted `Cancelled reassignment for booking on [Date] ([Reason]).`
+     - `therapist_create`: Formatted `Created therapist [Therapist Name].`
+     - `sale_edit` & `sale_void`: Formatted `Updated sale to ₱[Amount] ([Payment Method]).` and `Voided sale.`, eliminating secondary `sale_id=uuid` lines.
      - `quick_walkin`: Stripped technical IDs (`sale_id=...`, `booking_id=...`). Output formatted `Walk-in: [Client Codename] — [Service], [₱Amount]`.
      - Therapist Actions (`therapist_mark_on_leave`, `therapist_archive`, `therapist_unarchive`): Server-side lookup of therapist names via UUID batch collection in `app/(staff)/logs/page.tsx`. Formatted e.g., `Marked [Therapist Name] on leave from [Start] to [End]`, `Archived [Therapist Name]`, `Unarchived [Therapist Name]`.
      - `edit_booking`: Formatted diffs into human phrasing e.g. `Updated booking: Locker 19 assigned (4:00 PM)`. Stripped raw `booking_id=uuid`.
      - `locker_checkout`: Formatted to concise `Checked out Locker [Number]`. Stripped technical IDs.
+     - **Fallback Sanitizer (`formatFallbackDetail`)**: For unmapped actions, filters out raw UUIDs/IDs and formats remaining key-value fields cleanly (e.g. `Date: 2026-08-30 · Reason: ...`).
    - **Default Date Filter to Current Date (`components/logs-browser.tsx`)**: Defaulted `dateFilter` state to `spaDayNow()`, filtering logs against `toSpaDay(created_at)`. Added interactive "All Dates" / "Today" toggle buttons enabling easy clearing or switching back to current date.
    - **Visual Hierarchy**: Primary detail text styled in crisp `text-foreground text-[12px]`.
    - `npm run build` clean. See [[logs_state]] and `.ai/handoff.md`.
