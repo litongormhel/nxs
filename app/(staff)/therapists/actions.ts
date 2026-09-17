@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { spaDayNow } from "@/lib/analytics/spa-day";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 type CreateTherapistResult = { ok: true; id: string } | { ok: false; error: string };
@@ -141,11 +142,14 @@ export async function archiveTherapist(
     .eq("id", therapistId);
   if (archiveError) return fail(archiveError);
 
+  const currentSpaDate = spaDayNow();
+
   const { data: flagged, error: flagError } = await supabase
     .from("bookings")
     .update({ status: "Needs Reassignment" })
     .eq("therapist_id", therapistId)
     .eq("status", "Booked")
+    .gte("booking_date", currentSpaDate)
     .select("id");
   if (flagError) return fail(flagError);
 
@@ -220,7 +224,7 @@ export async function toggleDayOff(
 
   let flaggedCount = 0;
   if (turningOff) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = spaDayNow();
     const { data: candidates, error: candError } = await supabase
       .from("bookings")
       .select("id, booking_date")

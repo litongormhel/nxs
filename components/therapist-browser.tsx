@@ -13,6 +13,7 @@ import {
   updateTherapistName as updateTherapistNameAction,
   toggleTherapistService as toggleTherapistServiceAction,
 } from "@/app/(staff)/therapists/actions";
+import { spaDayNow } from "@/lib/analytics/spa-day";
 
 const DEFAULT_THERAPISTS = [
   "Ron",
@@ -576,10 +577,11 @@ export function TherapistBrowser({
         },
       };
     });
+    const currentSpaDate = spaDayNow();
     let flaggedCount = 0;
     setBookings((prev) =>
       prev.map((b) => {
-        if (b.therapist === t && b.status === "Booked") {
+        if (b.therapist === t && b.status === "Booked" && b.date >= currentSpaDate) {
           flaggedCount++;
           return { ...b, status: "Needs Reassignment" };
         }

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { ReassignmentPanel, FlaggedBooking } from "@/components/reassignment-panel";
+import { spaDayNow } from "@/lib/analytics/spa-day";
 
 async function getCount(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -19,6 +20,7 @@ async function getCount(
 
 export default async function DashboardPage() {
   const supabase = await createClient();
+  const currentSpaDate = spaDayNow();
 
   const [
     availableTherapists,
@@ -38,6 +40,7 @@ export default async function DashboardPage() {
         "id, booking_date, start_time, room_number, therapist_id, therapists(name), services(name), clients(codename), guest_label"
       )
       .eq("status", "Needs Reassignment")
+      .gte("booking_date", currentSpaDate)
       .order("booking_date", { ascending: true })
       .order("start_time", { ascending: true }),
     supabase

@@ -5,6 +5,15 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Fix Archiving Therapist "Needs Reassignment" on Historical Bookings — complete**
+  (`ohm#arcreassgn`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Archive Therapist Action Date Guard**: Updated `archiveTherapist` server action in `app/(staff)/therapists/actions.ts` to include `.gte("booking_date", spaDayNow())`, preventing past historical `Booked` bookings from being set to `Needs Reassignment`. Updated `toggleDayOff` to use `spaDayNow()`.
+  - **Therapist Browser Local State**: Guarded optimistic state update in `components/therapist-browser.tsx` (`handleConfirmArchive`) with `b.date >= currentSpaDate`.
+  - **Dashboard Query Fix**: Updated `app/(staff)/dashboard/page.tsx` query fetching `Needs Reassignment` to include `.gte("booking_date", currentSpaDate)`, preventing stale historical rows from surfacing.
+  - **DB Cleanup Migration**: Created migration `supabase/migrations/20260917110000_cleanup_stale_needs_reassignment.sql` executing `auto_cancel_lapsed_bookings()` to resolve historical stale `Needs Reassignment` rows.
+  - `npm run build` clean.
+
 - **Fix Check-in Time & Locker missing data + Add leftmost Edit Booking action & modal — complete**
   (`ohm#bkgchkedt`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

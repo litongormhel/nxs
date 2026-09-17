@@ -80,19 +80,27 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ## Last Completed Tasks
 
-1. **2026-09-17 — Fix Check-in Time & Locker missing data + Add leftmost Edit Booking action & modal**
+1. **2026-09-17 — Fix Archiving Therapist "Needs Reassignment" on Historical Bookings**
+   (`ohm#arcreassgn`). Implementation plan presented and approved before code execution.
+   - Fixed `archiveTherapist` server action in `app/(staff)/therapists/actions.ts` by adding strict date guard `.gte("booking_date", spaDayNow())` so historical past bookings remain untouched.
+   - Updated `toggleDayOff` server action to use `spaDayNow()` for consistent spa-day boundary calculation.
+   - Fixed Dashboard query in `app/(staff)/dashboard/page.tsx` with `.gte("booking_date", spaDayNow())` so only current and future spa-day bookings surface on "NEEDS REASSIGNMENT".
+   - Guarded local state update in `components/therapist-browser.tsx` (`handleConfirmArchive`) with `b.date >= currentSpaDate`.
+   - Created DB cleanup migration `supabase/migrations/20260917110000_cleanup_stale_needs_reassignment.sql` executing `auto_cancel_lapsed_bookings()`. `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
+
+2. **2026-09-17 — Fix Check-in Time & Locker missing data + Add leftmost Edit Booking action & modal**
    (`ohm#bkgchkedt`). Implementation plan presented and approved before code execution.
    - Fixed blank Check-in Time and Locker # rendering on CHECK-IN and CHECK-OUT tabs by querying `locker_occupancy` with fallback resolution for unlinked `booking_id` records in `components/booking-browser.tsx`.
    - Added leftmost "Edit" button column in the Bookings table and introduced `EditBookingModal` allowing receptionists to update Service, Therapist, Massage Time / Schedule, and Locker #.
    - Added `editBooking` server action in `app/(staff)/bookings/actions.ts` with therapist double-booking GiST validation, therapist availability checks, locker occupancy conflict checks, and `action_logs` audit entry creation.
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-2. **2026-09-17 — Auto-cancel lapsed unvisited bookings past 2:00 AM cutoff**
+3. **2026-09-17 — Auto-cancel lapsed unvisited bookings past 2:00 AM cutoff**
    (`ohm#c4nc3lbk`). Implementation plan presented and approved before code execution.
    Added DB function `public.auto_cancel_lapsed_bookings()` (`20260917100000_auto_cancel_lapsed_bookings.sql`) that auto-cancels unvisited bookings (`Booked` / `Needs Reassignment`) for elapsed spa dates past 2:00 AM Asia/Manila cutoff, recording audit entries in `action_logs`.
    Created Vercel Cron route `/api/cron/auto-cancel-bookings` (`app/api/cron/auto-cancel-bookings/route.ts`) registered in `vercel.json` (`0 18 * * *`). Added log detail formatter in `lib/logs/format-detail.ts`. `npm run build` clean. See [[bookings_state]], [[logs_state]], and `.ai/handoff.md`.
 
-3. **2026-09-16 — Log Visit: Link walk-in to client account (manual search + QR scan) & hide misleading points for unlinked guests**
+4. **2026-09-16 — Log Visit: Link walk-in to client account (manual search + QR scan) & hide misleading points for unlinked guests**
    (`ohm#3k7yqxpz`). Implementation plan & regression risk assessment presented and approved before code execution.
    Confined strictly to `components/log-visit-modal.tsx`, reusing `ScanMemberQrModal` and `resolveMemberQr` action as-is.
    - Fix A: Added Points input renders disabled `"N/A — no account linked"` text when `!clientId`.
@@ -100,7 +108,7 @@ Full invariant list: [[nxs-architecture-locks]].
    - Unlink: Added "Unlink account (back to walk-in)" text button when `isGuestOrigin && clientId !== null`.
    - `npx tsc --noEmit` and `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-16 — Fix Walk-in Client Mis-link Bug & Reorder Log Visit Modal Fields**
+5. **2026-09-16 — Fix Walk-in Client Mis-link Bug & Reorder Log Visit Modal Fields**
    (`ohm#7f3k2m9p`). Implementation plan & regression risk assessment presented and
    approved before code execution. Fixed client state initialization in `LogVisitModal`
    (`components/log-visit-modal.tsx`) where walk-in guest bookings (`client_id: null`)
@@ -108,13 +116,5 @@ Full invariant list: [[nxs-architecture-locks]].
    Service → Upgrade Box → Manual Discount → Promo Code → Add-ons → Points/Amount Paid →
    Payment Method (standalone full-width) → GCash Ref → Staff. `npx tsc --noEmit` clean.
    See [[bookings_state]] and `.ai/handoff.md`.
-
-5. **2026-09-16 — Add Supabase keep-alive cron to prevent free-tier pause**
-   (`ohm#rzx46p4g`). Implementation plan & regression risk assessment presented
-   and approved before code execution. Created `app/api/keep-alive/route.ts`
-   GET endpoint executing a head select query against `addons` using
-   `createClient()` from `@/lib/supabase/server`. Added a daily Vercel cron
-   entry (`0 0 * * *`) hitting `/api/keep-alive` in `vercel.json`. `npx tsc --noEmit`
-   clean. See [[settings_state]] and `.ai/handoff.md`.
 
 
