@@ -8,9 +8,61 @@ type Entry = {
   room_number: number | null;
   service_name: string;
   slot_time: string | null;
+  duration_minutes: number | null;
   therapist_name: string | null;
   client_codename: string | null;
+  checked_in_at: string;
 };
+
+type SlotStatus = "ongoing" | "done" | "upcoming";
+
+function getSlotStatus(
+  slotTime: string | null,
+  durationMinutes: number = 90,
+  checkedInAt?: string
+): SlotStatus {
+  const now = new Date();
+  const manilaTimeString = now.toLocaleTimeString("en-US", {
+    timeZone: "Asia/Manila",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const [nowH, nowM] = manilaTimeString.split(":").map(Number);
+  const nowMinsRaw = (nowH % 24) * 60 + nowM;
+  const nowMins = nowMinsRaw < 16 * 60 ? nowMinsRaw + 24 * 60 : nowMinsRaw;
+
+  let startMins: number;
+
+  if (slotTime) {
+    const [h, m] = slotTime.split(":").map(Number);
+    const rawMins = h * 60 + m;
+    startMins = rawMins < 16 * 60 ? rawMins + 24 * 60 : rawMins;
+  } else if (checkedInAt) {
+    const checkInDate = new Date(checkedInAt);
+    const checkInTimeString = checkInDate.toLocaleTimeString("en-US", {
+      timeZone: "Asia/Manila",
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const [h, m] = checkInTimeString.split(":").map(Number);
+    const rawMins = (h % 24) * 60 + m;
+    startMins = rawMins < 16 * 60 ? rawMins + 24 * 60 : rawMins;
+  } else {
+    return "ongoing";
+  }
+
+  const endMins = startMins + durationMinutes;
+
+  if (nowMins < startMins) {
+    return "upcoming";
+  }
+  if (nowMins >= endMins) {
+    return "done";
+  }
+  return "ongoing";
+}
 
 type NeedsCheckoutEntry = {
   id: string;
@@ -136,21 +188,6 @@ function drawCallSheetJpeg(rows: Entry[], label: string): string {
   return canvas.toDataURL("image/jpeg", 0.92);
 }
 
-function toMinutesSinceOpen(time: string): number {
-  const [h, m] = time.split(":").map(Number);
-  const minutes = h * 60 + m;
-  return minutes < 16 * 60 ? minutes + 24 * 60 : minutes;
-}
-
-function nearestUpcomingSlot(slots: string[]): string {
-  const now = new Date();
-  const nowMinutes = toMinutesSinceOpen(
-    `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`
-  );
-  const upcoming = slots.find((s) => toMinutesSinceOpen(s) >= nowMinutes);
-  return upcoming ?? slots[0];
-}
-
 export function CallSheetBrowser({
   inProgress,
   needsCheckout,
@@ -160,7 +197,7 @@ export function CallSheetBrowser({
   needsCheckout: NeedsCheckoutEntry[];
   availableSlots: string[];
 }) {
-  const [timeFilter, setTimeFilter] = useState<string>(() => nearestUpcomingSlot(availableSlots));
+  const [timeFilter, setTimeFilter] = useState<string>("all");
   const downloadRef = useRef<HTMLAnchorElement>(null);
 
   const filtered = useMemo(
@@ -177,6 +214,8 @@ export function CallSheetBrowser({
     link.download = `call-sheet-${timeFilter === "all" ? "all" : timeFilter.replace(":", "")}.jpg`;
     link.click();
   };
+
+  const isAllTab = timeFilter === "all";
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -218,30 +257,71 @@ export function CallSheetBrowser({
       <div className="rounded-xl border border-border bg-surface overflow-hidden">
         <div
           className="grid gap-4 border-b border-border px-6 py-4 text-sm font-bold tracking-wider uppercase text-muted"
-          style={{ gridTemplateColumns: "1fr 1fr 1.6fr 1fr 1.2fr" }}
+          style={{
+            gridTemplateColumns: isAllTab
+              ? "0.8fr 0.8fr 1.5fr 1fr 1.2fr 1fr 1.1fr"
+              : "1fr 1fr 1.6fr 1fr 1.2fr",
+          }}
         >
           <div>Locker</div>
           <div>Room</div>
           <div>Service</div>
           <div>Thera</div>
           <div>Client</div>
+          {isAllTab && <div>Time</div>}
+          {isAllTab && <div>Status</div>}
         </div>
         {filtered.length === 0 ? (
           <div className="px-6 py-8 text-lg text-muted">No massages match this time.</div>
         ) : (
-          filtered.map((e) => (
-            <div
-              key={e.id}
-              className="grid gap-4 border-b border-border px-6 py-5 text-lg last:border-b-0"
-              style={{ gridTemplateColumns: "1fr 1fr 1.6fr 1fr 1.2fr" }}
-            >
-              <div className="text-foreground">{e.locker_number}</div>
-              <div className="text-muted">{e.room_number ?? "—"}</div>
-              <div className="font-semibold text-accent-gold">{e.service_name}</div>
-              <div className="text-muted">{e.therapist_name ?? "—"}</div>
-              <div className="font-semibold text-foreground">{e.client_codename ?? "—"}</div>
-            </div>
-          ))
+          filtered.map((e) => {
+            const status = getSlotStatus(e.slot_time, e.duration_minutes ?? 90, e.checked_in_at);
+            return (
+              <div
+                key={e.id}
+                className={
+                  "grid gap-4 border-b border-border px-6 py-5 text-lg last:border-b-0 items-center " +
+                  (isAllTab && status === "done" ? "opacity-60" : "")
+                }
+                style={{
+                  gridTemplateColumns: isAllTab
+                    ? "0.8fr 0.8fr 1.5fr 1fr 1.2fr 1fr 1.1fr"
+                    : "1fr 1fr 1.6fr 1fr 1.2fr",
+                }}
+              >
+                <div className="text-foreground">{e.locker_number}</div>
+                <div className="text-muted">{e.room_number ?? "—"}</div>
+                <div className="font-semibold text-accent-gold">{e.service_name}</div>
+                <div className="text-muted">{e.therapist_name ?? "—"}</div>
+                <div className="font-semibold text-foreground">{e.client_codename ?? "—"}</div>
+                {isAllTab && (
+                  <div className="font-mono text-base text-muted">
+                    {e.slot_time ? fmtTime(e.slot_time) : "—"}
+                  </div>
+                )}
+                {isAllTab && (
+                  <div>
+                    {status === "ongoing" && (
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-[#C97A3E]/40 bg-[#C97A3E]/15 px-2.5 py-1 text-xs font-semibold text-[#C97A3E]">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#C97A3E] animate-pulse" />
+                        In Progress
+                      </span>
+                    )}
+                    {status === "done" && (
+                      <span className="inline-flex items-center rounded-md border border-border/60 bg-surface-2 px-2.5 py-1 text-xs font-medium text-stone-500">
+                        Done
+                      </span>
+                    )}
+                    {status === "upcoming" && (
+                      <span className="inline-flex items-center rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-stone-300">
+                        Upcoming
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
 

@@ -5,6 +5,24 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Default Call Sheet to 'All' Tab, Add Time-based Status Badges, and Fix Missing Client Codename — complete**
+  (`ohm#cllshtstat`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Client Codename Fix (`app/(staff)/call-sheet/page.tsx`)**:
+    - Added `extractCodename()` helper handling single objects and arrays returned by PostgREST.
+    - Updated `locker_occupancy` query select string to include `duration_minutes` and `guest_label` from linked `bookings`.
+    - Resolved `client_codename` with fallback hierarchy: direct `locker_occupancy.client_id -> clients.codename` -> linked `bookings.client_id -> clients.codename` -> direct `guest_label` -> linked `guest_label`. Passed `duration_minutes` to browser.
+  - **Default Active Tab & Status Badges (`components/call-sheet-browser.tsx`)**:
+    - Defaulted active tab `useState` state to `"all"`.
+    - Added `getSlotStatus(slotTime, durationMinutes, checkedInAt)` helper calculating Asia/Manila (UTC+8) operating-day status:
+      - **In Progress / Ongoing** (Ember `#C97A3E` accent pill): current Asia/Manila time within `[slotStart, slotStart + duration]`.
+      - **Done** (Muted gray badge / dimmed row): current Asia/Manila time past `slotStart + duration`.
+      - **Upcoming** (Subtle border badge): current Asia/Manila time before `slotStart`.
+    - Conditionally rendered `TIME` and `STATUS` columns exclusively on the `"All"` tab view (`isAllTab`).
+    - Preserved standard 5-column layout (`LOCKER | ROOM | SERVICE | THERA | CLIENT`) on specific time slot tabs (e.g. `4:00 PM`).
+    - Canvas JPEG download export remains clean and renders resolved client codenames.
+  - `npm run build` clean. See [[operations_state]] and `.ai/briefing.md`.
+
 - **Add Client Codename Column to Call Sheet Table — complete**
   (`ohm#cllshtclnt`, 2026-09-17).
   - Implementation plan presented and approved before code execution.
