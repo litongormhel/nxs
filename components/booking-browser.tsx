@@ -10,7 +10,6 @@ import { BookingFormModal } from "@/components/booking-form-modal";
 import { QuickWalkinModal } from "@/components/quick-walkin-modal";
 import { LogVisitModal } from "@/components/log-visit-modal";
 import { ScanMemberQrModal, type ScannedClient } from "@/components/scan-member-qr-modal";
-import { CheckoutConfirmModal, type CheckoutTarget } from "@/components/checkout-confirm-modal";
 import type { Database } from "@/lib/types/database";
 
 export type Client = {
@@ -149,7 +148,6 @@ export function BookingBrowser({
   const [logVisitBooking, setLogVisitBooking] = useState<LogVisitInitialBooking | null>(null);
   const [reassignBooking, setReassignBooking] = useState<BookingRow | null>(null);
   const [editBookingRow, setEditBookingRow] = useState<BookingRow | null>(null);
-  const [checkoutTarget, setCheckoutTarget] = useState<CheckoutTarget | null>(null);
   const [reassignTherapistId, setReassignTherapistId] = useState("");
   const [reassignStartTime, setReassignStartTime] = useState("");
   const [reassignError, setReassignError] = useState<string | null>(null);
@@ -618,7 +616,7 @@ export function BookingBrowser({
                   {tab !== "upcoming" && <th className="px-3.5 py-2.5">Check-in Time</th>}
                   {tab !== "upcoming" && <th className="px-3.5 py-2.5">Locker #</th>}
                   {tab === "checkout" && <th className="px-3.5 py-2.5">Check-out Time</th>}
-                  {(tab === "upcoming" || tab === "checkin") && <th className="px-3.5 py-2.5">Action</th>}
+                  {tab === "upcoming" && <th className="px-3.5 py-2.5">Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -674,32 +672,6 @@ export function BookingBrowser({
                         </td>
                       )}
                       {tab === "upcoming" && <td className="px-3.5 py-3">{renderActions(row)}</td>}
-                      {tab === "checkin" && (
-                        <td className="px-3.5 py-3">
-                          {occ?.id && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setCheckoutTarget({
-                                  occupancyId: occ.id!,
-                                  clientCodename: clientLabel(row),
-                                  lockerNumber: occ.locker_number,
-                                  roomNumber: row.room_number,
-                                  serviceName: serviceName(row.service_id),
-                                  startTime: row.start_time,
-                                  durationMinutes: row.duration_minutes,
-                                  therapistName: therapistName(row.therapist_id),
-                                  checkedInAt: occ.checked_in_at,
-                                  isWetArea: serviceName(row.service_id) === "Wet Area",
-                                })
-                              }
-                              className="rounded-md border border-[#5e3c3c] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-red hover:brightness-125 transition-all"
-                            >
-                              Check Out
-                            </button>
-                          )}
-                        </td>
-                      )}
                     </tr>
                   );
                 })}
@@ -879,17 +851,6 @@ export function BookingBrowser({
           onClose={() => setEditBookingRow(null)}
           onSaved={() => {
             setEditBookingRow(null);
-            reload();
-            router.refresh();
-          }}
-        />
-      )}
-
-      {checkoutTarget && (
-        <CheckoutConfirmModal
-          target={checkoutTarget}
-          onClose={() => setCheckoutTarget(null)}
-          onSuccess={() => {
             reload();
             router.refresh();
           }}

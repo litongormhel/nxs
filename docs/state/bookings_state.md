@@ -443,6 +443,12 @@ Day-Off therapist (Leo) could be saved from New Booking.
 - **Quick Search & Filter Controls (`components/booking-browser.tsx`)**: Placed responsive Filter Bar controls directly above active tab table. `searchQuery` state supports instant client-side substring matching on `client_codename` or `guest_label` and `locker_number` (exact or partial numeric match), with a clear "x" button. `selectedTimeSlot` state supports filtering by time slot (`All` + operating-day sorted pills with active gold highlight).
 - **Record Counter & Inline Empty Message (`components/booking-browser.tsx`)**: Displays reactive record counter (`Showing X of Y bookings` / `Showing Y bookings`). Displays inline empty state `No bookings match your search or filter criteria.` when no records match filter criteria.
 
+**Correction, `ohm#rembookingact` (2026-09-17)** — Remove ACTION column and Check Out buttons from Bookings page.
+
+- **Check-in Tab Table Cleanup (`components/booking-browser.tsx`)**: Removed `ACTION` table header (`<th>ACTION</th>`) and `Check Out` button cell (`<td><button ...>Check Out</button></td>`) under the **Check-in** tab table.
+- **Unused State & Modal Cleanup (`components/booking-browser.tsx`)**: Removed `CheckoutConfirmModal` import and `checkoutTarget` state binding from `BookingBrowser`.
+- **Clean Grid Alignment (`components/booking-browser.tsx`)**: Re-aligned Check-in table columns cleanly to 8 columns: `EDIT`, `MASSAGE TIME`, `CLIENT`, `SERVICE`, `ROOM`, `THERAPIST`, `CHECK-IN TIME`, `LOCKER #`. Locker checkout remains strictly handled under the **Lockers** tab (`components/locker-board.tsx`), protected by `CheckoutConfirmModal`.
+
 
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 

@@ -5,6 +5,13 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Remove ACTION column and Check Out buttons from Bookings page — complete**
+  (`ohm#rembookingact`, 2026-09-17).
+  - **Check-in Tab Cleanup (`components/booking-browser.tsx`)**: Removed `ACTION` table header (`<th>ACTION</th>`) and `Check Out` button cell (`<td><button ...>Check Out</button></td>`) under the **Check-in** tab table.
+  - **Unused State & Modal Clean Up (`components/booking-browser.tsx`)**: Removed `CheckoutConfirmModal` import and `checkoutTarget` state binding from `BookingBrowser`.
+  - **Clean Grid Alignment (`components/booking-browser.tsx`)**: Re-aligned Check-in table columns cleanly to 8 columns: `EDIT`, `MASSAGE TIME`, `CLIENT`, `SERVICE`, `ROOM`, `THERAPIST`, `CHECK-IN TIME`, `LOCKER #`. Locker checkout remains strictly protected in the Lockers tab (`components/locker-board.tsx`).
+  - `npm run build` clean. See [[bookings_state]] and `.ai/briefing.md`.
+
 - **Add Quick Search Bar and Time Slot Filters to Bookings Page — complete**
   (`ohm#bookingfilterbar`, 2026-09-17).
   - Implementation plan presented and approved before code execution.
