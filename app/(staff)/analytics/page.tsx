@@ -25,7 +25,7 @@ export default async function AnalyticsPage() {
         .order("name"),
       supabase
         .from("commission_rates")
-        .select("service_id, percent, effective_from")
+        .select("service_id, percent, rate_type, effective_from")
         .eq("is_active", true),
     ]);
 
@@ -49,7 +49,14 @@ export default async function AnalyticsPage() {
   }));
 
   const rateByService = new Map(
-    (rates ?? []).map((r) => [r.service_id, { percent: Number(r.percent), effective_from: r.effective_from }])
+    (rates ?? []).map((r) => [
+      r.service_id,
+      {
+        percent: Number(r.percent),
+        rateType: (r.rate_type === "flat" ? "flat" : "percent") as "percent" | "flat",
+        effective_from: r.effective_from,
+      },
+    ])
   );
 
   const commissionServices: CommissionService[] = (commissionable ?? []).map((s) => {
@@ -58,6 +65,7 @@ export default async function AnalyticsPage() {
       id: s.id,
       name: s.name,
       currentPercent: rate?.percent ?? null,
+      rateType: rate?.rateType ?? "percent",
       effectiveFrom: rate?.effective_from ?? null,
     };
   });

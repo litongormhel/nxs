@@ -8,6 +8,7 @@ export type CommissionService = {
   id: string;
   name: string;
   currentPercent: number | null;
+  rateType?: "percent" | "flat";
   effectiveFrom: string | null;
 };
 
@@ -22,14 +23,19 @@ function fmtDate(iso: string): string {
 function RateRow({ service }: { service: CommissionService }) {
   const { sessionStaff } = useStaffSim();
   const [editing, setEditing] = useState(false);
+  const [rateType, setRateType] = useState<"percent" | "flat">(service.rateType ?? "percent");
   const [value, setValue] = useState(service.currentPercent?.toString() ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleSave() {
-    const percent = Number(value);
-    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
-      setError("Enter a percent between 0 and 100");
+    const val = Number(value);
+    if (!Number.isFinite(val) || val < 0) {
+      setError("Enter a valid non-negative rate");
+      return;
+    }
+    if (rateType === "percent" && val > 100) {
+      setError("Percentage rate cannot exceed 100%");
       return;
     }
     if (!sessionStaff) {
@@ -38,7 +44,7 @@ function RateRow({ service }: { service: CommissionService }) {
     }
     setError(null);
     startTransition(async () => {
-      const result = await setCommissionRate(service.id, percent, sessionStaff.id);
+      const result = await setCommissionRate(service.id, val, sessionStaff.id, rateType);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -46,6 +52,14 @@ function RateRow({ service }: { service: CommissionService }) {
       setEditing(false);
     });
   }
+
+  const isFlat = (service.rateType ?? "percent") === "flat";
+  const displayRate =
+    service.currentPercent !== null
+      ? isFlat
+        ? `₱${service.currentPercent}`
+        : `${service.currentPercent}%`
+      : null;
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 flex-wrap">
@@ -55,9 +69,9 @@ function RateRow({ service }: { service: CommissionService }) {
 
       {!editing && (
         <>
-          <div className="text-[12.5px] text-fg min-w-[60px]">
-            {service.currentPercent !== null ? (
-              `${service.currentPercent}%`
+          <div className="text-[12.5px] text-fg min-w-[70px]">
+            {displayRate !== null ? (
+              displayRate
             ) : (
               <span className="text-muted italic">Not set</span>
             )}
@@ -69,6 +83,7 @@ function RateRow({ service }: { service: CommissionService }) {
           </div>
           <button
             onClick={() => {
+              setRateType(service.rateType ?? "percent");
               setValue(service.currentPercent?.toString() ?? "");
               setError(null);
               setEditing(true);
@@ -82,18 +97,45 @@ function RateRow({ service }: { service: CommissionService }) {
 
       {editing && (
         <>
-          <div className="flex items-center gap-1">
-            <input
-              type="number"
-              min={0}
-              max={100}
-              step="0.1"
-              autoFocus
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              className="w-[80px] rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none focus:border-gold"
-            />
-            <span className="text-[11px] text-muted">%</span>
+          <div className="flex items-center gap-1.5">
+            <div className="flex rounded-lg border border-border bg-background p-0.5">
+              <button
+                type="button"
+                onClick={() => setRateType("percent")}
+                className={`rounded px-2 py-0.5 text-[11px] font-bold transition ${
+                  rateType === "percent"
+                    ? "bg-[#a97e2e] text-black"
+                    : "text-muted hover:text-foreground"
+                }`}
+              >
+                %
+              </button>
+              <button
+                type="button"
+                onClick={() => setRateType("flat")}
+                className={`rounded px-2 py-0.5 text-[11px] font-bold transition ${
+                  rateType === "flat"
+                    ? "bg-[#a97e2e] text-black"
+                    : "text-muted hover:text-foreground"
+                }`}
+              >
+                ₱ Flat
+              </button>
+            </div>
+            <div className="flex items-center gap-1">
+              {rateType === "flat" && <span className="text-[11px] text-muted">₱</span>}
+              <input
+                type="number"
+                min={0}
+                max={rateType === "percent" ? 100 : undefined}
+                step="0.1"
+                autoFocus
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                className="w-[80px] rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none focus:border-gold"
+              />
+              {rateType === "percent" && <span className="text-[11px] text-muted">%</span>}
+            </div>
           </div>
           <button
             onClick={handleSave}
@@ -135,8 +177,8 @@ export function CommissionRatesBrowser({ services }: { services: CommissionServi
   return (
     <div>
       <div className="text-[11px] text-muted mb-2.5">
-        Commission percent per service. Editing a rate takes effect immediately and
-        keeps the prior rate on record.
+        Commission rate (percentage or flat peso) per service. Editing a rate takes effect immediately
+        and keeps prior rates on record.
       </div>
       <div className="space-y-2">
         {services.length === 0 && (

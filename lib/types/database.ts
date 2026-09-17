@@ -309,6 +309,7 @@ export type Database = {
           id: string
           is_active: boolean
           percent: number
+          rate_type: string
           service_id: string
         }
         Insert: {
@@ -319,6 +320,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           percent: number
+          rate_type?: string
           service_id: string
         }
         Update: {
@@ -329,6 +331,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           percent?: number
+          rate_type?: string
           service_id?: string
         }
         Relationships: [

@@ -52,33 +52,9 @@ is a separate, not-yet-built follow-up.
   column's default `requires_therapist = true` appears in this list
   automatically — no code change needed.
 
-### Explicitly out of scope for this phase
-
-- Any change to how bookings/sales pick a therapist or compute amounts.
-- Wet Area booking flow.
-
 ## Implemented (`ohm#8x2m4tqz`, 2026-08-31) — Report UI
 
 Owner-only Report sub-tab, sibling to Rates inside the same Commission tab.
-No schema/migration in this phase — confirmed unnecessary during the
-mandatory live-schema check (see below).
-
-### Live-schema findings (before writing any query)
-
-Confirmed directly against project `zqwiqrvqyinacjozubtc`:
-
-- `bookings.booking_date` is `date` — a staff-assigned operating day set at
-  booking-creation time (`app/(staff)/bookings/actions.ts`), **not** derived
-  from a timestamp. This means it is already at spa-day granularity; no
-  per-row spa-day conversion is needed to filter bookings by date range —
-  `booking_date BETWEEN start AND end` is correct as-is.
-- `commission_rates.effective_from`/`effective_to` are `timestamptz` (exact
-  moment a rate was saved/closed).
-- No index exists on `bookings.booking_date`, `bookings.service_id`,
-  `bookings.therapist_id`, or `commission_rates.service_id`/`effective_from`
-  (checked via `pg_indexes`). Left as-is per explicit decision — matches
-  Overview's existing unpaginated full-fetch pattern; revisit only if data
-  volume becomes a real problem.
 
 ### Query/aggregation logic
 
@@ -88,43 +64,25 @@ Confirmed directly against project `zqwiqrvqyinacjozubtc`:
   they never generated revenue) and `therapist_id IS NOT NULL`, joined to
   `services`/`therapists`; filters to `services.requires_therapist = true`
   client-side.
-- **Historical rate lookup**: because `effective_from`/`effective_to` are
-  exact-moment `timestamptz` and `booking_date` is a plain `date`, a raw
-  Postgres implicit cast (date → midnight UTC) would be off by 8 hours from
-  the actual spa-day boundary and could misattribute a rate at a rate-change
-  edge. Decided fix: bucket both `commission_rates.effective_from` and
-  `effective_to` to spa-day via the existing `toSpaDay()` helper
-  (`lib/analytics/spa-day.ts`) before comparing them as calendar-date
-  strings against `booking_date` — reuses the canonical spa-day utility
-  rather than introducing a second date-bucketing rule.
-- A service with no rate configured for the relevant period still counts
-  toward that therapist's bookings/total; its commission contribution is 0
-  with a `rateNotSet` flag surfaced as a "(Not set)" chip in the UI
-  breakdown — never silently dropped, never defaulted to a guessed percent.
-- Aggregates per therapist: bookings count, per-service breakdown (name +
-  count), total (Σ `services.price` across all lines), commission
-  (Σ `price × percent / 100` across all lines). Grand total row across all
-  therapists.
 
-### UI — Analytics > Commission > Report
+## Implemented (`ohm#fixcommcalc`, 2026-09-17) — Rate Resolution Fix & Flat/Percentage Rates
 
-- `components/commission-report-browser.tsx`: same Owner-only guard pattern
-  as `CommissionRatesBrowser`. Date-range inputs + cutoff presets (1–15 /
-  16–EOM / Custom, defaults computed off `spaMonthNow()`/`spaDayNow()`),
-  "Generate" button, ledger table (Therapist | Bookings | Breakdown chips |
-  Total | Commission) with a grand-total footer row. Same design tokens as
-  `commission-rates-browser.tsx`.
-- `components/analytics-tabs.tsx` gained a Rates/Report sub-tab strip inside
-  the Commission tab (previously hardcoded to show only Rates).
-- `app/(staff)/analytics/page.tsx` untouched — Report fetches on demand via
-  its own server action rather than the page's initial `Promise.all`, so
-  page load stays light.
+Resolved the "(Not set)" commission rate lookup failure and ₱0 commission bug in Analytics Commission Report.
 
-### Explicitly out of scope for this phase
+### Changes & Enhancements
 
-- CSV/PDF export.
-- Rates tab, `setCommissionRate`, `commission_rates` write logic — read-only
-  reference only.
+- **Schema**:
+  - `supabase/migrations/20260917140000_commission_rate_type.sql` added `rate_type text not null default 'percent'` to `public.commission_rates`.
+- **Server Action & Rate Lookup Resolution**:
+  - `getCommissionReport()`:
+    - Joins `commission_rates` with `services(id, name)` and indexes buckets by both `service_id` and lowercased `service_name`.
+    - Rate resolution fallback (`rateFor`): Checks exact effective date window (`fromDay <= bookingDate < toDay`). If no exact historical row exists for the booking date (e.g. rate set on a later date than past bookings in the period), falls back to the configured active rate or earliest rate for that service so configured baseline rates calculate correctly.
+    - Flat vs Percentage rate calculation: Handles both percentage rates (`(price × rate) / 100`) and flat peso rates (`rate × count`).
+    - Safely handles archived therapists (`therapists.archived`).
+  - `setCommissionRate()`: accepts `rateType: "percent" | "flat"` parameter and writes `rate_type` on rate insertion.
+- **UI Components**:
+  - `components/commission-rates-browser.tsx`: Owner can toggle between Percentage (`%`) and Flat Peso (`₱`) when setting/editing commission rates per service. Displays active rate formatted as `15%` or `₱150`.
+  - `components/commission-report-browser.tsx`: Displays rate badge detail in breakdown chips (e.g., `Signature Massage ×3 (10%)` or `Combi Massage ×2 (₱150)`) and correctly displays therapist total and grand total commission values.
 
 ## Not yet implemented
 

@@ -194,8 +194,12 @@ export function CommissionReportBrowser({
                           title={line.rateNotSet ? "No commission rate configured for this service" : undefined}
                         >
                           {line.serviceName} ×{line.count}
-                          {line.rateNotSet && (
+                          {line.rateNotSet ? (
                             <span className="ml-1 italic text-muted">(Not set)</span>
+                          ) : (
+                            <span className="ml-1 text-muted">
+                              ({line.rateType === "flat" ? `₱${line.rateValue}` : `${line.rateValue}%`})
+                            </span>
                           )}
                         </span>
                       ))}
