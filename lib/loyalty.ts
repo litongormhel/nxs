@@ -15,8 +15,10 @@ export function computeLoyaltyPoints(
   pesoPerPoint: number | null,
 ): number {
   if (mode === "uniform") {
-    if (!pesoPerPoint) return 0;
-    return Math.round(paidAmount / pesoPerPoint);
+    if (!pesoPerPoint || pesoPerPoint <= 0) return 0;
+    return Math.max(0, Math.round(paidAmount / pesoPerPoint));
   }
-  return Math.round(basePoints * (paidAmount / fullPrice));
+  if (fullPrice <= 0) return 0;
+  return Math.max(0, Math.round(basePoints * (paidAmount / fullPrice)));
 }
+

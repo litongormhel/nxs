@@ -108,15 +108,8 @@
 - Ledger history view is a fixed last-10 list on the Client Profile detail
   panel (`components/client-browser.tsx`) — no pagination, no full ledger
   browser.
-- **UI preview labels not yet reconciled with the formula** (flagged, not
-  fixed, during `ohm#2r8w5nfz`): `components/log-visit-modal.tsx`'s
-  "Points to award" field and `components/client-browser.tsx`'s
-  per-service quick-select cards both display `services.points_earned`
-  directly as a pre-submission preview. Since EARN now goes through
-  `computeLoyaltyPoints()`, the actual awarded amount can diverge from
-  this preview (discounts change the proportional result; an unconfigured
-  formula awards nothing). Nothing incorrect is written to the ledger —
-  this is a display-accuracy gap, not a data-correctness bug.
+- **UI preview labels reconciled with proportional formula in Log Visit Modal** (`ohm#proportionalpointscheckin`, 2026-09-17):
+  `components/log-visit-modal.tsx`'s "Added Points (auto)" field now dynamically computes points reactively using `computeLoyaltyPoints(mode, servicePaidAmount, price, basePoints, pesoPerPoint)` (fetching formula settings from `app_settings` and defaulting to `"proportional"`). The `Confirm Check-in` summary modal displays `Points Earned: +X pts` for Member clients. `resolveEarnedPoints()` in `actions.ts` defaults `mode` to `"proportional"` when `loyalty_formula_mode` is null in `app_settings`.
 
 ## Implemented (app level, `ohm#2r8w5nfz`, 2026-09-01) — loyalty formula
 wired end-to-end

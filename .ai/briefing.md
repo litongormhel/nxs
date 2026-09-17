@@ -80,7 +80,14 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-17 — Universal Edit/Void/Restore with Mandatory Manager PIN on Daily Sales Remittance**
+1. **2026-09-17 — Enforce Proportional Points Calculation & Display Earned Points in Confirm Check-in**
+   (`ohm#proportionalpointscheckin`).
+   - **Dynamic Proportional Calculation (`components/log-visit-modal.tsx`)**: Fetches `app_settings` on mount (defaulting to `"proportional"` if unset). Dynamically recomputes `pointsDelta` reactively using `computeLoyaltyPoints(mode, servicePaidAmount, price, basePoints, pesoPerPoint)` whenever service, promo, manual discount, or total amount changes.
+   - **Points Earned Row in Confirm Check-in (`components/log-visit-modal.tsx`)**: Added `Points Earned: +X pts` (styled with gold accent text `text-accent-gold`) inside the `Confirm Check-in` receipt card for Member clients (`clientId`), while omitting points display for walk-ins without an account.
+   - **Backend Action Alignment (`app/(staff)/bookings/actions.ts` & `lib/loyalty.ts`)**: Updated `resolveEarnedPoints` to default to `"proportional"` mode when `loyalty_formula_mode` is null in `app_settings`, and guarded `computeLoyaltyPoints` against zero-price division and negative results.
+   - `npm run build` clean. See [[points_ledger_state]] and `.ai/handoff.md`.
+
+2. **2026-09-17 — Universal Edit/Void/Restore with Mandatory Manager PIN on Daily Sales Remittance**
    (`ohm#salesvoidrestorepin`, `ohm#fixmissingsales`). Implementation plan presented and approved before code execution.
    - **Header Clean Up (`components/sales-browser.tsx`)**: Removed `(Spa Operational Window 8:00 AM – 2:00 AM)` pill/badge from title header.
    - **Universal Row Actions (`components/sales-browser.tsx`)**: Removed `is_walkin` action blocking (`No action — walk-in, no account`). All sales rows (members & walk-ins) feature `[Edit]` and `[Void]` buttons when active, and `[Restore]` button when voided.
@@ -89,29 +96,22 @@ Full invariant list: [[nxs-architecture-locks]].
    - **Query Resilience & Fallback (`app/(staff)/sales/page.tsx`)**: Added `salesResFirstTry.error` logging and automated fallback query without `void_reason`, ensuring sales records are never hidden even if DB migrations are unapplied.
    - `npm run build` clean. See [[sales_state]] and `.ai/handoff.md`.
 
-2. **2026-09-17 — Restrict Payment Method dropdown options & remove Logged by Staff in Quick Walk-In**
+3. **2026-09-17 — Restrict Payment Method dropdown options & remove Logged by Staff in Quick Walk-In**
    (`ohm#quickwalkinpaymethods`).
    - **Dropdown Options Restricted (`components/quick-walkin-modal.tsx`)**: Removed `Card` and `Maya` options from Quick Walk-In payment method `<select>` dropdown, strictly restricting choices to `Cash`, `GCash`, and `Split (Cash + GCash)`. Updated reference number input label span to `(optional — GCash)`.
    - **Removed Logged by Staff Field (`components/quick-walkin-modal.tsx`)**: Removed redundant visible "Logged by (staff)" field from Quick Walk-In modal UI while preserving staff attribution in backend actions via `useStaffSim()`.
    - **Split Logic Intact (`components/quick-walkin-modal.tsx`)**: Preserved auto-balancing, dual numerical inputs, and backend split sales ledger logic intact.
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-17 — Scale down Call Sheet typography and row density to match Bookings table styling**
+4. **2026-09-17 — Scale down Call Sheet typography and row density to match Bookings table styling**
    (`ohm#callsheettypography`).
    - **Table Header & Filter Controls (`components/call-sheet-browser.tsx`)**: Standardized header text size to `text-xs font-medium tracking-wider uppercase text-muted` with `px-4 py-2.5` padding. Scaled filter pill buttons to `px-3.5 py-1.5 text-xs font-semibold`.
    - **Row Cell Density & Typography (`components/call-sheet-browser.tsx`)**: Reduced row padding from `px-6 py-5` to `px-4 py-2.5 text-sm`. Scaled Locker/Room to `font-mono text-sm font-medium text-foreground`, Service to `text-sm font-medium text-gold`, Therapist to `text-sm text-foreground`, Client to `text-sm font-semibold text-foreground`, Time to `font-mono text-xs text-muted`, and Status badges to `px-2.5 py-0.5 text-xs`.
    - `npm run build` clean. See [[operations_state]] and `.ai/handoff.md`.
 
-4. **2026-09-17 — Align Quick Walk-in Split Payment UI to dropdown option "Split (Cash + GCash)"**
+5. **2026-09-17 — Align Quick Walk-in Split Payment UI to dropdown option "Split (Cash + GCash)"**
    (`ohm#quickwalkindropdownsplit`). Implementation plan presented and approved before code execution.
    - **Split Payment Dropdown Option (`components/quick-walkin-modal.tsx`)**: Removed standalone `Split Payment` checkbox. Added `Split (Cash + GCash)` directly to Payment Method dropdown options (`Cash`, `GCash`, `Card`, `Maya`, `Split (Cash + GCash)`).
    - **Dual Column Inputs & Auto-balancing (`components/quick-walkin-modal.tsx`)**: Renders side-by-side `Cash Amount (₱)` and `GCash Amount (₱)` inputs with auto-balancing and validation feedback. Reference number field displayed when GCash amount > 0.
    - **Backend Action Parameter Alignment (`app/(staff)/bookings/actions.ts`)**: Updated `quickWalkin` action to extract `splitCashAmount` and `splitGcashAmount`, preserving backend split sales ledger logic.
    - `npm run build` clean. See [[bookings_state]], [[sales_state]], and `.ai/handoff.md`.
-
-5. **2026-09-17 — Remove ACTION column and Check Out buttons from Bookings page**
-   (`ohm#rembookingact`).
-   - **Check-in Tab Cleanup (`components/booking-browser.tsx`)**: Removed `ACTION` table header (`<th>ACTION</th>`) and `Check Out` button cell (`<td><button ...>Check Out</button></td>`) under the **Check-in** tab table.
-   - **Unused State & Modal Clean Up (`components/booking-browser.tsx`)**: Removed `CheckoutConfirmModal` import and `checkoutTarget` state binding from `BookingBrowser`.
-   - **Clean Grid Alignment (`components/booking-browser.tsx`)**: Re-aligned Check-in table columns cleanly to 8 columns: `EDIT`, `MASSAGE TIME`, `CLIENT`, `SERVICE`, `ROOM`, `THERAPIST`, `CHECK-IN TIME`, `LOCKER #`. Locker checkout remains strictly protected in the Lockers tab (`components/locker-board.tsx`).
-   - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.

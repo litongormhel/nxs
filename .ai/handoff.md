@@ -5,6 +5,14 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Enforce Proportional Points Calculation & Display Earned Points in Confirm Check-in — complete**
+  (`ohm#proportionalpointscheckin`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Dynamic Proportional Calculation (`components/log-visit-modal.tsx`)**: Fetches `app_settings` on mount (defaulting to `"proportional"` if unset). Dynamically recomputes `pointsDelta` reactively using `computeLoyaltyPoints(mode, servicePaidAmount, price, basePoints, pesoPerPoint)` whenever service, promo, manual discount, or total amount changes.
+  - **Points Earned Row in Confirm Check-in (`components/log-visit-modal.tsx`)**: Added `Points Earned: +X pts` (styled with gold accent text `text-accent-gold`) inside the `Confirm Check-in` receipt card for Member clients (`clientId`), while omitting points display for walk-ins without an account.
+  - **Backend Action Alignment (`app/(staff)/bookings/actions.ts` & `lib/loyalty.ts`)**: Updated `resolveEarnedPoints` to default to `"proportional"` mode when `loyalty_formula_mode` is null in `app_settings`, and guarded `computeLoyaltyPoints` against zero-price division and negative results.
+  - `npm run build` clean. See [[points_ledger_state]] and `.ai/briefing.md`.
+
 - **Universal Edit/Void/Restore with Mandatory Manager PIN on Daily Sales Remittance — complete**
   (`ohm#salesvoidrestorepin`, `ohm#fixmissingsales`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

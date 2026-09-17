@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { logVisitBooking } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
 import { ScanMemberQrModal, type ScannedClient } from "@/components/scan-member-qr-modal";
+import { computeLoyaltyPoints, WET_AREA_POINTS, type LoyaltyFormulaMode } from "@/lib/loyalty";
 import type {
   Addon,
   Client,
@@ -168,7 +169,12 @@ export function LogVisitModal({
   const [pointsWarning, setPointsWarning] = useState<string | null>(null);
   const [showSummary, setShowSummary] = useState(false);
 
-  // Fetch open bookings and occupied lockers on mount
+  const [loyaltySettings, setLoyaltySettings] = useState<{
+    mode: LoyaltyFormulaMode;
+    pesoPerPoint: number | null;
+  }>({ mode: "proportional", pesoPerPoint: null });
+
+  // Fetch open bookings, occupied lockers, and loyalty settings on mount
   useEffect(() => {
     const supabase = createClient();
     supabase
@@ -187,6 +193,18 @@ export function LogVisitModal({
       .then(({ data }) =>
         setActiveOccupancies((data as ActiveOccupancy[]) ?? [])
       );
+
+    supabase
+      .from("app_settings")
+      .select("loyalty_formula_mode, peso_per_point")
+      .eq("id", true)
+      .single()
+      .then(({ data }) => {
+        setLoyaltySettings({
+          mode: (data?.loyalty_formula_mode as LoyaltyFormulaMode) || "proportional",
+          pesoPerPoint: data?.peso_per_point ?? null,
+        });
+      });
   }, []);
 
   const selectedClient = clients.find((c) => c.id === clientId);
@@ -291,9 +309,6 @@ export function LogVisitModal({
     );
   }
 
-  // Calculate points and amount
-  const pointsDelta = isRedemption ? -100 : selectedService?.points_earned ?? 0;
-
   const computedAmount = useMemo(() => {
     if (isRedemption && !isUpgraded) return 0;
     if (isRedemption && isUpgraded) {
@@ -356,6 +371,26 @@ export function LogVisitModal({
     manualDiscountOn,
     discountType,
     discountValue,
+  ]);
+
+  // Calculate dynamic points (auto) based on formula mode
+  const pointsDelta = useMemo(() => {
+    if (isRedemption) return -100;
+    if (isWetArea) return WET_AREA_POINTS;
+    if (!selectedService) return 0;
+    return computeLoyaltyPoints(
+      loyaltySettings.mode,
+      servicePaidAmount,
+      selectedService.price,
+      selectedService.points_earned,
+      loyaltySettings.pesoPerPoint
+    );
+  }, [
+    isRedemption,
+    isWetArea,
+    selectedService,
+    loyaltySettings,
+    servicePaidAmount,
   ]);
 
   useEffect(() => {
@@ -555,6 +590,15 @@ export function LogVisitModal({
               <span className="text-muted block text-[11px]">Service Availed</span>
               <span className="font-medium text-foreground">{serviceAvailedDisplay}</span>
             </div>
+
+            {clientId && (
+              <div className="border-b border-[#292524] pb-2.5 flex items-center justify-between">
+                <span className="text-muted text-[11px]">Points Earned</span>
+                <span className="font-mono text-xs font-bold text-accent-gold">
+                  {pointsDelta >= 0 ? `+${pointsDelta} pts` : `${pointsDelta} pts`}
+                </span>
+              </div>
+            )}
 
             <div>
               <span className="text-muted block text-[11px]">Total Payment</span>

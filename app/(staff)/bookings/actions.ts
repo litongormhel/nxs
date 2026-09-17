@@ -31,7 +31,7 @@ async function resolveEarnedPoints(
     .eq("id", true)
     .single();
 
-  const mode = (settings?.loyalty_formula_mode ?? null) as LoyaltyFormulaMode | null;
+  const mode = (settings?.loyalty_formula_mode ?? "proportional") as LoyaltyFormulaMode;
   if (!mode) return null;
 
   return computeLoyaltyPoints(
