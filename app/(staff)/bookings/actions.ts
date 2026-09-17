@@ -163,7 +163,12 @@ export type QuickWalkinInput = {
   amount: number;
   /** Service-only paid amount (post-promo/discount, excluding add-ons) — the input to the loyalty formula, distinct from `amount` which includes add-ons and is what's recorded on the sale. */
   servicePaidAmount: number;
-  paymentMethod: "Cash" | "GCash" | "Split (Cash + GCash)";
+  paymentMethod: string;
+  isSplitPayment?: boolean;
+  splitMethod1?: string;
+  splitAmount1?: number;
+  splitMethod2?: string;
+  splitAmount2?: number;
   splitCashAmount?: number | null;
   splitGcashAmount?: number | null;
   paymentRef: string | null;
@@ -211,10 +216,14 @@ export async function quickWalkin(
     );
   }
 
-  const isSplit = input.paymentMethod === "Split (Cash + GCash)";
-  const cashAmt = isSplit ? (input.splitCashAmount ?? 0) : input.amount;
-  const gcashAmt = isSplit ? (input.splitGcashAmount ?? 0) : 0;
-  const primaryMethod = isSplit ? "Cash" : input.paymentMethod;
+  const isSplit = input.isSplitPayment || input.paymentMethod === "Split (Cash + GCash)";
+  const method1 = input.isSplitPayment ? (input.splitMethod1 ?? "Cash") : "Cash";
+  const amount1 = input.isSplitPayment ? (input.splitAmount1 ?? 0) : (isSplit ? (input.splitCashAmount ?? 0) : input.amount);
+  const method2 = input.isSplitPayment ? (input.splitMethod2 ?? "GCash") : "GCash";
+  const amount2 = input.isSplitPayment ? (input.splitAmount2 ?? 0) : (isSplit ? (input.splitGcashAmount ?? 0) : 0);
+
+  const primaryMethod = isSplit ? method1 : input.paymentMethod;
+  const primaryAmount = isSplit ? amount1 : input.amount;
 
   const { data, error } = await supabase.rpc("quick_walkin", {
     p_client_id: input.clientId,
@@ -229,9 +238,9 @@ export async function quickWalkin(
     p_manual_discount_type: input.manualDiscountType,
     p_manual_discount_value: input.manualDiscountValue,
     p_addon_ids: input.addonIds,
-    p_amount: cashAmt,
+    p_amount: primaryAmount,
     p_payment_method: primaryMethod,
-    p_payment_ref: isSplit ? null : input.paymentRef,
+    p_payment_ref: isSplit ? (method1 !== "Cash" ? input.paymentRef : null) : (input.paymentMethod !== "Cash" ? input.paymentRef : null),
     p_staff_id: input.staffId,
     p_points_earned: pointsAwarded,
   });
@@ -275,15 +284,15 @@ export async function quickWalkin(
     return { ok: false, error: "Quick walk-in did not return a booking id." };
   }
 
-  if (isSplit && gcashAmt > 0) {
+  if (isSplit && amount2 > 0) {
     const { error: splitErr } = await supabase.from("sales").insert({
       client_id: input.clientId,
       guest_label: input.guestLabel,
       booking_id: bookingId,
       service_id: input.serviceId,
       therapist_id: input.therapistId,
-      amount: gcashAmt,
-      payment_method: "GCash",
+      amount: amount2,
+      payment_method: method2,
       payment_ref: input.paymentRef,
       promo_id: input.promoId,
       manual_discount_type: input.manualDiscountType,

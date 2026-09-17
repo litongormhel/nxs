@@ -5,6 +5,13 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Port Split Payment support to Quick Walk-in Modal — complete**
+  (`ohm#quickwalkinsplitpay`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Split Payment UI & Auto-balancing (`components/quick-walkin-modal.tsx`)**: Added `Split Payment` checkbox toggle with state for `isSplitPayment`, `splitMethod1`, `splitAmount1`, `splitMethod2`, `splitAmount2`, and `lastEditedSplitField`. Added auto-balancing logic (`Method 1 + Method 2 === Total Amount`) and validation error badge.
+  - **Backend Action Support (`app/(staff)/bookings/actions.ts`)**: Updated `QuickWalkinInput` type to support split payment fields. Updated `quickWalkin` action to insert 2 distinct `sales` entries for split payment channels, guaranteeing accurate shift remittance.
+  - `npm run build` clean. See [[bookings_state]], [[sales_state]], and `.ai/briefing.md`.
+
 - **Add Massage Time & Enforce 12-Hour Format in Walk-In Visit History Drawer — complete**
   (`ohm#walkindrawertimeformat`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

@@ -98,7 +98,13 @@ export function QuickWalkinModal({
   const [discountType, setDiscountType] = useState<"pct" | "fixed">("pct");
   const [discountValue, setDiscountValue] = useState(25);
   const [addonIds, setAddonIds] = useState<string[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<"Cash" | "GCash">("Cash");
+  const [isSplitPayment, setIsSplitPayment] = useState(false);
+  const [splitMethod1, setSplitMethod1] = useState<string>("Cash");
+  const [splitAmount1, setSplitAmount1] = useState<number | "">(0);
+  const [splitMethod2, setSplitMethod2] = useState<string>("GCash");
+  const [splitAmount2, setSplitAmount2] = useState<number | "">(0);
+  const [lastEditedSplitField, setLastEditedSplitField] = useState<"amount1" | "amount2">("amount1");
+  const [paymentMethod, setPaymentMethod] = useState<string>("Cash");
   const [gcashRef, setGcashRef] = useState("");
   const { sessionStaff } = useStaffSim();
   const actor = sessionStaff;
@@ -296,6 +302,22 @@ export function QuickWalkinModal({
     return base;
   }, [selectedService, selectedPromo, manualDiscountOn, discountType, discountValue]);
 
+  useEffect(() => {
+    if (isSplitPayment) {
+      if (lastEditedSplitField === "amount2") {
+        const a2 = typeof splitAmount2 === "number" ? splitAmount2 : 0;
+        setSplitAmount1(Math.max(0, amount - a2));
+      } else {
+        const a1 = typeof splitAmount1 === "number" ? splitAmount1 : 0;
+        setSplitAmount2(Math.max(0, amount - a1));
+      }
+    }
+  }, [amount, isSplitPayment, lastEditedSplitField]);
+
+  const numSplit1 = typeof splitAmount1 === "number" ? splitAmount1 : (parseFloat(String(splitAmount1)) || 0);
+  const numSplit2 = typeof splitAmount2 === "number" ? splitAmount2 : (parseFloat(String(splitAmount2)) || 0);
+  const isSplitValid = !isSplitPayment || (numSplit1 >= 0 && numSplit2 >= 0 && Math.abs((numSplit1 + numSplit2) - amount) < 0.01);
+
   function toggleAddon(id: string) {
     setAddonIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
@@ -315,6 +337,7 @@ export function QuickWalkinModal({
     !!serviceId &&
     !!staffId &&
     !!lockerNumber &&
+    isSplitValid &&
     (clientId ? true : guestName.trim().length > 0) &&
     (!isMassageService ||
       (!!therapistId &&
@@ -325,7 +348,13 @@ export function QuickWalkinModal({
 
   function handleSubmit() {
     setError(null);
+    if (isSplitPayment && !isSplitValid) {
+      setError(`Sum of Method 1 (₱${numSplit1.toLocaleString()}) and Method 2 (₱${numSplit2.toLocaleString()}) must equal required total (₱${amount.toLocaleString()}).`);
+      return;
+    }
+
     startTransition(async () => {
+      const isRefRequired = paymentMethod !== "Cash" || (isSplitPayment && (splitMethod1 !== "Cash" || splitMethod2 !== "Cash"));
       const result = await quickWalkin({
         clientId,
         guestLabel: clientId ? null : guestName.trim(),
@@ -341,8 +370,15 @@ export function QuickWalkinModal({
         addonIds,
         amount,
         servicePaidAmount,
-        paymentMethod,
-        paymentRef: paymentMethod === "GCash" ? gcashRef.trim() || null : null,
+        paymentMethod: isSplitPayment ? "Split (Cash + GCash)" : paymentMethod,
+        isSplitPayment,
+        splitMethod1,
+        splitAmount1: numSplit1,
+        splitMethod2,
+        splitAmount2: numSplit2,
+        splitCashAmount: isSplitPayment ? (splitMethod1 === "Cash" ? numSplit1 : (splitMethod2 === "Cash" ? numSplit2 : 0)) : null,
+        splitGcashAmount: isSplitPayment ? (splitMethod1 === "GCash" ? numSplit1 : (splitMethod2 === "GCash" ? numSplit2 : 0)) : null,
+        paymentRef: isRefRequired ? gcashRef.trim() || null : null,
         staffId,
       });
 
@@ -734,39 +770,170 @@ export function QuickWalkinModal({
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted" htmlFor="wk-amount">
-                Amount Paid (₱) <span className="opacity-70">(auto)</span>
-              </label>
-              <input
-                id="wk-amount"
-                type="number"
-                value={amount}
-                disabled
-                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground opacity-70"
-              />
-            </div>
-            <div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
               <label className="text-xs text-muted" htmlFor="wk-payment">
                 Payment Method
               </label>
-              <select
-                id="wk-payment"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as "Cash" | "GCash")}
-                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-              >
-                <option value="Cash">Cash</option>
-                <option value="GCash">GCash</option>
-              </select>
+              <label className="flex items-center gap-1.5 text-xs text-gold cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isSplitPayment}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setIsSplitPayment(checked);
+                    if (checked) {
+                      setSplitAmount1(amount);
+                      setSplitAmount2(0);
+                      setLastEditedSplitField("amount1");
+                    }
+                  }}
+                  className="accent-gold"
+                />
+                Split Payment
+              </label>
             </div>
+
+            {!isSplitPayment ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted" htmlFor="wk-amount">
+                    Amount Paid (₱) <span className="opacity-70">(auto)</span>
+                  </label>
+                  <input
+                    id="wk-amount"
+                    type="number"
+                    value={amount}
+                    disabled
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground opacity-70"
+                  />
+                </div>
+                <div>
+                  <select
+                    id="wk-payment"
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="GCash">GCash</option>
+                    <option value="Card">Card</option>
+                    <option value="Maya">Maya</option>
+                  </select>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 rounded-md border border-border/80 bg-background/50 p-3">
+                <div className="flex items-center justify-between text-xs text-muted">
+                  <span>Total Required: <strong className="text-gold">₱{amount.toLocaleString()}</strong></span>
+                  <span className="text-[10px] uppercase tracking-wide text-gold">Split Active</span>
+                </div>
+
+                {/* Method 1 + Amount 1 */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted" htmlFor="wk-split-method-1">
+                      Method 1
+                    </label>
+                    <select
+                      id="wk-split-method-1"
+                      value={splitMethod1}
+                      onChange={(e) => setSplitMethod1(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+                    >
+                      <option value="Cash">Cash</option>
+                      <option value="GCash">GCash</option>
+                      <option value="Card">Card</option>
+                      <option value="Maya">Maya</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted" htmlFor="wk-split-amount-1">
+                      Amount 1 (₱)
+                    </label>
+                    <input
+                      id="wk-split-amount-1"
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={splitAmount1}
+                      onChange={(e) => {
+                        const valStr = e.target.value;
+                        if (valStr === "") {
+                          setSplitAmount1("");
+                          setLastEditedSplitField("amount1");
+                        } else {
+                          const val = parseFloat(valStr);
+                          const num = isNaN(val) ? 0 : val;
+                          setSplitAmount1(num);
+                          setSplitAmount2(Math.max(0, amount - num));
+                          setLastEditedSplitField("amount1");
+                        }
+                      }}
+                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Method 2 + Amount 2 */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted" htmlFor="wk-split-method-2">
+                      Method 2
+                    </label>
+                    <select
+                      id="wk-split-method-2"
+                      value={splitMethod2}
+                      onChange={(e) => setSplitMethod2(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+                    >
+                      <option value="GCash">GCash</option>
+                      <option value="Cash">Cash</option>
+                      <option value="Card">Card</option>
+                      <option value="Maya">Maya</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted" htmlFor="wk-split-amount-2">
+                      Amount 2 (₱)
+                    </label>
+                    <input
+                      id="wk-split-amount-2"
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={splitAmount2}
+                      onChange={(e) => {
+                        const valStr = e.target.value;
+                        if (valStr === "") {
+                          setSplitAmount2("");
+                          setLastEditedSplitField("amount2");
+                        } else {
+                          const val = parseFloat(valStr);
+                          const num = isNaN(val) ? 0 : val;
+                          setSplitAmount2(num);
+                          setSplitAmount1(Math.max(0, amount - num));
+                          setLastEditedSplitField("amount2");
+                        }
+                      }}
+                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none font-mono"
+                    />
+                  </div>
+                </div>
+
+                {!isSplitValid && (
+                  <p className="rounded-md border border-red-900/50 bg-red-950/30 px-2.5 py-1.5 text-xs text-red-300 font-medium">
+                    ⚠ Sum of Method 1 (₱{numSplit1.toLocaleString()}) and Method 2 (₱{numSplit2.toLocaleString()}) must equal required total (₱{amount.toLocaleString()}).
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
-          {paymentMethod === "GCash" && (
+          {(paymentMethod !== "Cash" || (isSplitPayment && (splitMethod1 !== "Cash" || splitMethod2 !== "Cash"))) && (
             <div>
               <label className="text-xs text-muted" htmlFor="wk-gcash-ref">
-                GCash Reference Number <span className="opacity-70">(optional)</span>
+                Reference Number <span className="opacity-70">(optional — GCash / Card / Maya)</span>
               </label>
               <input
                 id="wk-gcash-ref"
