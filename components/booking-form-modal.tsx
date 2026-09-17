@@ -70,7 +70,6 @@ export function BookingFormModal({
   const [walkinName, setWalkinName] = useState("");
   const [serviceId, setServiceId] = useState(services[0]?.id ?? "");
   const [therapistId, setTherapistId] = useState("");
-  const [therapistTouched, setTherapistTouched] = useState(false);
   const [date, setDate] = useState(defaultDate || todayIso());
   const [slotTime, setSlotTime] = useState<string>("");
   const [useCustomTime, setUseCustomTime] = useState(false);
@@ -130,16 +129,6 @@ export function BookingFormModal({
       setUnavailableTherapists(map);
     });
   }, [date]);
-
-  // Default the Therapist select to the first *available* therapist rather
-  // than blindly `therapists[0]` — re-runs whenever the availability map
-  // reloads (date change) so an unavailable default never sticks, but only
-  // while the user hasn't picked one manually.
-  useEffect(() => {
-    if (therapistTouched) return;
-    const firstAvailable = therapists.find((t) => !unavailableTherapists.has(t.id));
-    setTherapistId(firstAvailable?.id ?? "");
-  }, [therapists, unavailableTherapists, therapistTouched]);
 
   useEffect(() => {
     if (error) errorRef.current?.scrollIntoView({ block: "nearest" });
@@ -407,10 +396,7 @@ export function BookingFormModal({
                 <select
                   id="bTherapist"
                   value={therapistId}
-                  onChange={(e) => {
-                    setTherapistTouched(true);
-                    setTherapistId(e.target.value);
-                  }}
+                  onChange={(e) => setTherapistId(e.target.value)}
                   className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
                 >
                   <option value="">— select —</option>

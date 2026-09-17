@@ -248,6 +248,8 @@ export type Database = {
       }
       clients: {
         Row: {
+          archived: boolean | null
+          archived_at: string | null
           birth_day: number | null
           birth_month: number | null
           codename: string
@@ -255,6 +257,8 @@ export type Database = {
           email: string | null
           id: string
           investor: boolean
+          is_active: boolean | null
+          is_archived: boolean | null
           member_code: string
           password_hash: string | null
           phone: string | null
@@ -262,9 +266,12 @@ export type Database = {
           privacy_consent: boolean
           qr_token: string
           since_date: string
+          status: string | null
           username: string
         }
         Insert: {
+          archived?: boolean | null
+          archived_at?: string | null
           birth_day?: number | null
           birth_month?: number | null
           codename: string
@@ -272,6 +279,8 @@ export type Database = {
           email?: string | null
           id?: string
           investor?: boolean
+          is_active?: boolean | null
+          is_archived?: boolean | null
           member_code: string
           password_hash?: string | null
           phone?: string | null
@@ -279,9 +288,12 @@ export type Database = {
           privacy_consent?: boolean
           qr_token?: string
           since_date?: string
+          status?: string | null
           username: string
         }
         Update: {
+          archived?: boolean | null
+          archived_at?: string | null
           birth_day?: number | null
           birth_month?: number | null
           codename?: string
@@ -289,6 +301,8 @@ export type Database = {
           email?: string | null
           id?: string
           investor?: boolean
+          is_active?: boolean | null
+          is_archived?: boolean | null
           member_code?: string
           password_hash?: string | null
           phone?: string | null
@@ -296,6 +310,7 @@ export type Database = {
           privacy_consent?: boolean
           qr_token?: string
           since_date?: string
+          status?: string | null
           username?: string
         }
         Relationships: []

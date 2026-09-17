@@ -18,9 +18,11 @@ export type Client = {
   username: string;
   member_code?: string;
   has_portal_account: boolean;
-  is_archived?: boolean;
+  is_archived?: boolean | null;
   archived_at?: string | null;
-  is_active?: boolean;
+  is_active?: boolean | null;
+  status?: string | null;
+  archived?: boolean | null;
 };
 export type Service = {
   id: string;

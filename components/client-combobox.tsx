@@ -27,7 +27,13 @@ export function ClientCombobox({
   // 1. Filter active members only
   const activeMembers = useMemo(() => {
     return (clients ?? []).filter(
-      (c) => c.is_archived !== true && c.archived_at == null && c.is_active !== false
+      (c) =>
+        c.is_archived !== true &&
+        c.archived_at == null &&
+        c.is_active !== false &&
+        c.archived !== true &&
+        c.status !== "archived" &&
+        c.status !== "inactive"
     );
   }, [clients]);
 
