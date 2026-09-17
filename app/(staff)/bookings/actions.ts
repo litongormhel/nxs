@@ -217,10 +217,10 @@ export async function quickWalkin(
   }
 
   const isSplit = input.isSplitPayment || input.paymentMethod === "Split (Cash + GCash)";
-  const method1 = input.isSplitPayment ? (input.splitMethod1 ?? "Cash") : "Cash";
-  const amount1 = input.isSplitPayment ? (input.splitAmount1 ?? 0) : (isSplit ? (input.splitCashAmount ?? 0) : input.amount);
-  const method2 = input.isSplitPayment ? (input.splitMethod2 ?? "GCash") : "GCash";
-  const amount2 = input.isSplitPayment ? (input.splitAmount2 ?? 0) : (isSplit ? (input.splitGcashAmount ?? 0) : 0);
+  const method1 = input.splitMethod1 ?? "Cash";
+  const amount1 = isSplit ? (input.splitCashAmount ?? input.splitAmount1 ?? 0) : input.amount;
+  const method2 = input.splitMethod2 ?? "GCash";
+  const amount2 = isSplit ? (input.splitGcashAmount ?? input.splitAmount2 ?? 0) : 0;
 
   const primaryMethod = isSplit ? method1 : input.paymentMethod;
   const primaryAmount = isSplit ? amount1 : input.amount;

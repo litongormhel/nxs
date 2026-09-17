@@ -5,6 +5,14 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Align Quick Walk-in Split Payment UI to dropdown option "Split (Cash + GCash)" — complete**
+  (`ohm#quickwalkindropdownsplit`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Split Payment Dropdown Option (`components/quick-walkin-modal.tsx`)**: Removed standalone `Split Payment` checkbox. Added `Split (Cash + GCash)` directly to Payment Method dropdown options (`Cash`, `GCash`, `Card`, `Maya`, `Split (Cash + GCash)`).
+  - **Dual Column Inputs & Auto-balancing (`components/quick-walkin-modal.tsx`)**: Renders side-by-side `Cash Amount (₱)` and `GCash Amount (₱)` inputs with auto-balancing and validation feedback. Reference number field displayed when GCash amount > 0.
+  - **Backend Action Parameter Alignment (`app/(staff)/bookings/actions.ts`)**: Updated `quickWalkin` action to extract `splitCashAmount` and `splitGcashAmount`, preserving backend split sales ledger logic.
+  - `npm run build` clean. See [[bookings_state]], [[sales_state]], and `.ai/briefing.md`.
+
 - **Remove ACTION column and Check Out buttons from Bookings page — complete**
   (`ohm#rembookingact`, 2026-09-17).
   - **Check-in Tab Cleanup (`components/booking-browser.tsx`)**: Removed `ACTION` table header (`<th>ACTION</th>`) and `Check Out` button cell (`<td><button ...>Check Out</button></td>`) under the **Check-in** tab table.
