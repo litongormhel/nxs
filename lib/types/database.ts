@@ -1253,7 +1253,7 @@ export type Database = {
           p_pin: string
           p_reason: string
           p_sale_id: string
-          p_staff_id: string
+          p_staff_id?: string | null
         }
         Returns: Json
       }
@@ -1262,7 +1262,7 @@ export type Database = {
           p_pin: string
           p_reason: string
           p_sale_id: string
-          p_staff_id: string
+          p_staff_id?: string | null
         }
         Returns: Json
       }

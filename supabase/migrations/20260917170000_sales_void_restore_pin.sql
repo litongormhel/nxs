@@ -32,7 +32,7 @@ create or replace function public.void_sale_with_pin(
   p_sale_id uuid,
   p_pin text,
   p_reason text,
-  p_staff_id uuid
+  p_staff_id uuid default null
 )
 returns jsonb
 language plpgsql
@@ -77,12 +77,14 @@ begin
 
   perform set_config('app.void_via_code', 'false', true);
 
-  insert into public.action_logs (staff_id, action, detail)
-  values (
-    p_staff_id,
-    'sale_void',
-    format('sale_id=%s voided_by=%s reason=%s', p_sale_id, p_staff_id, trim(p_reason))
-  );
+  if p_staff_id is not null then
+    insert into public.action_logs (staff_id, action, detail)
+    values (
+      p_staff_id,
+      'sale_void',
+      format('sale_id=%s voided_by=%s reason=%s', p_sale_id, p_staff_id, trim(p_reason))
+    );
+  end if;
 
   return jsonb_build_object('ok', true);
 end;
@@ -93,7 +95,7 @@ create or replace function public.restore_sale_with_pin(
   p_sale_id uuid,
   p_pin text,
   p_reason text,
-  p_staff_id uuid
+  p_staff_id uuid default null
 )
 returns jsonb
 language plpgsql
@@ -138,12 +140,14 @@ begin
 
   perform set_config('app.void_via_code', 'false', true);
 
-  insert into public.action_logs (staff_id, action, detail)
-  values (
-    p_staff_id,
-    'sale_restore',
-    format('sale_id=%s restored_by=%s reason=%s', p_sale_id, p_staff_id, trim(p_reason))
-  );
+  if p_staff_id is not null then
+    insert into public.action_logs (staff_id, action, detail)
+    values (
+      p_staff_id,
+      'sale_restore',
+      format('sale_id=%s restored_by=%s reason=%s', p_sale_id, p_staff_id, trim(p_reason))
+    );
+  end if;
 
   return jsonb_build_object('ok', true);
 end;

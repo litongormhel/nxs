@@ -94,11 +94,13 @@ export async function voidSale(
     staffId = legacyStaffId ?? "";
   }
 
+  const formattedStaffId = (staffId && staffId.trim()) ? staffId : undefined;
+
   const { data, error } = await supabase.rpc("void_sale_with_pin", {
     p_sale_id: saleId,
     p_pin: pin,
     p_reason: reason,
-    p_staff_id: staffId,
+    p_staff_id: formattedStaffId,
   });
 
   if (error) {
@@ -132,11 +134,13 @@ export async function restoreSale(
 ): Promise<ActionResult> {
   const supabase = await createClient();
 
+  const formattedStaffId = (input.staffId && input.staffId.trim()) ? input.staffId : undefined;
+
   const { data, error } = await supabase.rpc("restore_sale_with_pin", {
     p_sale_id: input.saleId,
     p_pin: input.pin,
     p_reason: input.reason,
-    p_staff_id: input.staffId,
+    p_staff_id: formattedStaffId,
   });
 
   if (error) {
