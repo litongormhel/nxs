@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createStaffServiceClient } from "@/lib/staff/service-client";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -75,8 +76,6 @@ export async function voidSale(
   input: VoidSaleInput | string,
   legacyStaffId?: string
 ): Promise<ActionResult> {
-  const supabase = await createClient();
-
   let saleId: string;
   let pin: string;
   let reason: string;
@@ -94,30 +93,67 @@ export async function voidSale(
     staffId = legacyStaffId ?? "";
   }
 
-  const formattedStaffId = (staffId && staffId.trim()) ? staffId : undefined;
+  const formattedStaffId = staffId && staffId.trim() ? staffId.trim() : null;
 
-  const { data, error } = await supabase.rpc("void_sale_with_pin", {
-    p_sale_id: saleId,
-    p_pin: pin,
-    p_reason: reason,
-    p_staff_id: formattedStaffId,
-  });
-
-  if (error) {
-    console.error("[voidSale RPC Error]:", error);
-    return { ok: false, error: error.message || String(error) };
+  if (!pin || !pin.trim()) {
+    return { ok: false, error: "Manager PIN is required." };
   }
 
-  const res = data as { ok?: boolean; success?: boolean; error?: string | { message?: string } } | null;
-  if (!res || (res.ok !== true && res.success !== true)) {
-    const errMsg =
-      typeof res?.error === "string"
-        ? res.error
-        : res?.error?.message || "Failed to void sale.";
-    console.error("[voidSale Failed]:", res);
-    return { ok: false, error: errMsg };
+  if (!reason || !reason.trim()) {
+    return { ok: false, error: "Reason for void is required." };
   }
 
+  const adminClient = createStaffServiceClient();
+
+  // Step 1: Fetch void_auth_code_hash from app_settings
+  const { data: settings, error: settingsError } = await adminClient
+    .from("app_settings")
+    .select("void_auth_code_hash")
+    .single();
+
+  if (settingsError || !settings?.void_auth_code_hash) {
+    return {
+      ok: false,
+      error: "Manager PIN is not configured yet. Ask Owner to set it in Settings.",
+    };
+  }
+
+  // Step 2: Verify the provided pin against void_auth_code_hash
+  const { data: isValid, error: pinError } = await adminClient.rpc(
+    "verify_void_pin",
+    { p_pin: pin.trim() }
+  );
+
+  if (pinError || !isValid) {
+    return { ok: false, error: "Invalid Manager / Owner PIN." };
+  }
+
+  // Step 3: Directly update public.sales
+  const { error: updateError } = await adminClient
+    .from("sales")
+    .update({
+      voided: true,
+      void_reason: reason.trim(),
+      voided_at: new Date().toISOString(),
+      voided_by: formattedStaffId,
+    })
+    .eq("id", saleId);
+
+  if (updateError) {
+    console.error("[voidSale Direct Update Error]:", updateError);
+    return { ok: false, error: updateError.message || "Failed to void sale." };
+  }
+
+  // Step 4: Insert audit record into action_logs directly
+  if (formattedStaffId) {
+    await adminClient.from("action_logs").insert({
+      staff_id: formattedStaffId,
+      action: "sale_void",
+      detail: `sale_id=${saleId} voided_by=${formattedStaffId} reason=${reason.trim()}`,
+    });
+  }
+
+  // Step 5: Return { ok: true } and call revalidatePath("/sales")
   revalidatePath("/sales");
   return { ok: true };
 }
@@ -132,32 +168,72 @@ export type RestoreSaleInput = {
 export async function restoreSale(
   input: RestoreSaleInput
 ): Promise<ActionResult> {
-  const supabase = await createClient();
+  const saleId = input.saleId;
+  const pin = input.pin;
+  const reason = input.reason;
+  const staffId = input.staffId;
 
-  const formattedStaffId = (input.staffId && input.staffId.trim()) ? input.staffId : undefined;
+  const formattedStaffId = staffId && staffId.trim() ? staffId.trim() : null;
 
-  const { data, error } = await supabase.rpc("restore_sale_with_pin", {
-    p_sale_id: input.saleId,
-    p_pin: input.pin,
-    p_reason: input.reason,
-    p_staff_id: formattedStaffId,
-  });
-
-  if (error) {
-    console.error("[restoreSale RPC Error]:", error);
-    return { ok: false, error: error.message || String(error) };
+  if (!pin || !pin.trim()) {
+    return { ok: false, error: "Manager PIN is required." };
   }
 
-  const res = data as { ok?: boolean; success?: boolean; error?: string | { message?: string } } | null;
-  if (!res || (res.ok !== true && res.success !== true)) {
-    const errMsg =
-      typeof res?.error === "string"
-        ? res.error
-        : res?.error?.message || "Failed to restore sale.";
-    console.error("[restoreSale Failed]:", res);
-    return { ok: false, error: errMsg };
+  if (!reason || !reason.trim()) {
+    return { ok: false, error: "Reason for restore is required." };
   }
 
+  const adminClient = createStaffServiceClient();
+
+  // Step 1: Fetch void_auth_code_hash from app_settings
+  const { data: settings, error: settingsError } = await adminClient
+    .from("app_settings")
+    .select("void_auth_code_hash")
+    .single();
+
+  if (settingsError || !settings?.void_auth_code_hash) {
+    return {
+      ok: false,
+      error: "Manager PIN is not configured yet. Ask Owner to set it in Settings.",
+    };
+  }
+
+  // Step 2: Verify the provided pin against void_auth_code_hash
+  const { data: isValid, error: pinError } = await adminClient.rpc(
+    "verify_void_pin",
+    { p_pin: pin.trim() }
+  );
+
+  if (pinError || !isValid) {
+    return { ok: false, error: "Invalid Manager / Owner PIN." };
+  }
+
+  // Step 3: Directly update public.sales
+  const { error: updateError } = await adminClient
+    .from("sales")
+    .update({
+      voided: false,
+      void_reason: null,
+      voided_at: null,
+      voided_by: null,
+    })
+    .eq("id", saleId);
+
+  if (updateError) {
+    console.error("[restoreSale Direct Update Error]:", updateError);
+    return { ok: false, error: updateError.message || "Failed to restore sale." };
+  }
+
+  // Step 4: Insert audit record into action_logs directly
+  if (formattedStaffId) {
+    await adminClient.from("action_logs").insert({
+      staff_id: formattedStaffId,
+      action: "sale_restore",
+      detail: `sale_id=${saleId} restored_by=${formattedStaffId} reason=${reason.trim()}`,
+    });
+  }
+
+  // Step 5: Return { ok: true } and call revalidatePath("/sales")
   revalidatePath("/sales");
   return { ok: true };
 }

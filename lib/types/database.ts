@@ -1248,6 +1248,12 @@ export type Database = {
         }
         Returns: Json
       }
+      verify_void_pin: {
+        Args: {
+          p_pin: string
+        }
+        Returns: boolean
+      }
       void_sale_with_pin: {
         Args: {
           p_pin: string
