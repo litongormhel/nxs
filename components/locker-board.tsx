@@ -3,13 +3,19 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStaffSim } from "@/lib/staff-context";
-import { checkOutLocker } from "@/app/(staff)/lockers/actions";
+import { CheckoutConfirmModal, type CheckoutTarget } from "@/components/checkout-confirm-modal";
 
 type Occupancy = {
   occupancyId: string;
   label: string;
   checkedInAt: string;
   stale: boolean;
+  clientCodename?: string;
+  roomNumber?: number | null;
+  serviceName?: string;
+  startTime?: string | null;
+  durationMinutes?: number | null;
+  therapistName?: string | null;
 };
 
 export function LockerBoard({
@@ -24,6 +30,7 @@ export function LockerBoard({
   const [occ, setOcc] = useState(occupancy);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [busyLocker, setBusyLocker] = useState<number | null>(null);
+  const [checkoutTarget, setCheckoutTarget] = useState<CheckoutTarget | null>(null);
 
   const occupiedCount = Object.keys(occ).length;
   const staleCount = Object.values(occ).filter((o) => o.stale).length;
@@ -31,25 +38,6 @@ export function LockerBoard({
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2400);
-  };
-
-  const handleCheckOut = async (num: number) => {
-    const entry = occ[num];
-    if (!entry) return;
-    setBusyLocker(num);
-    const res = await checkOutLocker(entry.occupancyId, sessionStaff?.id ?? "");
-    setBusyLocker(null);
-    if (!res.ok) {
-      showToast(res.error);
-      return;
-    }
-    setOcc((prev) => {
-      const next = { ...prev };
-      delete next[num];
-      return next;
-    });
-    showToast(`Locker ${num} checked out — now available`);
-    router.refresh();
   };
 
   return (
@@ -102,7 +90,20 @@ export function LockerBoard({
                   )}
                   <button
                     disabled={busyLocker === num}
-                    onClick={() => handleCheckOut(num)}
+                    onClick={() =>
+                      setCheckoutTarget({
+                        occupancyId: entry.occupancyId,
+                        clientCodename: entry.clientCodename ?? entry.label,
+                        lockerNumber: num,
+                        roomNumber: entry.roomNumber,
+                        serviceName: entry.serviceName ?? "Service",
+                        startTime: entry.startTime,
+                        durationMinutes: entry.durationMinutes,
+                        therapistName: entry.therapistName,
+                        checkedInAt: entry.checkedInAt,
+                        isWetArea: entry.serviceName === "Wet Area",
+                      })
+                    }
                     className="mt-1.5 w-full rounded border border-[#a97e2e] py-1 text-[9px] font-bold text-accent-gold hover:bg-[#c89b3c]/10 disabled:opacity-50"
                   >
                     Check Out
@@ -115,6 +116,23 @@ export function LockerBoard({
           );
         })}
       </div>
+
+      {checkoutTarget && (
+        <CheckoutConfirmModal
+          target={checkoutTarget}
+          onClose={() => setCheckoutTarget(null)}
+          onSuccess={() => {
+            const num = checkoutTarget.lockerNumber;
+            setOcc((prev) => {
+              const next = { ...prev };
+              delete next[num];
+              return next;
+            });
+            showToast(`Locker ${num} checked out — now available`);
+            router.refresh();
+          }}
+        />
+      )}
 
       {toastMessage && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-[#a97e2e] bg-surface-2 px-5 py-2.5 font-mono text-xs font-semibold text-accent-gold shadow-2xl animate-fade-in">

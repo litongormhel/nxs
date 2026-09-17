@@ -5,6 +5,21 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Add Check-out Confirmation Modal with Early/Pre-Massage Alert — complete**
+  (`ohm#checkoutconfirm`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Check-Out Confirmation Dialog (`components/checkout-confirm-modal.tsx`)**:
+    - Built reusable client component `CheckoutConfirmModal` showing Client Codename, Assigned Locker, and Room & Service.
+    - Evaluated client operating status (`upcoming`, `ongoing`, `done`) using operating day time math (`getSlotStatus`).
+    - Surfaces a high-visibility amber warning box `⚠ Scheduled Massage Alert: Client has a massage scheduled for [Start Time] with [Therapist]. Are you sure you want to check them out early?` when current time is before or during the massage window.
+    - Surfaces standard check-out confirmation prompt for Wet Area or completed massages.
+    - Buttons: **Cancel** (close with 0 state change) & **Yes, Check Out** (calls `checkOutLocker` server action with loading spinner state, closes modal, and refreshes state).
+  - **Cross-View Trigger Interceptors (`components/booking-browser.tsx`, `components/call-sheet-browser.tsx`, `components/locker-board.tsx`, `app/(staff)/lockers/page.tsx`, `app/(staff)/call-sheet/page.tsx`)**:
+    - **Bookings Page (`components/booking-browser.tsx`)**: Added `Action` header column and `Check Out` button to rows under the `Check-in` tab.
+    - **Call Sheet (`components/call-sheet-browser.tsx`)**: Added `Check Out` action column/buttons to both `inProgress` call sheet table rows and `needsCheckout` prior spa-day rows. Extended `NeedsCheckoutEntry` to carry `slot_time`, `duration_minutes`, and `therapist_name`.
+    - **Locker Board (`components/locker-board.tsx`)**: Intercepted Check Out button click on occupied locker cards. Updated `app/(staff)/lockers/page.tsx` query to fetch room, service, start_time, duration_minutes, and therapist details.
+  - `npm run build` clean. See [[operations_state]] and `.ai/briefing.md`.
+
 - **Link all Room dropdowns to configured Room Capacity (18) instead of hardcoded 20 — complete**
   (`ohm#roomcapdynamic`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

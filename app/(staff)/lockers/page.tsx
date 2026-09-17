@@ -20,22 +20,42 @@ export default async function LockersPage() {
       .order("number", { ascending: true }),
     supabase
       .from("locker_occupancy")
-      .select("id, locker_number, client_id, guest_label, checked_in_at, clients(codename)")
+      .select(`
+        id, locker_number, room_number, client_id, guest_label, checked_in_at,
+        clients(codename),
+        services(name),
+        bookings(start_time, duration_minutes, room_number, therapists(name), services(name))
+      `)
       .is("checked_out_at", null),
   ]);
 
   const today = spaDayNow();
 
   const occupancyByLocker = new Map(
-    (occupancy ?? []).map((o) => [
-      o.locker_number,
-      {
-        occupancyId: o.id,
-        label: o.clients?.codename ?? o.guest_label ?? "Occupied",
-        checkedInAt: o.checked_in_at,
-        stale: toSpaDay(o.checked_in_at) !== today,
-      },
-    ])
+    (occupancy ?? []).map((o) => {
+      const bookingObj = Array.isArray(o.bookings) ? o.bookings[0] : o.bookings;
+      const clientCodename = o.clients?.codename ?? o.guest_label ?? bookingObj?.guest_label ?? "Occupied";
+      const therapistName = Array.isArray(bookingObj?.therapists)
+        ? bookingObj.therapists[0]?.name
+        : bookingObj?.therapists?.name ?? null;
+      const serviceName = o.services?.name ?? bookingObj?.services?.name ?? "Wet Area";
+
+      return [
+        o.locker_number,
+        {
+          occupancyId: o.id,
+          label: clientCodename,
+          clientCodename,
+          checkedInAt: o.checked_in_at,
+          stale: toSpaDay(o.checked_in_at) !== today,
+          roomNumber: o.room_number ?? bookingObj?.room_number ?? null,
+          serviceName,
+          startTime: bookingObj?.start_time ? bookingObj.start_time.slice(0, 5) : null,
+          durationMinutes: bookingObj?.duration_minutes ?? 90,
+          therapistName,
+        },
+      ];
+    })
   );
 
   return (
