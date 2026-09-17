@@ -5,6 +5,17 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Restrict Members Tab strictly to Clients with Portal Accounts & Purge Non-Portal Client Rows — complete**
+  (`ohm#clienttabsandpurge`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Strict Portal Account Filtering (`app/(staff)/clients/page.tsx`)**:
+    - Filtered `registeredMembers` in `ClientsPage` to strictly require `portalAccountClientIds.has(c.id)` (`has_portal_account === true`).
+    - Prevents mock/legacy clients without portal credentials from polluting the **Members** tab.
+  - **Data Cleanup Migration (`supabase/migrations/20260917160000_purge_clients_without_portal_account.sql`)**:
+    - Created safe SQL cleanup script that purges clients without a `client_portal_accounts` row from `clients` table.
+    - Safely converts their historical `bookings`, `sales`, and `locker_occupancy` into non-account walk-in records (`guest_label = c.codename`, `client_id = NULL`), preserving revenue and operational reporting history.
+  - `npm run build` clean. See [[clients_state]] and `.ai/briefing.md`.
+
 - **Separate "Members" and "Walk-In Without Account" tabs in Client Profile + Purge legacy clients without bookings today — complete**
   (`ohm#clienttabsandpurge`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

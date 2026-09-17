@@ -83,12 +83,14 @@ export default async function ClientsPage() {
     }
   }
 
-  // Which clients can EARN/REDEEM points — must have a client_portal_accounts row
+  // Members Tab MUST strictly contain clients with a registered portal account
   const portalAccountClientIds = new Set((portalAccounts ?? []).map((p) => p.client_id));
-  const clientsWithPortalFlag = (clients ?? []).map((c) => ({
-    ...c,
-    has_portal_account: portalAccountClientIds.has(c.id),
-  }));
+  const registeredMembers = (clients ?? [])
+    .filter((c) => portalAccountClientIds.has(c.id))
+    .map((c) => ({
+      ...c,
+      has_portal_account: true,
+    }));
 
   // Parse Walk-In visits
   type RawWalkInRow = {
@@ -135,7 +137,7 @@ export default async function ClientsPage() {
         </div>
       ) : (
         <ClientBrowser
-          clients={clientsWithPortalFlag}
+          clients={registeredMembers}
           walkInVisits={walkInVisits}
           services={services ?? []}
           staff={staff ?? []}
