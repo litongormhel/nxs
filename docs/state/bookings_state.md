@@ -438,6 +438,11 @@ Day-Off therapist (Leo) could be saved from New Booking.
 - **Conditional Schedule Selector (`components/booking-browser.tsx`)**: Wrapped **Massage Time / Schedule** section in `{isMassageService && (...)}`. When service is changed to "Wet Area", the schedule slot selector is completely hidden. Updated form payload in `handleConfirmSave` to pass `startTime: isMassageService ? startTime : null`.
 - **Server Action & Slot Release (`app/(staff)/bookings/actions.ts`)**: Updated `EditBookingInput.startTime` to `string | null`. Computed `finalStartTime` in `editBooking` action (`isMassageService ? input.startTime : (input.startTime ?? booking.start_time)`). Clearing `therapist_id` and `room_number` when downgraded to Wet Area immediately releases the booking from the `no_double_book_therapist` and `no_double_book_room` GiST exclusion constraints, freeing up the massage slot immediately for other bookings on that day.
 
+**Correction, `ohm#bookingfilterbar` (2026-09-17)** — Add Quick Search Bar and Time Slot Filters to Bookings Page.
+
+- **Quick Search & Filter Controls (`components/booking-browser.tsx`)**: Placed responsive Filter Bar controls directly above active tab table. `searchQuery` state supports instant client-side substring matching on `client_codename` or `guest_label` and `locker_number` (exact or partial numeric match), with a clear "x" button. `selectedTimeSlot` state supports filtering by time slot (`All` + operating-day sorted pills with active gold highlight).
+- **Record Counter & Inline Empty Message (`components/booking-browser.tsx`)**: Displays reactive record counter (`Showing X of Y bookings` / `Showing Y bookings`). Displays inline empty state `No bookings match your search or filter criteria.` when no records match filter criteria.
+
 
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 

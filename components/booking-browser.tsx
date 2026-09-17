@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { updateBookingStatus, changeBookingTherapist, editBooking } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
-import { slotsOverlap, compareSlotTimes } from "@/lib/bookings/slots";
+import { slotsOverlap, compareSlotTimes, sortSlotTimes } from "@/lib/bookings/slots";
 import { BookingFormModal } from "@/components/booking-form-modal";
 import { QuickWalkinModal } from "@/components/quick-walkin-modal";
 import { LogVisitModal } from "@/components/log-visit-modal";
@@ -137,6 +137,8 @@ export function BookingBrowser({
   const { sessionStaff } = useStaffSim();
   const [date, setDate] = useState(todayIso());
   const [tab, setTab] = useState<TabKey>("upcoming");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>("all");
   const [dayBookings, setDayBookings] = useState<BookingRow[]>([]);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -249,6 +251,37 @@ export function BookingBrowser({
       ),
     [dayBookings]
   );
+
+  const availableSlots = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of timeSlots) if (s) set.add(s.slice(0, 5));
+    for (const b of dayBookings) if (b.start_time) set.add(b.start_time.slice(0, 5));
+    return sortSlotTimes(Array.from(set));
+  }, [timeSlots, dayBookings]);
+
+  const rowsForTab = tab === "upcoming" ? upcomingRows : tab === "checkin" ? checkinRows : checkoutRows;
+
+  const filteredRows = useMemo(() => {
+    return rowsForTab.filter((row) => {
+      if (selectedTimeSlot !== "all") {
+        if (row.start_time.slice(0, 5) !== selectedTimeSlot.slice(0, 5)) {
+          return false;
+        }
+      }
+      if (searchQuery.trim() !== "") {
+        const q = searchQuery.trim().toLowerCase();
+        const label = clientLabel(row).toLowerCase();
+        const occ = occupancyOf(row);
+        const lockerStr = occ?.locker_number != null ? String(occ.locker_number) : "";
+        const nameMatch = label.includes(q);
+        const lockerMatch = lockerStr.includes(q);
+        if (!nameMatch && !lockerMatch) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [rowsForTab, selectedTimeSlot, searchQuery, clients]);
 
   async function handleSetStatus(id: string, status: Database["public"]["Enums"]["booking_status"]) {
     await updateBookingStatus(id, status);
@@ -420,8 +453,6 @@ export function BookingBrowser({
     );
   }
 
-  const rowsForTab = tab === "upcoming" ? upcomingRows : tab === "checkin" ? checkinRows : checkoutRows;
-
   return (
     <div className="mt-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -490,12 +521,88 @@ export function BookingBrowser({
         })}
       </div>
 
+      {/* Filter Bar Controls */}
+      <div className="space-y-3 rounded-xl border border-border bg-surface p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          {/* Quick Search Input */}
+          <div className="relative flex-1 max-w-md">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by client codename or locker # (e.g. KD, 23)..."
+              className="w-full rounded-md border border-border bg-background py-2 pl-3 pr-8 text-xs text-foreground placeholder:text-stone-500 focus:border-gold outline-none"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-foreground text-xs font-bold"
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Record Counter */}
+          <div className="text-xs font-medium text-stone-400">
+            {searchQuery.trim() !== "" || selectedTimeSlot !== "all" ? (
+              <span>
+                Showing <strong className="text-foreground">{filteredRows.length}</strong> of{" "}
+                <strong className="text-foreground">{rowsForTab.length}</strong> bookings
+              </span>
+            ) : (
+              <span>
+                Showing <strong className="text-foreground">{rowsForTab.length}</strong> bookings
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Time Slot Pills */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border/50">
+          <button
+            type="button"
+            onClick={() => setSelectedTimeSlot("all")}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+              selectedTimeSlot === "all"
+                ? "bg-gold text-black font-semibold"
+                : "bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200"
+            }`}
+          >
+            All
+          </button>
+          {availableSlots.map((slot) => {
+            const active = selectedTimeSlot.slice(0, 5) === slot.slice(0, 5);
+            return (
+              <button
+                key={slot}
+                type="button"
+                onClick={() => setSelectedTimeSlot(slot)}
+                className={`rounded-full px-3 py-1 text-xs transition-all ${
+                  active
+                    ? "bg-gold text-black font-semibold"
+                    : "bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200"
+                }`}
+              >
+                {fmtTime(slot)}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="space-y-3">
         {loading ? (
           <p className="py-6 text-center text-xs text-muted">Loading…</p>
         ) : rowsForTab.length === 0 ? (
           <div className="rounded-xl border border-border bg-surface p-6 text-center text-xs text-muted">
             No bookings for this date.
+          </div>
+        ) : filteredRows.length === 0 ? (
+          <div className="rounded-xl border border-border bg-surface p-6 text-center text-xs text-muted">
+            No bookings match your search or filter criteria.
           </div>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-border bg-surface">
@@ -515,7 +622,7 @@ export function BookingBrowser({
                 </tr>
               </thead>
               <tbody>
-                {rowsForTab.map((row) => {
+                {filteredRows.map((row) => {
                   const flagged = row.status === "Needs Reassignment";
                   const occ = occupancyOf(row);
                   return (

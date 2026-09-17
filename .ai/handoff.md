@@ -5,6 +5,18 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Add Quick Search Bar and Time Slot Filters to Bookings Page — complete**
+  (`ohm#bookingfilterbar`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Quick Search & Filter Controls (`components/booking-browser.tsx`)**:
+    - Added responsive Filter Bar controls directly above active tab table.
+    - `searchQuery` state: supports instant client-side substring matching on `client_codename` or `guest_label` and `locker_number` (exact or partial numeric match), with a clear "x" button.
+    - `selectedTimeSlot` state: `All` + operating-day sorted time slot pills (`4:00 PM`, `5:30 PM`, `7:00 PM`, etc.) using `sortSlotTimes`, with active gold highlight (`bg-gold text-black font-semibold`) and dark inactive pills (`bg-stone-900 border border-stone-800 text-stone-400`).
+  - **Record Counter & Inline Empty State (`components/booking-browser.tsx`)**:
+    - Record counter displays matched count vs total (`Showing X of Y bookings` / `Showing Y bookings`).
+    - Inline empty state message: `No bookings match your search or filter criteria.` rendered when no records match filter criteria.
+  - `npm run build` clean. See [[bookings_state]] and `.ai/briefing.md`.
+
 - **Port Split Payment support to Quick Walk-in Modal — complete**
   (`ohm#quickwalkinsplitpay`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

@@ -80,32 +80,32 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-17 — Port Split Payment support to Quick Walk-in Modal**
+1. **2026-09-17 — Add Quick Search Bar and Time Slot Filters to Bookings Page**
+   (`ohm#bookingfilterbar`). Implementation plan presented and approved before code execution.
+   - **Quick Search & Filter Controls (`components/booking-browser.tsx`)**: Placed responsive Filter Bar controls directly above active tab table. Added `searchQuery` (instant client-side substring search on client codename/guest label and locker number with clear 'x' button) and `selectedTimeSlot` (`All` + operating-day sorted time slot pills with active gold highlight).
+   - **Record Counter & Empty State (`components/booking-browser.tsx`)**: Displays reactive record counter (`Showing X of Y bookings` / `Showing Y bookings`). Displays inline empty state `No bookings match your search or filter criteria.` when no records match filter criteria.
+   - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
+
+2. **2026-09-17 — Port Split Payment support to Quick Walk-in Modal**
    (`ohm#quickwalkinsplitpay`). Implementation plan presented and approved before code execution.
    - **Split Payment UI & Auto-balancing (`components/quick-walkin-modal.tsx`)**: Added `Split Payment` checkbox toggle with state for `isSplitPayment`, `splitMethod1`, `splitAmount1`, `splitMethod2`, `splitAmount2`, and `lastEditedSplitField`. Added auto-balancing logic (`Method 1 + Method 2 === Total Amount`) and validation error badge.
    - **Backend Action Support (`app/(staff)/bookings/actions.ts`)**: Updated `QuickWalkinInput` type to support split payment fields. Updated `quickWalkin` action to insert 2 distinct `sales` entries for split payment channels, guaranteeing accurate shift remittance.
    - `npm run build` clean. See [[bookings_state]], [[sales_state]], and `.ai/handoff.md`.
 
-2. **2026-09-17 — Add Massage Time & Enforce 12-Hour Format in Walk-In Visit History Drawer**
+3. **2026-09-17 — Add Massage Time & Enforce 12-Hour Format in Walk-In Visit History Drawer**
    (`ohm#walkindrawertimeformat`). Implementation plan presented and approved before code execution.
    - **12-Hour Time Format Helper (`components/client-browser.tsx`)**: Created `formatTime` helper using `toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })` to format `"HH:mm"` / `"HH:mm:ss"` times into standard 12-hour AM/PM format (e.g. `11:30 PM`). Updated visit card header to display date and formatted time (e.g., `Sep 17, 2026 · 11:30 PM`).
    - **Massage Time Details Block (`components/client-browser.tsx`)**: Added a dedicated `MASSAGE TIME` block inside each visit item card details grid displaying formatted 12-hour massage start time or `None (Wet Area)`.
    - `npm run build` clean. See [[clients_state]] and `.ai/handoff.md`.
 
-3. **2026-09-17 — Add Pagination and Page Size Selector to Logs, Top Clients, and Top Thera Tables**
+4. **2026-09-17 — Add Pagination and Page Size Selector to Logs, Top Clients, and Top Thera Tables**
    (`ohm#walkinpagination`). Implementation plan presented and approved before code execution.
    - **Activity Logs Pagination (`components/logs-browser.tsx`)**: Added `pageSize` (default 10) and `currentPage` (default 1) state with auto-reset on action/date/staff filter or page size changes. Rendered paginated slice (`paginatedLogs`) and added dark token pagination bar.
    - **Analytics Top Clients & Top Thera Pagination (`components/analytics-browser.tsx`)**: Added independent `pageSize` (default 10) and `currentPage` (default 1) states for Top Clients and Top Thera sections. Preserved rank indexing across pages (`startIndex + i + 1`) and appended responsive dark token pagination bars below both cards.
    - `npm run build` clean. See [[logs_state]], [[analytics_state]], and `.ai/handoff.md`.
 
-4. **2026-09-17 — Add Pagination and Page Size Selector to Walk-In Without Account Table**
+5. **2026-09-17 — Add Pagination and Page Size Selector to Walk-In Without Account Table**
    (`ohm#walkinpagination`). Implementation plan presented and approved before code execution.
    - **Pagination State & Slicing (`components/client-browser.tsx`)**: Added `pageSize` (default 10) and `currentPage` (default 1) state with auto-reset to page 1 on search or page size changes. Computed paginated slice of filtered walk-ins (`paginatedWalkIns`).
    - **Responsive Pagination Controls Bar (`components/client-browser.tsx`)**: Placed below the walk-in table. Includes status indicator (`Showing X–Y of Z guests`), dark token rows per page dropdown (`bg-[#141210] border-[#292524] text-[#f5f5f4]` with options 10, 20, 50, 100), page indicator (`Page X of Y`), and page navigation buttons (`Previous` & `Next`).
-   - `npm run build` clean. See [[clients_state]] and `.ai/handoff.md`.
-
-5. **2026-09-17 — Restrict Members Tab strictly to Clients with Portal Accounts & Purge Non-Portal Client Rows**
-   (`ohm#clienttabsandpurge`). Implementation plan presented and approved before code execution.
-   - **Strict Portal Account Filtering (`app/(staff)/clients/page.tsx`)**: Filtered `registeredMembers` in `ClientsPage` to strictly require `portalAccountClientIds.has(c.id)` (`has_portal_account === true`). Prevents mock/legacy clients without portal credentials from polluting the **Members** tab.
-   - **Data Cleanup Migration (`supabase/migrations/20260917160000_purge_clients_without_portal_account.sql`)**: Created safe SQL cleanup script that purges clients without a `client_portal_accounts` row from `clients` table. Safely converts their historical `bookings`, `sales`, and `locker_occupancy` into non-account walk-in records (`guest_label = c.codename`, `client_id = NULL`), preserving revenue and operational reporting history.
    - `npm run build` clean. See [[clients_state]] and `.ai/handoff.md`.
