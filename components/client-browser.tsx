@@ -108,6 +108,23 @@ function abbrevName(name: string | null | undefined) {
   return `${parts[0].charAt(0)}. ${parts.slice(1).join(" ")}`;
 }
 
+function formatTime(timeStr: string | null | undefined) {
+  if (!timeStr) return "";
+  const parts = timeStr.split(":");
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (isNaN(h) || isNaN(m)) return timeStr;
+
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+
 // Simple QR-code renderer using a free API
 function QRImage({ value, size = 160 }: { value: string; size?: number }) {
   const url = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(value)}&size=${size}x${size}&margin=8&bgcolor=1a1a1a&color=c89b3c`;
@@ -968,7 +985,7 @@ export function ClientBrowser({
                     </span>
                     <span className="text-xs text-muted font-mono">
                       {formatDisplayDate(visit.booking_date)}
-                      {visit.start_time ? ` · ${visit.start_time.slice(0, 5)}` : ""}
+                      {visit.start_time ? ` · ${formatTime(visit.start_time)}` : ""}
                     </span>
                   </div>
 
@@ -984,6 +1001,17 @@ export function ClientBrowser({
                       <p className="text-[10px] uppercase tracking-wider text-muted">Therapist</p>
                       <p className="font-medium text-foreground mt-0.5">
                         {visit.therapist_name ?? <span className="text-muted italic">Unassigned</span>}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-muted">Massage Time</p>
+                      <p className="font-medium text-foreground mt-0.5">
+                        {visit.start_time ? (
+                          formatTime(visit.start_time)
+                        ) : (
+                          <span className="text-muted italic">None (Wet Area)</span>
+                        )}
                       </p>
                     </div>
 

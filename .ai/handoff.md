@@ -5,6 +5,13 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Add Massage Time & Enforce 12-Hour Format in Walk-In Visit History Drawer — complete**
+  (`ohm#walkindrawertimeformat`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **12-Hour Time Format Helper (`components/client-browser.tsx`)**: Created `formatTime` helper using `toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })` to format `"HH:mm"` / `"HH:mm:ss"` times into standard 12-hour AM/PM format (e.g. `11:30 PM`). Updated visit card header to display date and formatted time (e.g., `Sep 17, 2026 · 11:30 PM`).
+  - **Massage Time Details Block (`components/client-browser.tsx`)**: Added a dedicated `MASSAGE TIME` block inside each visit item card details grid displaying formatted 12-hour massage start time or `None (Wet Area)`.
+  - `npm run build` clean. See [[clients_state]] and `.ai/briefing.md`.
+
 - **Add Pagination and Page Size Selector to Logs, Top Clients, and Top Thera Tables — complete**
   (`ohm#walkinpagination`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

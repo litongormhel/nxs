@@ -2,6 +2,10 @@
 
 ## Implemented
 
+- **Walk-In Visit History Drawer Time Formatting & Massage Time (`ohm#walkindrawertimeformat`, 2026-09-17)**:
+  - Added `formatTime` helper in `components/client-browser.tsx` using `toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })` to format timestamps into standard 12-hour AM/PM format (e.g., `11:30 PM`).
+  - Updated visit card header timestamp display from `Sep 17, 2026 · 23:30` to `Sep 17, 2026 · 11:30 PM`.
+  - Added dedicated **MASSAGE TIME** block to the visit card details grid showing formatted 12-hour time or `<span className="text-muted italic">None (Wet Area)</span>`.
 - **Walk-In Without Account Table Pagination (`ohm#walkinpagination`, 2026-09-17)**:
   - Added state management for pagination in `components/client-browser.tsx`: `pageSize` (default 10, options: 10, 20, 50, 100) and `currentPage` (default 1).
   - Automatically resets `currentPage` to 1 whenever search query or `pageSize` changes.
