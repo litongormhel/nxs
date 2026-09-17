@@ -145,44 +145,50 @@ export function SalesBrowser({
       return;
     }
     setBusy(true);
-    const res = await editSale(
-      editing.id,
-      {
-        amount,
-        paymentMethod: editPayment,
-        paymentRef: editPayment === "GCash" ? editRef.trim() || null : null,
-        therapistId: editTherapistId || null,
-      },
-      sessionStaff?.id ?? ""
-    );
-    setBusy(false);
-    if (!res.ok) {
-      const errMsg =
-        typeof res.error === "string"
-          ? res.error
-          : (res.error as any)?.message || "An unexpected error occurred.";
+    try {
+      const res = await editSale(
+        editing.id,
+        {
+          amount,
+          paymentMethod: editPayment,
+          paymentRef: editPayment === "GCash" ? editRef.trim() || null : null,
+          therapistId: editTherapistId || null,
+        },
+        sessionStaff?.id ?? ""
+      );
+      if (!res.ok) {
+        const errMsg =
+          typeof res.error === "string"
+            ? res.error
+            : (res.error as any)?.message || "An unexpected error occurred.";
+        setEditError(errMsg);
+        return;
+      }
+      setSales((prev) =>
+        prev.map((s) =>
+          s.id === editing.id
+            ? {
+                ...s,
+                amount,
+                payment_method: editPayment,
+                payment_ref: editPayment === "GCash" ? editRef.trim() || null : null,
+                therapist_id: editTherapistId || null,
+                therapist_name:
+                  therapists.find((t) => t.id === editTherapistId)?.name ?? null,
+                edited_by_name: "You",
+              }
+            : s
+        )
+      );
+      setEditing(null);
+      showToast("Sale updated");
+      router.refresh();
+    } catch (err: any) {
+      const errMsg = err?.message || "An unexpected error occurred.";
       setEditError(errMsg);
-      return;
+    } finally {
+      setBusy(false);
     }
-    setSales((prev) =>
-      prev.map((s) =>
-        s.id === editing.id
-          ? {
-              ...s,
-              amount,
-              payment_method: editPayment,
-              payment_ref: editPayment === "GCash" ? editRef.trim() || null : null,
-              therapist_id: editTherapistId || null,
-              therapist_name:
-                therapists.find((t) => t.id === editTherapistId)?.name ?? null,
-              edited_by_name: "You",
-            }
-          : s
-      )
-    );
-    setEditing(null);
-    showToast("Sale updated");
-    router.refresh();
   };
 
   const openVoidModal = (sale: Sale) => {
@@ -225,74 +231,79 @@ export function SalesBrowser({
     setPinModalBusy(true);
     setPinModalError(null);
 
-    const staffId = sessionStaff?.id ?? "";
+    try {
+      const staffId = sessionStaff?.id ?? "";
 
-    if (pinModalTarget.mode === "void") {
-      const res = await voidSale({
-        saleId: pinModalTarget.sale.id,
-        pin: trimmedPin,
-        reason: trimmedReason,
-        staffId,
-      });
-      setPinModalBusy(false);
+      if (pinModalTarget.mode === "void") {
+        const res = await voidSale({
+          saleId: pinModalTarget.sale.id,
+          pin: trimmedPin,
+          reason: trimmedReason,
+          staffId,
+        });
 
-      if (!res.ok) {
-        const errMsg =
-          typeof res.error === "string"
-            ? res.error
-            : (res.error as any)?.message || "An unexpected error occurred.";
-        setPinModalError(errMsg);
-        return;
+        if (!res.ok) {
+          const errMsg =
+            typeof res.error === "string"
+              ? res.error
+              : (res.error as any)?.message || "An unexpected error occurred.";
+          setPinModalError(errMsg);
+          return;
+        }
+
+        setSales((prev) =>
+          prev.map((s) =>
+            s.id === pinModalTarget.sale.id
+              ? {
+                  ...s,
+                  voided: true,
+                  void_reason: trimmedReason,
+                  voided_by_name: sessionStaff?.name ?? "Manager",
+                }
+              : s
+          )
+        );
+        closePinModal();
+        showToast("Sale voided successfully");
+        router.refresh();
+      } else {
+        const res = await restoreSale({
+          saleId: pinModalTarget.sale.id,
+          pin: trimmedPin,
+          reason: trimmedReason,
+          staffId,
+        });
+
+        if (!res.ok) {
+          const errMsg =
+            typeof res.error === "string"
+              ? res.error
+              : (res.error as any)?.message || "An unexpected error occurred.";
+          setPinModalError(errMsg);
+          return;
+        }
+
+        setSales((prev) =>
+          prev.map((s) =>
+            s.id === pinModalTarget.sale.id
+              ? {
+                  ...s,
+                  voided: false,
+                  void_reason: null,
+                  voided_by_name: null,
+                }
+              : s
+          )
+        );
+        closePinModal();
+        showToast("Sale restored successfully");
+        router.refresh();
       }
-
-      setSales((prev) =>
-        prev.map((s) =>
-          s.id === pinModalTarget.sale.id
-            ? {
-                ...s,
-                voided: true,
-                void_reason: trimmedReason,
-                voided_by_name: sessionStaff?.name ?? "Manager",
-              }
-            : s
-        )
-      );
-      closePinModal();
-      showToast("Sale voided successfully");
-      router.refresh();
-    } else {
-      const res = await restoreSale({
-        saleId: pinModalTarget.sale.id,
-        pin: trimmedPin,
-        reason: trimmedReason,
-        staffId,
-      });
+    } catch (err: any) {
+      const errMsg = err?.message || "An unexpected error occurred.";
+      setPinModalError(errMsg);
+    } finally {
       setPinModalBusy(false);
-
-      if (!res.ok) {
-        const errMsg =
-          typeof res.error === "string"
-            ? res.error
-            : (res.error as any)?.message || "An unexpected error occurred.";
-        setPinModalError(errMsg);
-        return;
-      }
-
-      setSales((prev) =>
-        prev.map((s) =>
-          s.id === pinModalTarget.sale.id
-            ? {
-                ...s,
-                voided: false,
-                void_reason: null,
-                voided_by_name: null,
-              }
-            : s
-        )
-      );
-      closePinModal();
-      showToast("Sale restored successfully");
-      router.refresh();
     }
   };
 
