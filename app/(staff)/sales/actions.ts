@@ -59,21 +59,79 @@ export async function editSale(
   return { ok: true };
 }
 
-export async function voidSale(saleId: string, actorStaffId: string): Promise<ActionResult> {
+export type VoidSaleInput = {
+  saleId: string;
+  pin: string;
+  reason: string;
+  staffId: string;
+};
+
+export async function voidSale(
+  input: VoidSaleInput | string,
+  legacyStaffId?: string
+): Promise<ActionResult> {
   const supabase = await createClient();
 
-  const { error } = await supabase
-    .from("sales")
-    .update({
-      voided: true,
-      voided_by: actorStaffId,
-      voided_at: new Date().toISOString(),
-    })
-    .eq("id", saleId);
+  let saleId: string;
+  let pin: string;
+  let reason: string;
+  let staffId: string;
+
+  if (typeof input === "object" && input !== null) {
+    saleId = input.saleId;
+    pin = input.pin;
+    reason = input.reason;
+    staffId = input.staffId;
+  } else {
+    saleId = input;
+    pin = "";
+    reason = "Direct void";
+    staffId = legacyStaffId ?? "";
+  }
+
+  const { data, error } = await supabase.rpc("void_sale_with_pin", {
+    p_sale_id: saleId,
+    p_pin: pin,
+    p_reason: reason,
+    p_staff_id: staffId,
+  });
 
   if (error) return fail(error);
 
-  await logAction(supabase, actorStaffId, "sale_void", `sale_id=${saleId}`);
+  const res = data as { ok: boolean; error?: string };
+  if (!res.ok) {
+    return { ok: false, error: res.error ?? "Failed to void sale." };
+  }
+
+  revalidatePath("/sales");
+  return { ok: true };
+}
+
+export type RestoreSaleInput = {
+  saleId: string;
+  pin: string;
+  reason: string;
+  staffId: string;
+};
+
+export async function restoreSale(
+  input: RestoreSaleInput
+): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("restore_sale_with_pin", {
+    p_sale_id: input.saleId,
+    p_pin: input.pin,
+    p_reason: input.reason,
+    p_staff_id: input.staffId,
+  });
+
+  if (error) return fail(error);
+
+  const res = data as { ok: boolean; error?: string };
+  if (!res.ok) {
+    return { ok: false, error: res.error ?? "Failed to restore sale." };
+  }
 
   revalidatePath("/sales");
   return { ok: true };

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStaffSim } from "@/lib/staff-context";
-import { editSale, voidSale, voidSaleWithCode } from "@/app/(staff)/sales/actions";
+import { editSale, voidSale, restoreSale } from "@/app/(staff)/sales/actions";
 import { spaDayNow, shiftSpaDay } from "@/lib/analytics/spa-day";
 
 export type Sale = {
@@ -19,12 +19,18 @@ export type Sale = {
   therapist_name: string | null;
   voided: boolean;
   voided_by_name: string | null;
+  void_reason?: string | null;
   edited_by_name: string | null;
   created_at: string;
 };
 
 type Therapist = { id: string; name: string };
 type Authorizer = { id: string; name: string };
+
+type PinModalTarget = {
+  sale: Sale;
+  mode: "void" | "restore";
+};
 
 const PAYMENT_METHODS = ["Cash", "GCash", "Card", "Points"] as const;
 
@@ -69,6 +75,8 @@ export function SalesBrowser({
 
   const [sales, setSales] = useState<Sale[]>(initialSales);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Edit Modal State
   const [editing, setEditing] = useState<Sale | null>(null);
   const [editAmount, setEditAmount] = useState("");
   const [editPayment, setEditPayment] = useState<(typeof PAYMENT_METHODS)[number]>("Cash");
@@ -77,14 +85,14 @@ export function SalesBrowser({
   const [editError, setEditError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const [voidStepUp, setVoidStepUp] = useState<Sale | null>(null);
-  const [voidAuthorizerId, setVoidAuthorizerId] = useState("");
-  const [voidCode, setVoidCode] = useState("");
-  const [voidError, setVoidError] = useState<string | null>(null);
-  const [voidBusy, setVoidBusy] = useState(false);
+  // Mandatory Security PIN Confirmation Modal State
+  const [pinModalTarget, setPinModalTarget] = useState<PinModalTarget | null>(null);
+  const [pinInput, setPinInput] = useState("");
+  const [reasonInput, setReasonInput] = useState("");
+  const [pinModalError, setPinModalError] = useState<string | null>(null);
+  const [pinModalBusy, setPinModalBusy] = useState(false);
 
   const editAllowed = currentRole === "Supervisor" || currentRole === "Owner";
-  const directVoidAllowed = currentRole === "Supervisor" || currentRole === "Owner";
 
   const { cashRemit, onlineRemit, totalShiftSales, validSalesCount } = useMemo(() => {
     let cash = 0;
@@ -173,81 +181,107 @@ export function SalesBrowser({
     router.refresh();
   };
 
-  const handleVoid = async (sale: Sale) => {
-    if (directVoidAllowed) {
-      if (!window.confirm("Void this sale? It stays on record but is excluded from totals.")) {
-        return;
-      }
-      const res = await voidSale(sale.id, sessionStaff?.id ?? "");
-      if (!res.ok) {
-        showToast(res.error);
-        return;
-      }
-      setSales((prev) =>
-        prev.map((s) => (s.id === sale.id ? { ...s, voided: true } : s))
-      );
-      showToast("Sale voided");
-      router.refresh();
-      return;
-    }
-
-    setVoidStepUp(sale);
-    setVoidAuthorizerId("");
-    setVoidCode("");
-    setVoidError(null);
+  const openVoidModal = (sale: Sale) => {
+    setPinModalTarget({ sale, mode: "void" });
+    setPinInput("");
+    setReasonInput("");
+    setPinModalError(null);
   };
 
-  const closeVoidStepUp = () => setVoidStepUp(null);
+  const openRestoreModal = (sale: Sale) => {
+    setPinModalTarget({ sale, mode: "restore" });
+    setPinInput("");
+    setReasonInput("");
+    setPinModalError(null);
+  };
 
-  const confirmVoidStepUp = async () => {
-    if (!voidStepUp) return;
-    if (!voidAuthorizerId) {
-      setVoidError("Select who is authorizing this void.");
+  const closePinModal = () => {
+    setPinModalTarget(null);
+    setPinInput("");
+    setReasonInput("");
+    setPinModalError(null);
+  };
+
+  const handleConfirmPinModal = async () => {
+    if (!pinModalTarget) return;
+
+    const trimmedPin = pinInput.trim();
+    const trimmedReason = reasonInput.trim();
+
+    if (!trimmedPin) {
+      setPinModalError("Manager / Owner PIN is required.");
       return;
     }
-    if (!/^\d{6}$/.test(voidCode)) {
-      setVoidError("Enter the 6-digit authorization code.");
+
+    if (!trimmedReason) {
+      setPinModalError(`Reason for ${pinModalTarget.mode} is required.`);
       return;
     }
-    setVoidBusy(true);
-    const res = await voidSaleWithCode(voidStepUp.id, voidCode, voidAuthorizerId);
-    setVoidBusy(false);
 
-    if (!res.ok) {
-      switch (res.reason) {
-        case "locked": {
-          const retry = new Date(res.retryAfter).toLocaleTimeString("en-US", {
-            hour: "numeric",
-            minute: "2-digit",
-          });
-          setVoidError(`Too many failed attempts. Try again after ${retry}.`);
-          break;
-        }
-        case "not_configured":
-          setVoidError("Void code isn't set up yet. Ask the Owner to configure it in Settings.");
-          break;
-        case "invalid_code":
-          setVoidError(`Incorrect code. ${res.attemptsRemaining} attempt(s) remaining.`);
-          break;
-        case "invalid_authorizer":
-          setVoidError("Selected staff member can't authorize a void.");
-          break;
-        default:
-          setVoidError(res.error);
+    setPinModalBusy(true);
+    setPinModalError(null);
+
+    const staffId = sessionStaff?.id ?? "";
+
+    if (pinModalTarget.mode === "void") {
+      const res = await voidSale({
+        saleId: pinModalTarget.sale.id,
+        pin: trimmedPin,
+        reason: trimmedReason,
+        staffId,
+      });
+      setPinModalBusy(false);
+
+      if (!res.ok) {
+        setPinModalError(res.error);
+        return;
       }
-      return;
-    }
 
-    const saleId = voidStepUp.id;
-    const authorizerName = authorizers.find((a) => a.id === voidAuthorizerId)?.name ?? "—";
-    setSales((prev) =>
-      prev.map((s) =>
-        s.id === saleId ? { ...s, voided: true, voided_by_name: authorizerName } : s
-      )
-    );
-    setVoidStepUp(null);
-    showToast("Sale voided");
-    router.refresh();
+      setSales((prev) =>
+        prev.map((s) =>
+          s.id === pinModalTarget.sale.id
+            ? {
+                ...s,
+                voided: true,
+                void_reason: trimmedReason,
+                voided_by_name: sessionStaff?.name ?? "Manager",
+              }
+            : s
+        )
+      );
+      closePinModal();
+      showToast("Sale voided successfully");
+      router.refresh();
+    } else {
+      const res = await restoreSale({
+        saleId: pinModalTarget.sale.id,
+        pin: trimmedPin,
+        reason: trimmedReason,
+        staffId,
+      });
+      setPinModalBusy(false);
+
+      if (!res.ok) {
+        setPinModalError(res.error);
+        return;
+      }
+
+      setSales((prev) =>
+        prev.map((s) =>
+          s.id === pinModalTarget.sale.id
+            ? {
+                ...s,
+                voided: false,
+                void_reason: null,
+                voided_by_name: null,
+              }
+            : s
+        )
+      );
+      closePinModal();
+      showToast("Sale restored successfully");
+      router.refresh();
+    }
   };
 
   return (
@@ -255,14 +289,9 @@ export function SalesBrowser({
       {/* Top Header & Spa Day Date Selector */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5">
         <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-serif font-bold text-foreground tracking-tight">
-              Daily Sales Remittance
-            </h1>
-            <span className="inline-flex items-center rounded-full border border-[#C97A3E]/40 bg-[#C97A3E]/10 px-2.5 py-0.5 text-[11px] font-medium text-[#C97A3E]">
-              Spa Operational Window (8:00 AM – 2:00 AM)
-            </span>
-          </div>
+          <h1 className="text-2xl font-serif font-bold text-foreground tracking-tight">
+            Daily Sales Remittance
+          </h1>
           <p className="text-xs text-muted mt-1">
             Cash shift remittance and transaction tally for Spa Day operational window.
           </p>
@@ -381,7 +410,7 @@ export function SalesBrowser({
             <div
               key={s.id}
               className={`grid gap-3 border-b border-border px-4 py-3 text-[12px] last:border-b-0 min-w-[900px] items-center ${
-                s.voided ? "opacity-50" : ""
+                s.voided ? "opacity-50 bg-white/[0.02]" : ""
               }`}
               style={{ gridTemplateColumns: GRID_COLS }}
             >
@@ -397,7 +426,7 @@ export function SalesBrowser({
                   </span>
                 )}
               </div>
-              <div className="font-mono font-semibold text-accent-gold">
+              <div className={`font-mono font-semibold ${s.voided ? "line-through text-muted" : "text-accent-gold"}`}>
                 ₱{s.amount.toLocaleString()}
               </div>
               <div className="text-muted">
@@ -409,9 +438,7 @@ export function SalesBrowser({
               <div className="text-muted">{s.promo_label ?? "—"}</div>
               <div className="text-muted">{s.therapist_name ?? "—"}</div>
               <div className="flex flex-wrap items-center gap-1.5">
-                {s.is_walkin ? (
-                  <span className="text-[10px] text-muted italic">No action — walk-in, no account</span>
-                ) : !s.voided ? (
+                {!s.voided ? (
                   <>
                     <button
                       disabled={!editAllowed}
@@ -422,15 +449,25 @@ export function SalesBrowser({
                       Edit
                     </button>
                     <button
-                      onClick={() => handleVoid(s)}
+                      onClick={() => openVoidModal(s)}
                       className="rounded-md border border-[#6b2b2b] px-2 py-1 text-[10.5px] font-semibold text-accent-red hover:bg-accent-red/10 cursor-pointer"
                     >
                       Void
                     </button>
                   </>
-                ) : null}
+                ) : (
+                  <button
+                    onClick={() => openRestoreModal(s)}
+                    className="rounded-md border border-[#3e5e40] bg-emerald-500/10 px-2 py-1 text-[10.5px] font-semibold text-emerald-400 hover:bg-emerald-500/20 cursor-pointer"
+                  >
+                    Restore
+                  </button>
+                )}
                 {s.edited_by_name && (
                   <div className="w-full text-[9.5px] text-muted">Edited by {s.edited_by_name}</div>
+                )}
+                {s.voided && s.void_reason && (
+                  <div className="w-full text-[9.5px] text-accent-red/80 italic">Reason: {s.void_reason}</div>
                 )}
               </div>
             </div>
@@ -532,67 +569,85 @@ export function SalesBrowser({
         </div>
       )}
 
-      {/* Void Step Up Modal */}
-      {voidStepUp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      {/* Mandatory Security PIN Confirmation Modal */}
+      {pinModalTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-fade-in">
           <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4">
-            <div>
-              <h3 className="text-base font-bold text-foreground">Void Sale — Authorization Required</h3>
+            <div className="border-b border-border pb-3">
+              <h3 className="text-base font-bold text-foreground">
+                {pinModalTarget.mode === "void" ? "Confirm Void Sale" : "Confirm Restore Sale"}
+              </h3>
               <p className="text-[11px] text-muted mt-1">
-                {voidStepUp.client_name} · {voidStepUp.service_name} · ₱{voidStepUp.amount.toLocaleString()}
+                {pinModalTarget.sale.client_name} · {pinModalTarget.sale.service_name} · ₱{pinModalTarget.sale.amount.toLocaleString()}
               </p>
             </div>
             <div className="space-y-3">
               <div>
                 <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
-                  Authorizing Supervisor / Owner
+                  Manager / Owner PIN <span className="text-accent-red">*</span>
                 </label>
-                <select
-                  value={voidAuthorizerId}
-                  onChange={(e) => setVoidAuthorizerId(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
-                >
-                  <option value="">— Select —</option>
-                  {authorizers.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={pinInput}
+                  onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="Enter Manager PIN"
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-sm tracking-[0.2em] text-foreground outline-none focus:border-gold"
+                  autoFocus
+                />
               </div>
               <div>
                 <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
-                  6-Digit Authorization Code
+                  Reason for {pinModalTarget.mode} <span className="text-accent-red">*</span>
                 </label>
                 <input
                   type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={voidCode}
-                  onChange={(e) => setVoidCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-sm tracking-[0.3em] text-foreground outline-none focus:border-gold"
-                  placeholder="••••••"
+                  value={reasonInput}
+                  onChange={(e) => setReasonInput(e.target.value)}
+                  placeholder={
+                    pinModalTarget.mode === "void"
+                      ? "e.g. Accidental double entry / Client cancelled"
+                      : "e.g. Reverting accidental void"
+                  }
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
                 />
               </div>
-              {voidError && (
-                <div className="text-[11px] font-semibold text-accent-red">{voidError}</div>
+              {pinModalError && (
+                <div className="text-[11px] font-semibold text-accent-red bg-accent-red/10 p-2 rounded-md border border-accent-red/20">
+                  {pinModalError}
+                </div>
               )}
             </div>
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-2 pt-2 border-t border-border">
               <button
                 type="button"
-                onClick={closeVoidStepUp}
-                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground cursor-pointer"
+                disabled={pinModalBusy}
+                onClick={closePinModal}
+                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground disabled:opacity-50 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                disabled={voidBusy}
-                onClick={confirmVoidStepUp}
-                className="flex-1 rounded-lg bg-accent-red py-2 text-xs font-bold text-black hover:brightness-110 disabled:opacity-50 cursor-pointer"
+                disabled={pinModalBusy}
+                onClick={handleConfirmPinModal}
+                className={`flex-1 rounded-lg py-2 text-xs font-bold text-black disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5 ${
+                  pinModalTarget.mode === "void"
+                    ? "bg-accent-red hover:brightness-110"
+                    : "bg-emerald-500 hover:brightness-110"
+                }`}
               >
-                Void Sale
+                {pinModalBusy ? (
+                  <>
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-black border-t-transparent" />
+                    Processing…
+                  </>
+                ) : pinModalTarget.mode === "void" ? (
+                  "Confirm Void"
+                ) : (
+                  "Confirm Restore"
+                )}
               </button>
             </div>
           </div>

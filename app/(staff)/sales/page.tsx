@@ -17,7 +17,7 @@ export default async function SalesPage({
     supabase
       .from("sales")
       .select(
-        "id, client_id, guest_label, amount, payment_method, payment_ref, therapist_id, voided, voided_at, voided_by, edited_by, edited_at, created_at, clients(codename), services(name), therapists(name), promos(label)"
+        "id, client_id, guest_label, amount, payment_method, payment_ref, therapist_id, voided, voided_at, voided_by, void_reason, edited_by, edited_at, created_at, clients(codename), services(name), therapists(name), promos(label)"
       )
       .gte("created_at", bounds.startIso)
       .lte("created_at", bounds.endIso)
@@ -51,6 +51,7 @@ export default async function SalesPage({
           therapist_name: s.therapists?.name ?? null,
           voided: s.voided,
           voided_by_name: s.voided_by ? staffNameById.get(s.voided_by) ?? "—" : null,
+          void_reason: (s as { void_reason?: string | null }).void_reason ?? null,
           edited_by_name: s.edited_by ? staffNameById.get(s.edited_by) ?? "—" : null,
           created_at: s.created_at,
         }))}

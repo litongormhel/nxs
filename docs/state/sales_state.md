@@ -8,15 +8,16 @@
   `amount`, `payment_method` (checked: `Cash`/`GCash`/`Card`/`Points`),
   `payment_ref`, `manual_discount_type` (checked: `pct`/`fixed`),
   `manual_discount_value`, `processed_by` (FK, not null), `edited_by`/
-  `edited_at` (mutation audit), `voided`/`voided_at`/`voided_by` (void
-  audit).
+  `edited_at` (mutation audit), `voided`/`voided_at`/`voided_by`/`void_reason` (void
+  audit & reason).
 - `public.sale_addons` — join table to `addons` with `price_at_sale`
   (price snapshot at time of sale, independent of `addons.price` changing
   later).
+- RPC functions `public.void_sale_with_pin` and `public.restore_sale_with_pin` for PIN-verified voiding and restoring.
 - Mutable and voidable by design — not append-only like the ledger. Cross-
   references the ledger only via `point_transactions.sale_id` (optional).
 
-## Implemented (app level, Core Loop `ohm#7f3k9d2m`)
+## Implemented (app level, Core Loop `ohm#7f3k9d2m` & Refinements `ohm#salesvoidrestorepin`)
 
 - **Log Visit / Quick Walk-In Write Path (`logVisitBooking` / `quickWalkin`, `ohm#spltpaylog`, 2026-09-17)**:
   - Payment dropdown restricted to `Cash`, `GCash`, and `Split (Cash + GCash)`.
@@ -25,6 +26,11 @@
     - Row 1: `payment_method: 'Cash'`, `amount: splitCashAmount`
     - Row 2: `payment_method: 'GCash'`, `amount: splitGcashAmount`, `payment_ref: paymentRef`
   - Preserves table schema while ensuring Daily Sales Remittance KPI cards (`Cash Remit` vs `Online / E-Wallet`) automatically tally split amounts accurately.
+- **Universal Actions & Manager PIN Security Guard (`sales-browser.tsx`, `actions.ts`, `ohm#salesvoidrestorepin`, 2026-09-17)**:
+  - **Header Clean Up**: Removed `(Spa Operational Window 8:00 AM – 2:00 AM)` pill/badge from Daily Sales Remittance header.
+  - **Universal Actions**: Removed `is_walkin` action blocking (`No action — walk-in, no account`). All sales rows (members & walk-ins) feature `[Edit]` and `[Void]` buttons when active, and `[Restore]` button when voided.
+  - **Mandatory Manager PIN Confirmation Modal**: Mandates entering a valid 4 to 6 digit Manager/Owner PIN and required reason string before committing `Void` or `Restore` actions.
+  - **Backend Actions & Audit**: `voidSale` and `restoreSale` server actions validate PIN against `app_settings.void_auth_code_hash` via `void_sale_with_pin` and `restore_sale_with_pin` RPCs, record `void_reason` and audit logs in `action_logs`, and update sales void status.
 - `processed_by` is the real authenticated staff member (`sessionStaff.id`).
 - **RLS, real role-based as of Staff Auth 6C-2 (`ohm#5m8t2x6b`,
   2026-08-29)**: the additive `public_select`/`public_insert`/

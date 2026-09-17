@@ -707,6 +707,7 @@ export type Database = {
           voided: boolean
           voided_at: string | null
           voided_by: string | null
+          void_reason: string | null
         }
         Insert: {
           amount?: number
@@ -721,13 +722,14 @@ export type Database = {
           manual_discount_value?: number | null
           payment_method: string
           payment_ref?: string | null
-          processed_by: string
+          processed_by?: string
           promo_id?: string | null
           service_id: string
           therapist_id?: string | null
           voided?: boolean
           voided_at?: string | null
           voided_by?: string | null
+          void_reason?: string | null
         }
         Update: {
           amount?: number
@@ -749,6 +751,7 @@ export type Database = {
           voided?: boolean
           voided_at?: string | null
           voided_by?: string | null
+          void_reason?: string | null
         }
         Relationships: [
           {
@@ -1242,6 +1245,24 @@ export type Database = {
           p_authorizing_staff_id: string
           p_code: string
           p_sale_id: string
+        }
+        Returns: Json
+      }
+      void_sale_with_pin: {
+        Args: {
+          p_pin: string
+          p_reason: string
+          p_sale_id: string
+          p_staff_id: string
+        }
+        Returns: Json
+      }
+      restore_sale_with_pin: {
+        Args: {
+          p_pin: string
+          p_reason: string
+          p_sale_id: string
+          p_staff_id: string
         }
         Returns: Json
       }
