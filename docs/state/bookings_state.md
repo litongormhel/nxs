@@ -99,11 +99,11 @@
     `bookings.therapist_id`) when a booking is linked via Find Booking
     search; editable dropdown for walk-ins (no linked booking); disabled/
     exempted for Wet Area in both cases (`ohm#7n4k9wx3`, 2026-09-02).
-  - Assign Locker dropdown (shows free lockers).
+  - Assign Locker dropdown (`ohm#logvstconflict`, 2026-09-17): queries active `locker_occupancy` (`checked_out_at IS NULL`) with `booking_id` and `client_id`; renders occupied lockers as `Locker X - Unavailable` (`disabled={true}`, `text-stone-500`), while auto-selecting and enabling pre-assigned lockers for the active booking/client as `Locker X (Assigned)`.
   - Field order (`ohm#7f3k2m9p`, 2026-09-16): Availed Service → Upgrade Box (conditional) → Manual Discount → **Promo Code** (standalone dropdown) → **Add-ons** checklist → Points & Amount Paid (2-column auto-calc grid) → **Payment Method** (standalone dropdown) → GCash Ref (conditional) → Staff attribution.
 - `app/bookings/actions.ts` — `logVisitBooking` server action handles complete visit logging
   (marks booking `Completed`, inserts `sales`, `sale_addons`, `point_transactions`, `locker_occupancy`,
-  and `action_logs` in one atomic flow); `updateBookingStatus` handles status transitions.
+  and `action_logs` in one atomic flow). Updates existing active `locker_occupancy` (`checked_out_at IS NULL`) matching `input.bookingId` if present, preventing false positive self-collisions on room/locker availability checks (`ohm#logvstconflict`, 2026-09-17); `updateBookingStatus` handles status transitions.
 - `components/booking-form-modal.tsx` — **New Booking** form (updated to full
   HTML mockup parity):
   - Client selector dropdown (`<select id="bClient">`) with `— Walk-in / No account —`

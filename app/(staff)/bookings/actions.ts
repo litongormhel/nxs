@@ -751,30 +751,69 @@ export async function logVisitBooking(
       );
 
   // 2. Assign Locker Occupancy FIRST (validates locker/room constraints before updating booking status)
-  const { data: lockerData, error: lockerErr } = await supabase
+  const { data: existingOcc } = await supabase
     .from("locker_occupancy")
-    .insert({
-      locker_number: input.lockerNumber,
-      client_id: input.clientId,
-      guest_label: input.guestLabel,
-      room_number: input.roomNumber,
-      service_id: input.serviceId,
-      checked_in_by: input.staffId,
-      booking_id: input.bookingId,
-    })
     .select("id")
-    .single();
+    .eq("booking_id", input.bookingId)
+    .is("checked_out_at", null)
+    .maybeSingle();
 
-  if (lockerErr) {
-    if (lockerErr.code === UNIQUE_VIOLATION) {
-      if (lockerErr.message.includes("one_active_occupant_per_locker")) {
-        return { ok: false, field: "locker", error: "That locker was just taken — pick another." };
+  let lockerDataId: string | null = null;
+  let isNewInsert = false;
+
+  if (existingOcc) {
+    const { error: lockerErr } = await supabase
+      .from("locker_occupancy")
+      .update({
+        locker_number: input.lockerNumber,
+        client_id: input.clientId,
+        guest_label: input.guestLabel,
+        room_number: input.roomNumber,
+        service_id: input.serviceId,
+        checked_in_by: input.staffId,
+      })
+      .eq("id", existingOcc.id);
+
+    if (lockerErr) {
+      if (lockerErr.code === UNIQUE_VIOLATION) {
+        if (lockerErr.message.includes("one_active_occupant_per_locker")) {
+          return { ok: false, field: "locker", error: "That locker was just taken — pick another." };
+        }
+        if (lockerErr.message.includes("one_active_occupant_per_room")) {
+          return { ok: false, field: "room", error: "That room is already occupied." };
+        }
       }
-      if (lockerErr.message.includes("one_active_occupant_per_room")) {
-        return { ok: false, field: "room", error: "That room is already occupied." };
-      }
+      return { ok: false, error: lockerErr.message };
     }
-    return { ok: false, error: lockerErr.message };
+    lockerDataId = existingOcc.id;
+  } else {
+    const { data: lockerData, error: lockerErr } = await supabase
+      .from("locker_occupancy")
+      .insert({
+        locker_number: input.lockerNumber,
+        client_id: input.clientId,
+        guest_label: input.guestLabel,
+        room_number: input.roomNumber,
+        service_id: input.serviceId,
+        checked_in_by: input.staffId,
+        booking_id: input.bookingId,
+      })
+      .select("id")
+      .single();
+
+    if (lockerErr) {
+      if (lockerErr.code === UNIQUE_VIOLATION) {
+        if (lockerErr.message.includes("one_active_occupant_per_locker")) {
+          return { ok: false, field: "locker", error: "That locker was just taken — pick another." };
+        }
+        if (lockerErr.message.includes("one_active_occupant_per_room")) {
+          return { ok: false, field: "room", error: "That room is already occupied." };
+        }
+      }
+      return { ok: false, error: lockerErr.message };
+    }
+    lockerDataId = lockerData?.id ?? null;
+    isNewInsert = true;
   }
 
   // 3. Update booking status to Completed
@@ -789,9 +828,26 @@ export async function logVisitBooking(
     .eq("id", input.bookingId);
 
   if (bookingErr) {
-    // Roll back locker occupancy if booking update fails
-    if (lockerData?.id) {
-      await supabase.from("locker_occupancy").delete().eq("id", lockerData.id);
+    // Roll back locker occupancy if booking update fails and it was a new insert
+    if (isNewInsert && lockerDataId) {
+      await supabase.from("locker_occupancy").delete().eq("id", lockerDataId);
+    }
+    if (bookingErr.code === EXCLUSION_VIOLATION) {
+      if (bookingErr.message.includes("no_double_book_room")) {
+        return {
+          ok: false,
+          field: "room",
+          error: "That room is already booked for the selected time.",
+        };
+      }
+      if (bookingErr.message.includes("no_double_book_therapist")) {
+        return {
+          ok: false,
+          field: "therapist",
+          error: "That therapist is already booked for the selected time.",
+        };
+      }
+      return { ok: false, error: "This booking conflicts with an existing one." };
     }
     return { ok: false, error: bookingErr.message };
   }

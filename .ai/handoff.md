@@ -5,6 +5,19 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Exclude Self-Booking in Room Collision Check & Gray Out Occupied Lockers in Log Visit Modal — complete**
+  (`ohm#logvstconflict`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Self-Collision Room Validation (`app/(staff)/bookings/actions.ts`)**:
+    - Updated `logVisitBooking` server action to check for an existing active `locker_occupancy` record (`checked_out_at IS NULL`) for `input.bookingId`.
+    - If found, updates the existing row instead of executing a duplicate insert, avoiding false positive `one_active_occupant_per_room` collisions with itself.
+    - Preserved unique constraint validation against other bookings' active occupancies.
+  - **Locker Availability Dropdown (`components/log-visit-modal.tsx`)**:
+    - Updated `LogVisitModal` to query `locker_number, booking_id, client_id` from active `locker_occupancy`.
+    - Rendered occupied lockers as `Locker X - Unavailable` with `disabled={true}` and `text-stone-500` styling.
+    - Preserved and auto-selected lockers pre-assigned to the active booking/client as `Locker X (Assigned)`.
+  - `npm run build` clean. See [[bookings_state]] and `.ai/briefing.md`.
+
 - **Split Payment (Cash + GCash), Restrict Methods to Cash/GCash, and Remove Redundant Staff Input — complete**
   (`ohm#spltpaylog`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

@@ -132,8 +132,14 @@ export function LogVisitModal({
   const [therapistId, setTherapistId] = useState<string>(
     initialBooking?.therapist_id ?? ""
   );
+  type ActiveOccupancy = {
+    locker_number: number;
+    booking_id: string | null;
+    client_id: string | null;
+  };
+
   const [lockerNumber, setLockerNumber] = useState<number | "">("");
-  const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
+  const [activeOccupancies, setActiveOccupancies] = useState<ActiveOccupancy[]>([]);
 
   const [isRedemption, setIsRedemption] = useState(false);
   const [isUpgraded, setIsUpgraded] = useState(false);
@@ -175,10 +181,10 @@ export function LogVisitModal({
 
     supabase
       .from("locker_occupancy")
-      .select("locker_number")
+      .select("locker_number, booking_id, client_id")
       .is("checked_out_at", null)
       .then(({ data }) =>
-        setOccupiedLockers(new Set((data ?? []).map((r) => r.locker_number)))
+        setActiveOccupancies((data as ActiveOccupancy[]) ?? [])
       );
   }, []);
 
@@ -187,14 +193,23 @@ export function LogVisitModal({
   const isWetArea = selectedService?.name === "Wet Area";
   const selectedPromo = promos.find((p) => p.id === promoId);
 
-  const freeLockers = useMemo(() => {
-    if (lockers.length === 0) {
-      const all: number[] = [];
-      for (let i = 1; i <= 100; i++) all.push(i);
-      return all.filter((n) => !occupiedLockers.has(n));
-    }
-    return lockers.filter((n) => !occupiedLockers.has(n));
-  }, [lockers, occupiedLockers]);
+  const lockerOptions = useMemo(() => {
+    const all = lockers.length > 0 ? lockers : Array.from({ length: 100 }, (_, i) => i + 1);
+    return all.map((num) => {
+      const occ = activeOccupancies.find((o) => o.locker_number === num);
+      const isMine =
+        !!occ &&
+        ((!!selectedBookingId && occ.booking_id === selectedBookingId) ||
+          (!!clientId && occ.client_id === clientId));
+      const isOccupied = !!occ && !isMine;
+
+      return {
+        number: num,
+        isOccupied,
+        isMine,
+      };
+    });
+  }, [lockers, activeOccupancies, selectedBookingId, clientId]);
 
   // Filtered booking search results
   const matchingBookings = useMemo(() => {
@@ -232,6 +247,10 @@ export function LogVisitModal({
     setTherapistId(b.therapist_id ?? "");
     setDate(b.booking_date);
     if (b.promo_id) setPromoId(b.promo_id);
+    const existingOcc = activeOccupancies.find((o) => o.booking_id === b.id);
+    if (existingOcc) {
+      setLockerNumber(existingOcc.locker_number);
+    }
   }
 
   function onServiceSelect(val: string) {
@@ -637,9 +656,14 @@ export function LogVisitModal({
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
             >
               <option value="">— select a free locker —</option>
-              {freeLockers.map((n) => (
-                <option key={n} value={n}>
-                  Locker {n}
+              {lockerOptions.map((opt) => (
+                <option
+                  key={opt.number}
+                  value={opt.number}
+                  disabled={opt.isOccupied}
+                  className={opt.isOccupied ? "text-stone-500" : undefined}
+                >
+                  Locker {opt.number}{opt.isOccupied ? " - Unavailable" : opt.isMine ? " (Assigned)" : ""}
                 </option>
               ))}
             </select>
