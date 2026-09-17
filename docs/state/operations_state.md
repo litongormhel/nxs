@@ -84,6 +84,8 @@ occupancy rows are never hard-deleted.
   known residual gap for a future prompt, not silently patched here.
 - **Stale Locker Auto-Checkout & Sync Fix** (`ohm#lckstalesync`, 2026-09-17):
   Created stored procedure `public.auto_checkout_stale_lockers()` (`20260917120000_auto_checkout_stale_lockers.sql`) to auto check-out unclosed `locker_occupancy` rows checked in prior to the 2:00 AM cutoff date (`v_cutoff_date`), releasing stale rows (JM #9 and ohm #18) and backfilling Nanon's missing occupancy (#8). Updated `app/(staff)/lockers/page.tsx` to invoke `auto_checkout_stale_lockers()` on page load. Reordered `logVisitBooking()` in `app/(staff)/bookings/actions.ts` to assign `locker_occupancy` before setting `bookings.status = 'Completed'`, eliminating orphaned completed bookings without locker records.
+- **Client Codename Column on Call Sheet** (`ohm#cllshtclnt`, 2026-09-17):
+  Updated `app/(staff)/call-sheet/page.tsx` query to retrieve `clients(codename)` via both direct `locker_occupancy.client_id` and linked `bookings(client_id -> clients(codename))`. Updated `components/call-sheet-browser.tsx` table subtitle to `CALL SHEET — LOCKER / ROOM / SERVICE / THERA / CLIENT`, added `CLIENT` column header to the right of `THERA`, rendered client codename styled with `font-semibold text-foreground` (or fallback `—`), and updated canvas JPEG download generation.
 - Both current write paths into `locker_occupancy` — `quick_walkin()` (RPC)
   and `logVisitBooking()`'s linked-booking branch
   (`app/bookings/actions.ts`) — were verified directly (not assumed) to

@@ -9,6 +9,7 @@ type Entry = {
   service_name: string;
   slot_time: string | null;
   therapist_name: string | null;
+  client_codename: string | null;
 };
 
 type NeedsCheckoutEntry = {
@@ -70,7 +71,7 @@ function drawCallSheetJpeg(rows: Entry[], label: string): string {
   const tableTop = 96;
   const tableLeft = 32;
   const tableWidth = width - 64;
-  const colX = [tableLeft + 20, tableLeft + 220, tableLeft + 400, tableLeft + 680];
+  const colX = [tableLeft + 15, tableLeft + 140, tableLeft + 270, tableLeft + 490, tableLeft + 670];
 
   ctx.strokeStyle = border;
   ctx.lineWidth = 1;
@@ -85,6 +86,7 @@ function drawCallSheetJpeg(rows: Entry[], label: string): string {
   ctx.fillText("ROOM", colX[1], tableTop + 25);
   ctx.fillText("SERVICE", colX[2], tableTop + 25);
   ctx.fillText("THERA", colX[3], tableTop + 25);
+  ctx.fillText("CLIENT", colX[4], tableTop + 25);
 
   ctx.strokeStyle = border;
   ctx.beginPath();
@@ -111,6 +113,10 @@ function drawCallSheetJpeg(rows: Entry[], label: string): string {
     ctx.fillStyle = muted;
     ctx.font = "15px system-ui, sans-serif";
     ctx.fillText(row.therapist_name ?? "—", colX[3], y + 27);
+
+    ctx.fillStyle = foreground;
+    ctx.font = "bold 15px system-ui, sans-serif";
+    ctx.fillText(row.client_codename ?? "—", colX[4], y + 27);
 
     ctx.strokeStyle = border;
     ctx.beginPath();
@@ -176,7 +182,7 @@ export function CallSheetBrowser({
     <div className="max-w-5xl space-y-6">
       <div className="mb-2">
         <div className="text-sm font-bold tracking-[0.13em] uppercase text-muted mb-3">
-          Call Sheet — Locker / Room / Service / Thera
+          Call Sheet — Locker / Room / Service / Thera / Client
         </div>
         <div className="flex gap-2 flex-wrap">
           <button
@@ -212,12 +218,13 @@ export function CallSheetBrowser({
       <div className="rounded-xl border border-border bg-surface overflow-hidden">
         <div
           className="grid gap-4 border-b border-border px-6 py-4 text-sm font-bold tracking-wider uppercase text-muted"
-          style={{ gridTemplateColumns: "1fr 1fr 1.6fr 1fr" }}
+          style={{ gridTemplateColumns: "1fr 1fr 1.6fr 1fr 1.2fr" }}
         >
           <div>Locker</div>
           <div>Room</div>
           <div>Service</div>
           <div>Thera</div>
+          <div>Client</div>
         </div>
         {filtered.length === 0 ? (
           <div className="px-6 py-8 text-lg text-muted">No massages match this time.</div>
@@ -226,12 +233,13 @@ export function CallSheetBrowser({
             <div
               key={e.id}
               className="grid gap-4 border-b border-border px-6 py-5 text-lg last:border-b-0"
-              style={{ gridTemplateColumns: "1fr 1fr 1.6fr 1fr" }}
+              style={{ gridTemplateColumns: "1fr 1fr 1.6fr 1fr 1.2fr" }}
             >
               <div className="text-foreground">{e.locker_number}</div>
               <div className="text-muted">{e.room_number ?? "—"}</div>
               <div className="font-semibold text-accent-gold">{e.service_name}</div>
               <div className="text-muted">{e.therapist_name ?? "—"}</div>
+              <div className="font-semibold text-foreground">{e.client_codename ?? "—"}</div>
             </div>
           ))
         )}

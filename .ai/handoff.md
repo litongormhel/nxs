@@ -5,6 +5,21 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Add Client Codename Column to Call Sheet Table — complete**
+  (`ohm#cllshtclnt`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - **Data Query (`app/(staff)/call-sheet/page.tsx`)**:
+    - Updated Supabase `locker_occupancy` query to select `bookings(start_time, therapists(name), clients(codename))` alongside direct `clients(codename)`.
+    - Formatted entry payload to resolve `client_codename` from `o.clients?.codename ?? o.bookings?.clients?.codename ?? null`.
+  - **Call Sheet UI (`components/call-sheet-browser.tsx`)**:
+    - Updated `Entry` type definition.
+    - Updated table subtitle to `CALL SHEET — LOCKER / ROOM / SERVICE / THERA / CLIENT`.
+    - Added `CLIENT` column header (`<div>CLIENT</div>`) to the right of `THERA`.
+    - Rendered `client_codename` formatted with `font-semibold text-foreground` (fallback `—`).
+  - **Canvas JPEG Export (`drawCallSheetJpeg`)**:
+    - Updated canvas column coordinates and added `CLIENT` header and row values for JPEG downloads.
+  - `npm run build` clean. See [[operations_state]] and `.ai/briefing.md`.
+
 - **Fix Daily Sales Remittance Window to Include Daytime Check-Ins (8:00 AM – 2:00 AM) — complete**
   (`ohm#slswndw8am`, 2026-09-17).
   - Implementation plan presented and approved before code execution.

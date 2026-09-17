@@ -10,7 +10,7 @@ export default async function CallSheetPage() {
     supabase
       .from("locker_occupancy")
       .select(
-        "id, locker_number, room_number, checked_in_at, client_id, guest_label, clients(codename), services(name), bookings(start_time, therapists(name))"
+        "id, locker_number, room_number, checked_in_at, client_id, guest_label, clients(codename), services(name), bookings(start_time, therapists(name), clients(codename))"
       )
       .is("checked_out_at", null),
     supabase.from("weekend_slots").select("slot_time"),
@@ -27,7 +27,8 @@ export default async function CallSheetPage() {
       service_name: o.services!.name,
       slot_time: o.bookings?.start_time ? o.bookings.start_time.slice(0, 5) : null,
       therapist_name: o.bookings?.therapists?.name ?? null,
-      guest_or_client: o.clients?.codename ?? o.guest_label ?? "Walk-in",
+      client_codename: o.clients?.codename ?? o.bookings?.clients?.codename ?? null,
+      guest_or_client: o.clients?.codename ?? o.bookings?.clients?.codename ?? o.guest_label ?? "Walk-in",
       checked_in_at: o.checked_in_at,
       stale: toSpaDay(o.checked_in_at) !== today,
     }));

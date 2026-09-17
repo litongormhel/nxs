@@ -80,37 +80,37 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ## Last Completed Tasks
 
-1. **2026-09-17 — Fix Daily Sales Remittance Window to Include Daytime Check-Ins (8:00 AM – 2:00 AM)**
+1. **2026-09-17 — Add Client Codename Column to Call Sheet Table**
+   (`ohm#cllshtclnt`). Implementation plan presented and approved before code execution.
+   - Updated `app/(staff)/call-sheet/page.tsx` query to include `bookings(start_time, therapists(name), clients(codename))` in addition to `clients(codename)`, resolving `client_codename` via `o.clients?.codename ?? o.bookings?.clients?.codename ?? null`.
+   - Updated `components/call-sheet-browser.tsx` subtitle to `CALL SHEET — LOCKER / ROOM / SERVICE / THERA / CLIENT`.
+   - Added `CLIENT` header column (`<div>CLIENT</div>`) to the right of `THERA`, rendered `client_codename` styled with `font-semibold text-foreground` or fallback `—`.
+   - Updated Canvas JPEG drawer `drawCallSheetJpeg` to render the `CLIENT` header and column values in downloaded images. `npm run build` clean. See [[operations_state]] and `.ai/handoff.md`.
+
+2. **2026-09-17 — Fix Daily Sales Remittance Window to Include Daytime Check-Ins (8:00 AM – 2:00 AM)**
    (`ohm#slswndw8am`). Implementation plan presented and approved before code execution.
    - Updated `getSpaDayBounds(spaDateStr)` in `lib/analytics/spa-day.ts` start bound from `08:00:00Z` (16:00:00+08 / 4:00 PM PHT) to `00:00:00Z` (08:00:00+08 / 8:00 AM PHT), matching the 8:00 AM Spa Day turnover rule (`ohm#spaday8am`).
    - Updated badge in `components/sales-browser.tsx` to `Spa Operational Window (8:00 AM – 2:00 AM)`.
    - Ensures daytime check-in and walk-in sales logged from 8:00 AM onwards up to the 2:00 AM closing cutoff are included in the remittance tally. `npm run build` clean. See [[sales_state]] and `.ai/handoff.md`.
 
-2. **2026-09-17 — Display Therapist Availability Suffixes & Grayed-Out Disabled States in Quick Walk-In Modal Dropdown**
+3. **2026-09-17 — Display Therapist Availability Suffixes & Grayed-Out Disabled States in Quick Walk-In Modal Dropdown**
    (`ohm#j4m8v2xq`). Implementation plan presented and approved before code execution.
    - Updated `components/quick-walkin-modal.tsx` to fetch `therapist_day_off`, `therapist_absence`, and `therapist_leave` for the modal date (`todayIso()`).
    - Formatted dropdown options with status labels (`Akio - Day Off`, `Josh - On Leave`, `Name - Absent`, `Name - Fully Booked`), set `disabled={disabled}`, and applied `text-stone-500` disabled styling.
    - Extended `canSubmit` to check `!unavailableTherapists.has(therapistId)`.
    - Verified server-side validation in `app/(staff)/bookings/actions.ts` (`quickWalkin` action) handling Postgres trigger `trg_bookings_check_therapist_availability` exception `THERAPIST_UNAVAILABLE` and returning a friendly error. `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-17 — Conditionally Display Leftmost Edit Column Strictly on CHECK-IN Tab**
+4. **2026-09-17 — Conditionally Display Leftmost Edit Column Strictly on CHECK-IN Tab**
    (`ohm#bkgupcedt`).
    - Updated `components/booking-browser.tsx` to conditionally render the leftmost "Edit" header (`<th>`) and body cell (`<td>`) only when `tab === "checkin"`.
    - On UPCOMING and CHECK-OUT tabs, the redundant leftmost Edit column is removed.
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-17 — Update Spa Day Cutoff to 8:00 AM Current Date Switch**
+5. **2026-09-17 — Update Spa Day Cutoff to 8:00 AM Current Date Switch**
    (`ohm#spaday8am`).
    - Updated `lib/analytics/spa-day.ts` (`toManilaDateParts`): shifted cutoff boundary from 4:00 PM to 8:00 AM PHT.
    - From 08:00 AM PHT onwards (`hour >= 8`), `spaDayNow()` evaluates to the current calendar date so reception can prepare for the upcoming shift. Subtracting 1 day (-1 day) applies strictly between 00:00 AM and 07:59 AM PHT (`hour < 8`).
    - Verified all 5 test cases (01:30 AM Sept 18 -> "2026-09-17", 07:59 AM Sept 18 -> "2026-09-17", 08:00 AM Sept 17 -> "2026-09-17", 10:45 AM Sept 17 -> "2026-09-17", 04:00 PM Sept 17 -> "2026-09-17"). `npm run build` clean. See [[operations_state]], [[analytics_state]], and `.ai/handoff.md`.
-
-5. **2026-09-17 — Fix Desync Between Bookings Check-In Tab & Locker Board (Missing Nanon Occupancy + Stale Locker Rows)**
-   (`ohm#lckstalesync`). Implementation plan presented and approved before code execution.
-   - Reordered `logVisitBooking` in `app/(staff)/bookings/actions.ts` to assign locker occupancy before updating booking status, ensuring atomicity.
-   - Added DB migration `20260917120000_auto_checkout_stale_lockers.sql` creating `public.auto_checkout_stale_lockers()` stored procedure to auto check-out unclosed lockers past 2:00 AM cutoff, auto-releasing JM (#9) and ohm (#18) and repairing Nanon (#8).
-   - Updated `app/(staff)/lockers/page.tsx` to invoke `auto_checkout_stale_lockers()` on load.
-   - Added log detail formatter for `auto_checkout_stale_locker` in `lib/logs/format-detail.ts`. `npm run build` clean. See [[lockers_state]], [[bookings_state]], and `.ai/handoff.md`.
 
 
 
