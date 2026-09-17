@@ -5,6 +5,14 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Conditionally Display Leftmost Edit Column Strictly on CHECK-IN Tab — complete**
+  (`ohm#bkgupcedt`, 2026-09-17).
+  - Implementation plan presented and approved before code execution.
+  - Updated `components/booking-browser.tsx` table header (`<thead>`) and row rendering (`<tbody>`) to display the leftmost "Edit" button column strictly when `tab === "checkin"`.
+  - Removed the redundant leftmost Edit column from the UPCOMING tab (which already has dedicated rightmost Action buttons) and CHECK-OUT tab.
+  - Verified empty and loading states remain unaffected as they are rendered outside the `<table>`.
+  - `npm run build` clean.
+
 - **Update Spa Day Cutoff to Switch to Current Date at 8:00 AM — complete**
   (`ohm#spaday8am`, 2026-09-17).
   - Updated `lib/analytics/spa-day.ts` (`toManilaDateParts`): adjusted local Manila hour check so that starting at 8:00 AM PHT (`hour >= 8`), `spaDayNow()` evaluates to the current calendar date so reception can prepare for the upcoming shift.

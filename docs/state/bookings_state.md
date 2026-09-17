@@ -411,12 +411,10 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Added `editBooking` server action in `app/(staff)/bookings/actions.ts`: updates `bookings` (`service_id`, `therapist_id`, `start_time`), validates double-booking GiST constraint (`no_double_book_therapist`) and therapist status availability (`THERAPIST_UNAVAILABLE`), checks and updates/inserts `locker_occupancy` (preventing double-locker assignment via `one_active_occupant_per_locker`), and logs an entry to `action_logs` (`action: "edit_booking"`).
   - Revalidates `/bookings`, `/dashboard`, `/call-sheet`, `/lockers`.
 
-**Correction, `ohm#arcreassgn` (2026-09-17)** — Fix Archiving Therapist "Needs Reassignment" on Historical Bookings.
+**Correction, `ohm#bkgupcedt` (2026-09-17)** — Conditionally display leftmost Edit column strictly on CHECK-IN tab.
 
-- **Archive Therapist Date Guard**: Added `.gte("booking_date", spaDayNow())` to `archiveTherapist` server action (`app/(staff)/therapists/actions.ts`) and guarded `handleConfirmArchive` local state update in `components/therapist-browser.tsx`. Past historical bookings remain untouched when a therapist is archived.
-- **Dashboard Query Guard**: Added `.gte("booking_date", currentSpaDate)` to `app/(staff)/dashboard/page.tsx` for `status = 'Needs Reassignment'` bookings, preventing historical past rows from surfacing on the Dashboard widget.
-- **Stale Data Cleanup**: Created migration `20260917110000_cleanup_stale_needs_reassignment.sql` calling `auto_cancel_lapsed_bookings()` to resolve stale historical `Needs Reassignment` rows.
-
+- **Check-in Tab Column Condition**: Updated `BookingBrowser` (`components/booking-browser.tsx`) table header (`<thead>`) and body (`<tbody>`) to condition the leftmost Edit button column on `tab === "checkin"`.
+- **Removed Redundancy**: The leftmost Edit column is omitted from the UPCOMING tab (which features dedicated rightmost action buttons) and CHECK-OUT tab.
 
 
 ## Known simplifications (not gaps — deliberate for this phase's scope)

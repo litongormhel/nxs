@@ -500,7 +500,7 @@ export function BookingBrowser({
             <table className="w-full text-left text-[11px]">
               <thead>
                 <tr className="border-b border-border text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-                  <th className="px-3.5 py-2.5 w-12 text-center">Edit</th>
+                  {tab === "checkin" && <th className="px-3.5 py-2.5 w-12 text-center">Edit</th>}
                   <th className="px-3.5 py-2.5">Massage Time</th>
                   <th className="px-3.5 py-2.5">Client</th>
                   <th className="px-3.5 py-2.5">Service</th>
@@ -523,16 +523,18 @@ export function BookingBrowser({
                         flagged ? "bg-gradient-to-r from-red-950/20 to-surface" : ""
                       }`}
                     >
-                      <td className="px-3.5 py-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => setEditBookingRow(row)}
-                          title="Edit booking"
-                          className="rounded-md border border-border bg-surface-2 px-2 py-1 text-[10px] font-bold text-foreground hover:border-gold hover:text-accent-gold transition-all"
-                        >
-                          Edit
-                        </button>
-                      </td>
+                      {tab === "checkin" && (
+                        <td className="px-3.5 py-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setEditBookingRow(row)}
+                            title="Edit booking"
+                            className="rounded-md border border-border bg-surface-2 px-2 py-1 text-[10px] font-bold text-foreground hover:border-gold hover:text-accent-gold transition-all"
+                          >
+                            Edit
+                          </button>
+                        </td>
+                      )}
                       <td className="whitespace-nowrap px-3.5 py-3 font-mono text-[10.5px] text-muted">
                         {fmtTime(row.start_time)}
                       </td>
