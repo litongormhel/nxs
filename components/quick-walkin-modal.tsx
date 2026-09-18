@@ -240,10 +240,6 @@ export function QuickWalkinModal({
     return effectiveRooms.filter((r) => !taken.has(r));
   }, [conflicts, time, duration, effectiveRooms]);
 
-  const freeLockers = useMemo(
-    () => lockers.filter((n) => !occupiedLockers.has(n)),
-    [lockers, occupiedLockers]
-  );
 
   const filteredClients = useMemo(() => {
     if (!clientQuery.trim()) return [];
@@ -335,6 +331,7 @@ export function QuickWalkinModal({
     !!serviceId &&
     !!staffId &&
     !!lockerNumber &&
+    !occupiedLockers.has(Number(lockerNumber)) &&
     isSplitValid &&
     (clientId ? true : guestName.trim().length > 0) &&
     (!isMassageService ||
@@ -346,6 +343,10 @@ export function QuickWalkinModal({
 
   function handleSubmit() {
     setError(null);
+    if (typeof lockerNumber === "number" && occupiedLockers.has(lockerNumber)) {
+      setError("That locker is currently occupied. Please select an unoccupied locker.");
+      return;
+    }
     if (isSplitPayment && !isSplitValid) {
       setError(`Sum of Cash Amount (₱${numCash.toLocaleString()}) and GCash Amount (₱${numGcash.toLocaleString()}) must equal required total (₱${amount.toLocaleString()}).`);
       return;
@@ -674,12 +675,20 @@ export function QuickWalkinModal({
               onChange={(e) => setLockerNumber(Number(e.target.value))}
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
             >
-              <option value="">— select a free locker —</option>
-              {freeLockers.map((n) => (
-                <option key={n} value={n}>
-                  Locker {n}
-                </option>
-              ))}
+              <option value="">— select locker —</option>
+              {lockers.map((n) => {
+                const isOccupied = occupiedLockers.has(n);
+                return (
+                  <option
+                    key={n}
+                    value={n}
+                    disabled={isOccupied}
+                    className={isOccupied ? "text-muted" : undefined}
+                  >
+                    Locker {n}{isOccupied ? " — Occupied" : ""}
+                  </option>
+                );
+              })}
             </select>
           </div>
 

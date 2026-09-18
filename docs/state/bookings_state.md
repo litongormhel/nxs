@@ -164,6 +164,8 @@
     `QuickWalkinModal` aligned Split Payment UI to dropdown option `Split (Cash + GCash)` directly in main Payment Method select, replacing the standalone checkbox toggle. Renders side-by-side `Cash Amount (₱)` and `GCash Amount (₱)` inputs with auto-balancing and validation feedback badge (`Cash Amount + GCash Amount === Total Amount`). `quickWalkin` action in `app/(staff)/bookings/actions.ts` receives `isSplitPayment: true`, `splitCashAmount`, and `splitGcashAmount`, preserving backend split sales ledger logic intact.
   - **(`ohm#quickwalkinpaymethods`, 2026-09-17) Restrict Payment Method Dropdown Options & Remove Logged by Staff**:
     `QuickWalkinModal` removed `Card` and `Maya` options from the Payment Method dropdown, strictly restricting options to `Cash`, `GCash`, and `Split (Cash + GCash)`. Updated reference number input label span to `(optional — GCash)`. Removed the redundant visible "Logged by (staff)" field from the UI while preserving staff attribution in backend actions via `useStaffSim()`.
+  - **(`ohm#quickwalkinlockerdisabledstate`, 2026-09-18) Keep Occupied Lockers as Disabled Options**:
+    `QuickWalkinModal` updated locker options mapping to render all lockers without filtering occupied ones out. Occupied lockers are rendered with `disabled` attribute and text `Locker {n} — Occupied` with `text-muted` styling. Default option formatted as `— select locker —`. Added validation in `canSubmit` and `handleSubmit` ensuring selected locker is strictly unoccupied.
 - `components/sms-preview-modal.tsx` — shown after a successful New
   Booking for a registered client (`client_id` not null). Editable
   textarea pre-filled with **placeholder** copy (no locked SMS format
