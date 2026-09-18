@@ -7,6 +7,7 @@ import {
   toggleDayOff as toggleDayOffAction,
   createTherapist as createTherapistAction,
   markAbsentToday as markAbsentTodayAction,
+  markPresentToday as markPresentTodayAction,
   markOnLeave as markOnLeaveAction,
   archiveTherapist as archiveTherapistAction,
   unarchiveTherapist as unarchiveTherapistAction,
@@ -489,6 +490,57 @@ export function TherapistBrowser({
     router.refresh();
   };
 
+  // Mark present today handler — clears today's absence (and any single-day
+  // leave covering only this date), restores Needs Reassignment → Booked.
+  const handleMarkPresent = async (t: string) => {
+    const therapistId = therapistIds[t];
+    if (!therapistId || !sessionStaff) return;
+
+    const res = await markPresentTodayAction(therapistId, viewDate, sessionStaff.id);
+    if (!res.ok) {
+      showToast(`Couldn't mark ${t} present — ${res.error}`);
+      return;
+    }
+
+    setTherapistMeta((prev) => {
+      const meta = prev[t];
+      if (!meta) return prev;
+      const newLeave =
+        meta.leave?.start === viewDate && meta.leave?.end === viewDate
+          ? null
+          : meta.leave;
+      return {
+        ...prev,
+        [t]: {
+          ...meta,
+          absentDates: meta.absentDates.filter((d) => d !== viewDate),
+          leave: newLeave,
+        },
+      };
+    });
+
+    let restoredCount = 0;
+    setBookings((prev) =>
+      prev.map((b) => {
+        if (
+          b.therapist === t &&
+          b.date === viewDate &&
+          b.status === "Needs Reassignment"
+        ) {
+          restoredCount++;
+          return { ...b, status: "Booked" };
+        }
+        return b;
+      })
+    );
+    showToast(
+      `${t} marked present on ${fmtDate(viewDate)}${
+        restoredCount > 0 ? ` · ${restoredCount} booking(s) restored` : ""
+      }`
+    );
+    router.refresh();
+  };
+
   // Confirm leave — writes through to therapist_leave and flags any
   // Booked appointments in the leave range as Needs Reassignment.
   const handleConfirmLeave = async () => {
@@ -940,27 +992,44 @@ export function TherapistBrowser({
                       <div className="absolute right-0 top-7 z-30 min-w-[170px] rounded-xl border border-border bg-surface-2 py-1 shadow-2xl overflow-hidden animate-fade-in">
                         {!meta.archived ? (
                           <>
-                            <div
-                              onClick={() => {
-                                setOpenKebab(null);
-                                handleMarkAbsent(t);
-                              }}
-                              className="px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-surface cursor-pointer border-b border-border"
-                            >
-                              Mark Absent Today
-                            </div>
-                            <div
-                              onClick={() => {
-                                setOpenKebab(null);
-                                setLeaveTherapist(t);
-                                setLeaveStart(todayISO());
-                                setLeaveEnd("");
-                                setLeaveReason("");
-                              }}
-                              className="px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-surface cursor-pointer border-b border-border"
-                            >
-                              Mark On Leave
-                            </div>
+                            {isAbsentToday || onLeave ? (
+                              <div
+                                onClick={() => {
+                                  setOpenKebab(null);
+                                  handleMarkPresent(t);
+                                }}
+                                className="px-3.5 py-2 text-xs font-semibold text-emerald-400 hover:bg-surface cursor-pointer border-b border-border flex items-center gap-1.5"
+                              >
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                                Mark Present Today
+                              </div>
+                            ) : (
+                              <div
+                                onClick={() => {
+                                  setOpenKebab(null);
+                                  handleMarkAbsent(t);
+                                }}
+                                className="px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-surface cursor-pointer border-b border-border"
+                              >
+                                Mark Absent Today
+                              </div>
+                            )}
+                            {!isAbsentToday && !onLeave && (
+                              <div
+                                onClick={() => {
+                                  setOpenKebab(null);
+                                  setLeaveTherapist(t);
+                                  setLeaveStart(todayISO());
+                                  setLeaveEnd("");
+                                  setLeaveReason("");
+                                }}
+                                className="px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-surface cursor-pointer border-b border-border"
+                              >
+                                Mark On Leave
+                              </div>
+                            )}
                             <div
                               onClick={() => {
                                 setOpenKebab(null);

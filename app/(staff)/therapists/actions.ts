@@ -86,6 +86,51 @@ export async function markAbsentToday(
   return { ok: true };
 }
 
+export async function markPresentToday(
+  therapistId: string,
+  date: string,
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  // Remove the therapist_absence record for this date
+  const { error: absenceError } = await supabase
+    .from("therapist_absence")
+    .delete()
+    .eq("therapist_id", therapistId)
+    .eq("absent_date", date);
+  if (absenceError) return fail(absenceError);
+
+  // Remove any therapist_leave record that is a single-day leave on exactly this date
+  const { error: leaveError } = await supabase
+    .from("therapist_leave")
+    .delete()
+    .eq("therapist_id", therapistId)
+    .eq("start_date", date)
+    .eq("end_date", date);
+  if (leaveError) return fail(leaveError);
+
+  // Restore "Needs Reassignment" bookings on this date back to "Booked"
+  const { data: restored, error: restoreError } = await supabase
+    .from("bookings")
+    .update({ status: "Booked" })
+    .eq("therapist_id", therapistId)
+    .eq("booking_date", date)
+    .eq("status", "Needs Reassignment")
+    .select("id");
+  if (restoreError) return fail(restoreError);
+
+  await logAction(
+    supabase,
+    staffId,
+    "therapist_mark_present",
+    `therapist=${therapistId} date=${date} restored=${restored?.length ?? 0}`
+  );
+  revalidatePath("/therapists");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
 export async function markOnLeave(
   therapistId: string,
   startDate: string,
