@@ -843,9 +843,9 @@ export function LogVisitModal({
                   key={opt.number}
                   value={opt.number}
                   disabled={opt.isOccupied}
-                  className={opt.isOccupied ? "text-stone-500" : undefined}
+                  className={opt.isOccupied ? "text-muted" : undefined}
                 >
-                  Locker {opt.number}{opt.isOccupied ? " - Unavailable" : opt.isMine ? " (Assigned)" : ""}
+                  Locker {opt.number}{opt.isOccupied ? " — Occupied" : opt.isMine ? " (Assigned)" : ""}
                 </option>
               ))}
             </select>

@@ -1069,7 +1069,7 @@ function EditBookingModal({
         setError("Please select a therapist for massage service.");
         return;
       }
-      if (roomNumber === "") {
+      if (roomNumber === "" || (typeof roomNumber === "number" && occupiedRooms.has(roomNumber) && roomNumber !== booking.room_number)) {
         setError("Please select an available room for massage service.");
         return;
       }
@@ -1195,8 +1195,13 @@ function EditBookingModal({
                 const isCurrent = booking.room_number === num;
                 const disabled = occupied && !isCurrent;
                 return (
-                  <option key={num} value={num} disabled={disabled}>
-                    Room {num} {isCurrent ? " (Current)" : occupied ? " (Occupied)" : ""}
+                  <option
+                    key={num}
+                    value={num}
+                    disabled={disabled}
+                    className={disabled ? "text-muted" : undefined}
+                  >
+                    Room {num}{isCurrent ? " (Current)" : occupied ? " — Occupied" : ""}
                   </option>
                 );
               })}

@@ -338,11 +338,16 @@ export function QuickWalkinModal({
       (!!therapistId &&
         !!time &&
         !!roomNumber &&
+        freeRooms.includes(Number(roomNumber)) &&
         !takenTherapists.has(therapistId) &&
         !unavailableTherapists.has(therapistId)));
 
   function handleSubmit() {
     setError(null);
+    if (isMassageService && (roomNumber === "" || !freeRooms.includes(Number(roomNumber)))) {
+      setError("Please select an available room.");
+      return;
+    }
     if (typeof lockerNumber === "number" && occupiedLockers.has(lockerNumber)) {
       setError("That locker is currently occupied. Please select an unoccupied locker.");
       return;
@@ -644,18 +649,23 @@ export function QuickWalkinModal({
                   <select
                     id="wk-room"
                     value={roomNumber}
-                    onChange={(e) => setRoomNumber(Number(e.target.value))}
-                    disabled={freeRooms.length === 0}
+                    onChange={(e) => setRoomNumber(e.target.value === "" ? "" : Number(e.target.value))}
                     className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-50"
                   >
-                    <option value="">
-                      {freeRooms.length === 0 ? "— no rooms free —" : "— select a room —"}
-                    </option>
-                    {freeRooms.map((r) => (
-                      <option key={r} value={r}>
-                        Room {r}
-                      </option>
-                    ))}
+                    <option value="">— select room —</option>
+                    {effectiveRooms.map((r) => {
+                      const isFree = freeRooms.includes(r);
+                      return (
+                        <option
+                          key={r}
+                          value={r}
+                          disabled={!isFree}
+                          className={!isFree ? "text-muted" : undefined}
+                        >
+                          Room {r}{!isFree ? " — Occupied" : ""}
+                        </option>
+                      );
+                    })}
                   </select>
                   <p className="mt-1 text-xs text-muted">
                     {freeRooms.length} room{freeRooms.length === 1 ? "" : "s"} free at this time.

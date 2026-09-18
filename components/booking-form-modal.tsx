@@ -470,6 +470,7 @@ export function BookingFormModal({
                       disabled={taken || useCustomTime}
                       onClick={() => {
                         setSlotTime(s);
+                        setManualRoomNumber(null);
                         setError(null);
                       }}
                       className={`min-h-[44px] sm:min-h-0 rounded-md border px-2 py-2 font-mono text-xs transition-all ${
@@ -551,15 +552,22 @@ export function BookingFormModal({
                 {!time ? (
                   <option value="">— pick a time first —</option>
                 ) : (
-                  effectiveRooms.map((r) => {
-                    const isFree = freeRooms.includes(r);
-                    return (
-                      <option key={r} value={r} disabled={!isFree}>
-                        Room {r}
-                        {!isFree ? " — Unavailable" : ""}
-                      </option>
-                    );
-                  })
+                  <>
+                    <option value="">— select room —</option>
+                    {effectiveRooms.map((r) => {
+                      const isFree = freeRooms.includes(r);
+                      return (
+                        <option
+                          key={r}
+                          value={r}
+                          disabled={!isFree}
+                          className={!isFree ? "text-muted" : undefined}
+                        >
+                          Room {r}{!isFree ? " — Occupied" : ""}
+                        </option>
+                      );
+                    })}
+                  </>
                 )}
               </select>
             </div>
