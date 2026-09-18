@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { ReassignmentPanel, FlaggedBooking } from "@/components/reassignment-panel";
 import { spaDayNow } from "@/lib/analytics/spa-day";
+import { sortSlotTimes } from "@/lib/bookings/slots";
 
 async function getCount(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -33,6 +34,7 @@ export default async function DashboardPage() {
     { data: dbLeaves },
     { data: dbDaysOff },
     { data: dbTherapists },
+    { data: dbWeekendSlots },
   ] = await Promise.all([
     getCount(supabase, "therapists", { column: "archived", value: false }),
     getCount(supabase, "services", { column: "active", value: true }),
@@ -41,7 +43,7 @@ export default async function DashboardPage() {
     supabase
       .from("bookings")
       .select(
-        "id, booking_date, start_time, room_number, therapist_id, status, therapists(name, archived), services(name), clients(codename), guest_label"
+        "id, booking_date, start_time, duration_minutes, room_number, therapist_id, status, therapists(name, archived), services(name), clients(codename), guest_label"
       )
       .eq("status", "Needs Reassignment")
       .gte("booking_date", currentSpaDate)
@@ -50,7 +52,7 @@ export default async function DashboardPage() {
     supabase
       .from("bookings")
       .select(
-        "id, booking_date, start_time, room_number, therapist_id, status, therapists(name, archived), services(name), clients(codename), guest_label, locker_occupancy(id, checked_in_at, checked_out_at)"
+        "id, booking_date, start_time, duration_minutes, room_number, therapist_id, status, therapists(name, archived), services(name), clients(codename), guest_label, locker_occupancy(id, checked_in_at, checked_out_at)"
       )
       .gte("booking_date", currentSpaDate)
       .not("therapist_id", "is", null)
@@ -73,12 +75,16 @@ export default async function DashboardPage() {
       .select("id, name")
       .eq("archived", false)
       .order("name", { ascending: true }),
+    supabase
+      .from("weekend_slots")
+      .select("slot_time"),
   ]);
 
   type FlaggedRow = {
     id: string;
     booking_date: string;
     start_time: string;
+    duration_minutes?: number | null;
     room_number: number | null;
     therapist_id: string | null;
     status: string;
@@ -168,6 +174,7 @@ export default async function DashboardPage() {
     id: b.id,
     bookingDate: b.booking_date,
     startTime: b.start_time,
+    durationMinutes: b.duration_minutes,
     clientLabel: b.clients?.codename ?? b.guest_label ?? "Walk-in",
     serviceName: b.services?.name ?? "Massage",
     roomNumber: b.room_number,
@@ -217,7 +224,22 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      <ReassignmentPanel bookings={reassignmentBookings} therapists={therapistOptions} />
+      <ReassignmentPanel
+        bookings={reassignmentBookings}
+        therapists={therapistOptions}
+        daysOff={dbDaysOff ?? []}
+        absences={dbAbsences ?? []}
+        leaves={dbLeaves ?? []}
+        allBookings={(dbActiveBookings ?? []).map((b) => ({
+          id: b.id,
+          therapist_id: b.therapist_id,
+          booking_date: b.booking_date,
+          start_time: b.start_time,
+          duration_minutes: b.duration_minutes,
+          status: b.status,
+        }))}
+        standardSlots={sortSlotTimes((dbWeekendSlots ?? []).map((s) => s.slot_time.slice(0, 5)))}
+      />
     </div>
   );
 }
