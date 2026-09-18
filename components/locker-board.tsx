@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStaffSim } from "@/lib/staff-context";
 import { CheckoutConfirmModal, type CheckoutTarget } from "@/components/checkout-confirm-modal";
+import { BulkCheckoutModal } from "@/components/bulk-checkout-modal";
 
 type Occupancy = {
   occupancyId: string;
@@ -31,9 +32,14 @@ export function LockerBoard({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [busyLocker, setBusyLocker] = useState<number | null>(null);
   const [checkoutTarget, setCheckoutTarget] = useState<CheckoutTarget | null>(null);
+  const [showBulkModal, setShowBulkModal] = useState(false);
 
   const occupiedCount = Object.keys(occ).length;
   const staleCount = Object.values(occ).filter((o) => o.stale).length;
+  const staleLockerNumbers = Object.entries(occ)
+    .filter(([_, entry]) => entry.stale)
+    .map(([numStr]) => Number(numStr))
+    .sort((a, b) => a - b);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -48,10 +54,19 @@ export function LockerBoard({
         </div>
         <div className="flex items-center gap-2.5">
           {staleCount > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#5e3c3c] bg-surface-2 px-2.5 py-1 text-[9.5px] font-bold text-accent-red">
-              <span className="h-1.5 w-1.5 rounded-full bg-accent-red" />
-              {staleCount} locker{staleCount === 1 ? "" : "s"} need checkout
-            </span>
+            <>
+              <button
+                type="button"
+                onClick={() => setShowBulkModal(true)}
+                className="rounded-lg border border-[#5e3c3c] bg-surface-2 px-2.5 py-1 text-[9.5px] font-bold text-accent-red hover:bg-[#5e3c3c]/30 transition-all"
+              >
+                Check Out Overdue ({staleCount})
+              </button>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#5e3c3c] bg-surface-2 px-2.5 py-1 text-[9.5px] font-bold text-accent-red">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent-red" />
+                {staleCount} locker{staleCount === 1 ? "" : "s"} need checkout
+              </span>
+            </>
           )}
           <span className="text-[10.5px] text-muted">
             {occupiedCount} / {lockerNumbers.length} occupied
@@ -129,6 +144,27 @@ export function LockerBoard({
               return next;
             });
             showToast(`Locker ${num} checked out — now available`);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {showBulkModal && (
+        <BulkCheckoutModal
+          overdueCount={staleCount}
+          overdueLockerNumbers={staleLockerNumbers}
+          onClose={() => setShowBulkModal(false)}
+          onSuccess={(count) => {
+            setOcc((prev) => {
+              const next = { ...prev };
+              for (const [key, val] of Object.entries(next)) {
+                if (val.stale) {
+                  delete next[Number(key)];
+                }
+              }
+              return next;
+            });
+            showToast(`Bulk checked out ${count} overdue locker${count === 1 ? "" : "s"} — now available`);
             router.refresh();
           }}
         />
