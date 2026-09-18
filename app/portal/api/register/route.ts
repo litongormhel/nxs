@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/portal/service-client";
 import { hashPassword, MIN_PASSWORD_LENGTH } from "@/lib/portal/password";
-import { generateMemberCode, generateClientUsername } from "@/lib/portal/codes";
+import { generateMemberCode } from "@/lib/portal/codes";
 import { isUsernameTaken, isValidUsername } from "@/lib/portal/username";
 import { setPortalSession } from "@/lib/portal/session";
 import { checkLockout, clientIp, recordFailure } from "@/lib/portal/rate-limit";
@@ -38,6 +38,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null);
     const name = typeof body?.name === "string" ? body.name.trim() : "";
     const username = typeof body?.username === "string" ? body.username.trim() : "";
+    const cleanUsername = username.toLowerCase();
     const phone = typeof body?.phone === "string" ? normalizePhone(body.phone) : "";
     const password = typeof body?.password === "string" ? body.password : "";
 
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (await isUsernameTaken(supabase, username)) {
+    if (await isUsernameTaken(supabase, cleanUsername)) {
       return NextResponse.json(
         { error: "That username is already taken.", field: "username" },
         { status: 409 },
@@ -91,6 +92,16 @@ export async function POST(request: Request) {
     if (matchedClient) {
       clientId = matchedClient.id;
       displayName = matchedClient.codename;
+
+      const { error: updateError } = await supabase
+        .from("clients")
+        .update({ username: cleanUsername })
+        .eq("id", clientId);
+
+      if (updateError) {
+        console.error("[portal/register] Could not update client username:", updateError);
+        return NextResponse.json({ error: "Could not create client record." }, { status: 500 });
+      }
     } else {
       let created: { id: string } | null = null;
       for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS && !created; attempt++) {
@@ -99,7 +110,7 @@ export async function POST(request: Request) {
           .insert({
             codename: name,
             phone,
-            username: generateClientUsername(),
+            username: cleanUsername,
             member_code: generateMemberCode(),
           })
           .select("id")
@@ -128,7 +139,7 @@ export async function POST(request: Request) {
         client_id: clientId,
         phone,
         password_hash: passwordHash,
-        username,
+        username: cleanUsername,
       })
       .select("id, username")
       .single();

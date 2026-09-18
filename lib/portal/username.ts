@@ -15,10 +15,20 @@ export async function isUsernameTaken(
   supabase: SupabaseClient<Database>,
   username: string,
 ): Promise<boolean> {
-  const { data } = await supabase
+  const pattern = escapeLikePattern(username);
+  const { data: portalAccount } = await supabase
     .from("client_portal_accounts")
     .select("id")
-    .ilike("username", escapeLikePattern(username))
+    .ilike("username", pattern)
     .maybeSingle();
-  return !!data;
+
+  if (portalAccount) return true;
+
+  const { data: client } = await supabase
+    .from("clients")
+    .select("id")
+    .ilike("username", pattern)
+    .maybeSingle();
+
+  return !!client;
 }
