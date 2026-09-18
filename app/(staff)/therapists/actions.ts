@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createStaffServiceClient } from "@/lib/staff/service-client";
 import { spaDayNow } from "@/lib/analytics/spa-day";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
@@ -92,22 +93,35 @@ export async function markPresentToday(
   staffId: string
 ): Promise<ActionResult> {
   const supabase = await createClient();
+  // The service role client is used for the DELETE calls because
+  // therapist_absence and therapist_leave have no DELETE RLS policy yet
+  // (see migration 20260918000000_therapist_absence_leave_delete_rls.sql).
+  // All other reads/writes in this action go through the normal session client.
+  const serviceClient = createStaffServiceClient();
 
-  // Remove the therapist_absence record for this date
-  const { error: absenceError } = await supabase
+  // Remove the therapist_absence record for this date.
+  // count:"exact" lets us log whether the row was actually deleted (0 = row
+  // didn't exist; 1 = successfully removed).
+  const { error: absenceError, count: absenceCount } = await serviceClient
     .from("therapist_absence")
-    .delete()
+    .delete({ count: "exact" })
     .eq("therapist_id", therapistId)
     .eq("absent_date", date);
+  console.log(
+    `[markPresentToday] therapist_absence delete — therapist=${therapistId} date=${date} count=${absenceCount} error=${absenceError?.message ?? "none"}`
+  );
   if (absenceError) return fail(absenceError);
 
-  // Remove any therapist_leave record that is a single-day leave on exactly this date
-  const { error: leaveError } = await supabase
+  // Remove any therapist_leave record that is a single-day leave on exactly this date.
+  const { error: leaveError, count: leaveCount } = await serviceClient
     .from("therapist_leave")
-    .delete()
+    .delete({ count: "exact" })
     .eq("therapist_id", therapistId)
     .eq("start_date", date)
     .eq("end_date", date);
+  console.log(
+    `[markPresentToday] therapist_leave delete — therapist=${therapistId} date=${date} count=${leaveCount} error=${leaveError?.message ?? "none"}`
+  );
   if (leaveError) return fail(leaveError);
 
   // Restore "Needs Reassignment" bookings on this date back to "Booked"
