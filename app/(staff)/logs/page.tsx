@@ -104,7 +104,7 @@ export default async function LogsPage() {
           action: l.action,
           detail: l.detail,
           created_at: l.created_at,
-          staff_name: staffNameById.get(l.staff_id) ?? "—",
+          staff_name: l.staff_id ? (staffNameById.get(l.staff_id) ?? "Unknown Staff") : "System",
         }))}
         lookups={lookups}
       />

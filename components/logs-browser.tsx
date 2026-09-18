@@ -153,7 +153,15 @@ export function LogsBrowser({
                 style={{ gridTemplateColumns: "1.3fr .9fr 1.1fr 1.7fr" }}
               >
                 <div className="text-muted">{fmtWhen(l.created_at)}</div>
-                <div className="text-foreground">{l.staff_name}</div>
+                <div>
+                  {l.staff_name === "System" ? (
+                    <span className="inline-flex items-center rounded-md bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-muted ring-1 ring-inset ring-border">
+                      System
+                    </span>
+                  ) : (
+                    <div className="text-foreground">{l.staff_name}</div>
+                  )}
+                </div>
                 <div>
                   <span className="inline-flex items-center rounded-md bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20">
                     {formatActionLabel(l.action)}

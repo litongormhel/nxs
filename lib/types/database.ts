@@ -20,21 +20,21 @@ export type Database = {
           created_at: string
           detail: string | null
           id: string
-          staff_id: string
+          staff_id: string | null
         }
         Insert: {
           action: string
           created_at?: string
           detail?: string | null
           id?: string
-          staff_id: string
+          staff_id?: string | null
         }
         Update: {
           action?: string
           created_at?: string
           detail?: string | null
           id?: string
-          staff_id?: string
+          staff_id?: string | null
         }
         Relationships: [
           {

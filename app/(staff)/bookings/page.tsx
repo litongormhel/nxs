@@ -5,6 +5,12 @@ import { sortSlotTimes } from "@/lib/bookings/slots";
 export default async function BookingsPage() {
   const supabase = await createClient();
 
+  try {
+    await supabase.rpc("auto_cancel_lapsed_bookings");
+  } catch (err) {
+    console.error("Failed to run auto-cancel sweep on bookings load:", err);
+  }
+
   const [
     { data: clients, error: clientsError },
     { data: services },
