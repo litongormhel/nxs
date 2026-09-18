@@ -91,14 +91,27 @@ export function BookingFormModal({
   const [isPending, startTransition] = useTransition();
   const errorRef = useRef<HTMLParagraphElement>(null);
 
+  const [clientBookings, setClientBookings] = useState<
+    Array<{ client_id: string | null; guest_label: string | null; start_time: string }>
+  >([]);
+
   useEffect(() => {
     const supabase = createClient();
     supabase
       .from("bookings")
-      .select("therapist_id, room_number, start_time, duration_minutes")
+      .select("client_id, guest_label, therapist_id, room_number, start_time, duration_minutes, status")
       .eq("booking_date", date)
       .in("status", ACTIVE_STATUSES)
-      .then(({ data }) => setConflicts(data ?? []));
+      .then(({ data }) => {
+        setConflicts(data ?? []);
+        setClientBookings(
+          (data ?? []).map((b) => ({
+            client_id: b.client_id,
+            guest_label: b.guest_label,
+            start_time: b.start_time,
+          }))
+        );
+      });
   }, [date]);
 
   // Therapist status (Day Off / Absent / On Leave) for the selected date —
@@ -240,6 +253,26 @@ export function BookingFormModal({
     setError(null);
   }
 
+  const hasClientSlotConflict = useMemo(() => {
+    if (!time) return false;
+    if (!isWalkIn && clientSelectValue) {
+      return clientBookings.some(
+        (b) => b.client_id === clientSelectValue && b.start_time === time
+      );
+    }
+    if (isWalkIn && walkinName.trim()) {
+      const q = walkinName.trim().toLowerCase();
+      return clientBookings.some(
+        (b) =>
+          !b.client_id &&
+          b.guest_label &&
+          b.guest_label.trim().toLowerCase() === q &&
+          b.start_time === time
+      );
+    }
+    return false;
+  }, [time, isWalkIn, clientSelectValue, walkinName, clientBookings]);
+
   const therapistOk =
     !!therapistId && !conflictingTherapists.has(therapistId) && !unavailableTherapists.has(therapistId);
   const selectedTherapist = therapists.find((t) => t.id === therapistId);
@@ -247,6 +280,7 @@ export function BookingFormModal({
   const canSubmit =
     !isPending &&
     !isPastDate &&
+    !hasClientSlotConflict &&
     (isWalkIn ? walkinName.trim().length > 0 : !!clientSelectValue) &&
     !!serviceId &&
     !!staffId &&
@@ -261,6 +295,10 @@ export function BookingFormModal({
     setError(null);
     if (isPastDate) {
       setError("Cannot book a date in the past.");
+      return;
+    }
+    if (hasClientSlotConflict) {
+      setError(`This client already has a booking at ${fmtTime(time)}. Please select a different time.`);
       return;
     }
     if (isMassageService && !time) {
@@ -531,6 +569,12 @@ export function BookingFormModal({
                 </div>
               )}
             </div>
+          )}
+
+          {hasClientSlotConflict && time && (
+            <p className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-xs text-red-300 font-medium">
+              ⚠ This client already has a booking at {fmtTime(time)}. Please select a different time.
+            </p>
           )}
 
           {/* Room */}

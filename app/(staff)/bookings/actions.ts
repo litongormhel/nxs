@@ -82,6 +82,13 @@ async function getMaxRoomCapacity(
   return count && count > 0 ? count : 18;
 }
 
+function fmtTime(t: string): string {
+  if (!t || !t.includes(":")) return t;
+  const [h, m] = t.split(":");
+  const hr = ((+h + 11) % 12) + 1;
+  return `${hr}:${m} ${+h < 12 ? "AM" : "PM"}`;
+}
+
 export async function createBooking(
   input: CreateBookingInput
 ): Promise<CreateBookingResult> {
@@ -94,6 +101,30 @@ export async function createBooking(
         ok: false,
         field: "room",
         error: `Room ${input.roomNumber} exceeds room capacity of ${maxRoom}.`,
+      };
+    }
+  }
+
+  // Prevent duplicate same-slot booking for the same client (member or walk-in)
+  if (input.clientId || input.guestLabel) {
+    let query = supabase
+      .from("bookings")
+      .select("id")
+      .eq("booking_date", input.bookingDate)
+      .eq("start_time", input.startTime)
+      .neq("status", "Cancelled");
+
+    if (input.clientId) {
+      query = query.eq("client_id", input.clientId);
+    } else if (input.guestLabel) {
+      query = query.ilike("guest_label", input.guestLabel);
+    }
+
+    const { data: existingBooking } = await query.maybeSingle();
+    if (existingBooking) {
+      return {
+        ok: false,
+        error: `This client already has a booking at ${fmtTime(input.startTime)}. Please select a different time.`,
       };
     }
   }
@@ -193,6 +224,30 @@ export async function quickWalkin(
         ok: false,
         field: "room",
         error: `Room ${input.roomNumber} exceeds room capacity of ${maxRoom}.`,
+      };
+    }
+  }
+
+  // Prevent duplicate same-slot booking for the same client (member or walk-in)
+  if (input.clientId || input.guestLabel) {
+    let query = supabase
+      .from("bookings")
+      .select("id")
+      .eq("booking_date", input.bookingDate)
+      .eq("start_time", input.startTime)
+      .neq("status", "Cancelled");
+
+    if (input.clientId) {
+      query = query.eq("client_id", input.clientId);
+    } else if (input.guestLabel) {
+      query = query.ilike("guest_label", input.guestLabel);
+    }
+
+    const { data: existingBooking } = await query.maybeSingle();
+    if (existingBooking) {
+      return {
+        ok: false,
+        error: `This client already has a booking at ${fmtTime(input.startTime)}. Please select a different time.`,
       };
     }
   }
@@ -863,12 +918,32 @@ export async function logVisitBooking(
       );
 
   // 2. Assign Locker Occupancy FIRST (validates locker/room constraints before updating booking status)
-  const { data: existingOcc } = await supabase
-    .from("locker_occupancy")
-    .select("id")
-    .eq("booking_id", input.bookingId)
-    .is("checked_out_at", null)
-    .maybeSingle();
+  let existingOcc: { id: string } | null = null;
+  if (input.bookingId) {
+    const { data: occByBooking } = await supabase
+      .from("locker_occupancy")
+      .select("id")
+      .eq("booking_id", input.bookingId)
+      .is("checked_out_at", null)
+      .maybeSingle();
+    existingOcc = occByBooking;
+  }
+
+  if (!existingOcc && (input.clientId || input.guestLabel)) {
+    let query = supabase
+      .from("locker_occupancy")
+      .select("id")
+      .is("checked_out_at", null);
+
+    if (input.clientId) {
+      query = query.eq("client_id", input.clientId);
+    } else if (input.guestLabel) {
+      query = query.ilike("guest_label", input.guestLabel);
+    }
+
+    const { data: occByClient } = await query.limit(1);
+    existingOcc = occByClient?.[0] ?? null;
+  }
 
   let lockerDataId: string | null = null;
   let isNewInsert = false;

@@ -110,6 +110,13 @@ export function QuickWalkinModal({
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [unavailableTherapists, setUnavailableTherapists] = useState<Map<string, string>>(new Map());
   const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
+  const [clientBookings, setClientBookings] = useState<
+    Array<{ client_id: string | null; guest_label: string | null; start_time: string }>
+  >([]);
+  const [activeLockerMap, setActiveLockerMap] = useState<Map<string, number>>(new Map());
+  const [activeWalkinCheckins, setActiveWalkinCheckins] = useState<
+    Array<{ guestLabel: string; lockerNumber: number }>
+  >([]);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [pointsWarning, setPointsWarning] = useState<string | null>(null);
@@ -119,15 +126,49 @@ export function QuickWalkinModal({
     const supabase = createClient();
     supabase
       .from("bookings")
-      .select("therapist_id, room_number, start_time, duration_minutes")
+      .select("client_id, guest_label, therapist_id, room_number, start_time, duration_minutes, status")
       .eq("booking_date", date)
       .in("status", ACTIVE_STATUSES)
-      .then(({ data }) => setConflicts(data ?? []));
+      .then(({ data }) => {
+        setConflicts(data ?? []);
+        setClientBookings(
+          (data ?? []).map((b) => ({
+            client_id: b.client_id,
+            guest_label: b.guest_label,
+            start_time: b.start_time,
+          }))
+        );
+      });
+
     supabase
       .from("locker_occupancy")
-      .select("locker_number")
+      .select("locker_number, client_id, guest_label")
       .is("checked_out_at", null)
-      .then(({ data }) => setOccupiedLockers(new Set((data ?? []).map((r) => r.locker_number))));
+      .then(({ data }) => {
+        const occupied = new Set<number>();
+        const lockerMap = new Map<string, number>();
+        const walkinsList: Array<{ guestLabel: string; lockerNumber: number }> = [];
+
+        for (const row of data ?? []) {
+          occupied.add(row.locker_number);
+          if (row.client_id) {
+            lockerMap.set(row.client_id, row.locker_number);
+          }
+          if (row.guest_label) {
+            const key = row.guest_label.trim().toLowerCase();
+            lockerMap.set(key, row.locker_number);
+            if (!row.client_id) {
+              walkinsList.push({
+                guestLabel: row.guest_label,
+                lockerNumber: row.locker_number,
+              });
+            }
+          }
+        }
+        setOccupiedLockers(occupied);
+        setActiveLockerMap(lockerMap);
+        setActiveWalkinCheckins(walkinsList);
+      });
   }, [date]);
 
   useEffect(() => {
@@ -251,6 +292,50 @@ export function QuickWalkinModal({
       .slice(0, 8);
   }, [clients, clientQuery]);
 
+  const filteredActiveWalkins = useMemo(() => {
+    if (!clientQuery.trim()) return [];
+    const q = clientQuery.toLowerCase();
+    return activeWalkinCheckins.filter((w) =>
+      w.guestLabel.toLowerCase().includes(q)
+    );
+  }, [activeWalkinCheckins, clientQuery]);
+
+  const activeLockerForClient = useMemo(() => {
+    if (clientId) {
+      return activeLockerMap.get(clientId) ?? null;
+    }
+    if (guestName.trim()) {
+      return activeLockerMap.get(guestName.trim().toLowerCase()) ?? null;
+    }
+    return null;
+  }, [clientId, guestName, activeLockerMap]);
+
+  useEffect(() => {
+    if (activeLockerForClient != null) {
+      setLockerNumber(activeLockerForClient);
+    }
+  }, [activeLockerForClient]);
+
+  const hasClientSlotConflict = useMemo(() => {
+    if (!time) return false;
+    if (clientId) {
+      return clientBookings.some(
+        (b) => b.client_id === clientId && b.start_time === time
+      );
+    }
+    if (guestName.trim()) {
+      const q = guestName.trim().toLowerCase();
+      return clientBookings.some(
+        (b) =>
+          !b.client_id &&
+          b.guest_label &&
+          b.guest_label.trim().toLowerCase() === q &&
+          b.start_time === time
+      );
+    }
+    return false;
+  }, [time, clientId, guestName, clientBookings]);
+
   const selectedClient = clients.find((c) => c.id === clientId);
   const selectedPromo = promos.find((p) => p.id === promoId);
 
@@ -326,12 +411,16 @@ export function QuickWalkinModal({
     if (checked) setPromoId("none");
   }
 
+  const isLockerValid =
+    typeof lockerNumber === "number" &&
+    (!occupiedLockers.has(lockerNumber) || lockerNumber === activeLockerForClient);
+
   const canSubmit =
     !isPending &&
+    !hasClientSlotConflict &&
     !!serviceId &&
     !!staffId &&
-    !!lockerNumber &&
-    !occupiedLockers.has(Number(lockerNumber)) &&
+    isLockerValid &&
     isSplitValid &&
     (clientId ? true : guestName.trim().length > 0) &&
     (!isMassageService ||
@@ -344,11 +433,15 @@ export function QuickWalkinModal({
 
   function handleSubmit() {
     setError(null);
+    if (hasClientSlotConflict) {
+      setError(`This client already has a booking at ${fmtTime(time)}. Please select a different time.`);
+      return;
+    }
     if (isMassageService && (roomNumber === "" || !freeRooms.includes(Number(roomNumber)))) {
       setError("Please select an available room.");
       return;
     }
-    if (typeof lockerNumber === "number" && occupiedLockers.has(lockerNumber)) {
+    if (typeof lockerNumber === "number" && occupiedLockers.has(lockerNumber) && lockerNumber !== activeLockerForClient) {
       setError("That locker is currently occupied. Please select an unoccupied locker.");
       return;
     }
@@ -467,23 +560,43 @@ export function QuickWalkinModal({
                   className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
                 />
                 {!clientId && clientQuery && (
-                  <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-border bg-background">
-                    {filteredClients.length === 0 ? (
-                      <p className="px-3 py-2 text-xs text-muted">No matching clients.</p>
+                  <div className="mt-1 max-h-48 overflow-y-auto rounded-md border border-border bg-background">
+                    {filteredClients.length === 0 && filteredActiveWalkins.length === 0 ? (
+                      <p className="px-3 py-2 text-xs text-muted">No matching clients or active walk-ins.</p>
                     ) : (
-                      filteredClients.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => {
-                            setClientId(c.id);
-                            setClientQuery("");
-                          }}
-                          className="block min-h-[44px] sm:min-h-0 w-full px-3 py-2 text-left text-sm text-foreground hover:bg-gold/10"
-                        >
-                          {c.codename} <span className="text-muted">@{c.username}</span>
-                        </button>
-                      ))
+                      <>
+                        {filteredClients.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setClientId(c.id);
+                              setGuestName("");
+                              setClientQuery("");
+                            }}
+                            className="block min-h-[44px] sm:min-h-0 w-full px-3 py-2 text-left text-sm text-foreground hover:bg-gold/10"
+                          >
+                            {c.codename} <span className="text-muted">@{c.username}</span>
+                          </button>
+                        ))}
+                        {filteredActiveWalkins.map((w) => (
+                          <button
+                            key={`walkin-${w.guestLabel}`}
+                            type="button"
+                            onClick={() => {
+                              setClientId(null);
+                              setGuestName(w.guestLabel);
+                              setClientQuery("");
+                            }}
+                            className="flex items-center justify-between min-h-[44px] sm:min-h-0 w-full px-3 py-2 text-left text-sm text-foreground hover:bg-gold/10 border-t border-border/40"
+                          >
+                            <span>{w.guestLabel}</span>
+                            <span className="shrink-0 rounded bg-gold/15 px-2 py-0.5 text-[10px] font-semibold text-gold border border-gold/30">
+                              {w.guestLabel} • Checked in: Locker {w.lockerNumber}
+                            </span>
+                          </button>
+                        ))}
+                      </>
                     )}
                   </div>
                 )}
@@ -502,9 +615,16 @@ export function QuickWalkinModal({
 
           {!clientId && (
             <div>
-              <label className="text-xs text-muted" htmlFor="wk-guest-name">
-                Name <span className="opacity-70">(if not found above — walk-in, no account)</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-muted" htmlFor="wk-guest-name">
+                  Name <span className="opacity-70">(if not found above — walk-in, no account)</span>
+                </label>
+                {activeLockerForClient != null && (
+                  <span className="text-[10px] font-medium text-gold bg-gold/10 px-2 py-0.5 rounded border border-gold/30">
+                    Active Today: Locker {activeLockerForClient}
+                  </span>
+                )}
+              </div>
               <input
                 id="wk-guest-name"
                 type="text"
@@ -641,6 +761,12 @@ export function QuickWalkinModal({
                 )}
               </div>
 
+              {hasClientSlotConflict && time && (
+                <p className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-xs text-red-300 font-medium">
+                  ⚠ This client already has a booking at {fmtTime(time)}. Please select a different time.
+                </p>
+              )}
+
               {time && (
                 <div>
                   <label className="text-xs text-muted" htmlFor="wk-room">
@@ -676,9 +802,16 @@ export function QuickWalkinModal({
           )}
 
           <div>
-            <label className="text-xs text-muted" htmlFor="wk-locker">
-              Assign Locker
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-muted" htmlFor="wk-locker">
+                Assign Locker
+              </label>
+              {activeLockerForClient != null && (
+                <span className="inline-flex items-center rounded-full bg-gold/15 px-2 py-0.5 text-[11px] font-semibold text-gold border border-gold/30">
+                  Locker {activeLockerForClient} (Reusing Active Locker)
+                </span>
+              )}
+            </div>
             <select
               id="wk-locker"
               value={lockerNumber}
@@ -688,14 +821,16 @@ export function QuickWalkinModal({
               <option value="">— select locker —</option>
               {lockers.map((n) => {
                 const isOccupied = occupiedLockers.has(n);
+                const isReusing = activeLockerForClient === n;
+                const disabled = isOccupied && !isReusing;
                 return (
                   <option
                     key={n}
                     value={n}
-                    disabled={isOccupied}
-                    className={isOccupied ? "text-muted" : undefined}
+                    disabled={disabled}
+                    className={disabled ? "text-muted" : undefined}
                   >
-                    Locker {n}{isOccupied ? " — Occupied" : ""}
+                    Locker {n}{isReusing ? " — Active Locker (Reusing)" : isOccupied ? " — Occupied" : ""}
                   </option>
                 );
               })}
