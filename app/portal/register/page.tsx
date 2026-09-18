@@ -30,8 +30,9 @@ export default function PortalRegisterPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username }),
         });
-        const data = await res.json();
-        setUsernameError(data.available ? null : data.error ?? "Username unavailable.");
+        const isJson = res.headers.get("content-type")?.includes("application/json");
+        const data = isJson ? await res.json().catch(() => null) : null;
+        setUsernameError(data?.available ? null : data?.error ?? "Username unavailable.");
       } catch {
         // Silent — server-side check on submit is authoritative.
       } finally {
@@ -55,14 +56,20 @@ export default function PortalRegisterPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, username, phone, password }),
       });
-      const data = await res.json();
+      const isJson = res.headers.get("content-type")?.includes("application/json");
+      const data = isJson ? await res.json().catch(() => null) : null;
 
       if (!res.ok) {
-        if (data.field === "username") {
+        if (data?.field === "username") {
           setUsernameError(data.error);
         } else {
-          setError(data.error ?? "Registration failed.");
+          setError(data?.error ?? "Registration failed. Please try again later.");
         }
+        return;
+      }
+
+      if (!data) {
+        setError("Registration failed. Please try again later.");
         return;
       }
 

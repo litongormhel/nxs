@@ -15,127 +15,142 @@ function normalizePhone(raw: string): string {
 }
 
 export async function POST(request: Request) {
-  const supabase = createServiceClient();
-  const ipKey = `register-ip:${clientIp(request)}`;
-
-  const { locked } = await checkLockout(supabase, ipKey);
-  if (locked) {
-    return NextResponse.json(
-      { error: "Too many attempts. Please wait a moment and try again." },
-      { status: 429 },
-    );
-  }
-  await recordFailure(supabase, ipKey, { maxAttempts: IP_MAX_CALLS, lockoutMinutes: IP_COOLDOWN_MINUTES });
-
-  const body = await request.json().catch(() => null);
-  const name = typeof body?.name === "string" ? body.name.trim() : "";
-  const username = typeof body?.username === "string" ? body.username.trim() : "";
-  const phone = typeof body?.phone === "string" ? normalizePhone(body.phone) : "";
-  const password = typeof body?.password === "string" ? body.password : "";
-
-  if (!name || !username || !phone || !password) {
-    return NextResponse.json({ error: "Name, Username, Phone Number, and Password are all required." }, { status: 400 });
-  }
-  if (!isValidUsername(username)) {
-    return NextResponse.json(
-      { error: "Username must be 3-20 characters: letters, numbers, . _ -", field: "username" },
-      { status: 400 },
-    );
-  }
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    return NextResponse.json(
-      { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`, field: "password" },
-      { status: 400 },
-    );
-  }
-
-  if (await isUsernameTaken(supabase, username)) {
-    return NextResponse.json(
-      { error: "That username is already taken.", field: "username" },
-      { status: 409 },
-    );
-  }
-
-  const { data: existingAccount } = await supabase
-    .from("client_portal_accounts")
-    .select("id")
-    .eq("phone", phone)
-    .maybeSingle();
-
-  if (existingAccount) {
-    // Deliberately generic: do not confirm a phone number already has a
-    // portal account (would leak account existence to an anonymous visitor).
-    return NextResponse.json(
-      { error: "Could not complete registration with these details." },
-      { status: 400 },
-    );
-  }
-
-  const { data: matchedClient } = await supabase
-    .from("clients")
-    .select("id, codename")
-    .eq("phone", phone)
-    .maybeSingle();
-
-  let clientId: string;
-  let displayName: string;
-
-  if (matchedClient) {
-    clientId = matchedClient.id;
-    displayName = matchedClient.codename;
-  } else {
-    let created: { id: string } | null = null;
-    for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS && !created; attempt++) {
-      const { data, error } = await supabase
-        .from("clients")
-        .insert({
-          codename: name,
-          phone,
-          username: generateClientUsername(),
-          member_code: generateMemberCode(),
-        })
-        .select("id")
-        .single();
-
-      if (!error) {
-        created = data;
-      } else if (error.code !== "23505") {
-        return NextResponse.json({ error: "Could not create client record." }, { status: 500 });
-      }
+  try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.PORTAL_SESSION_SECRET) {
+      return NextResponse.json(
+        { error: "Server configuration missing. Please contact support." },
+        { status: 503 }
+      );
     }
 
-    if (!created) {
-      return NextResponse.json({ error: "Could not generate a unique client code. Try again." }, { status: 500 });
+    const supabase = createServiceClient();
+    const ipKey = `register-ip:${clientIp(request)}`;
+
+    const { locked } = await checkLockout(supabase, ipKey);
+    if (locked) {
+      return NextResponse.json(
+        { error: "Too many attempts. Please wait a moment and try again." },
+        { status: 429 },
+      );
+    }
+    await recordFailure(supabase, ipKey, { maxAttempts: IP_MAX_CALLS, lockoutMinutes: IP_COOLDOWN_MINUTES });
+
+    const body = await request.json().catch(() => null);
+    const name = typeof body?.name === "string" ? body.name.trim() : "";
+    const username = typeof body?.username === "string" ? body.username.trim() : "";
+    const phone = typeof body?.phone === "string" ? normalizePhone(body.phone) : "";
+    const password = typeof body?.password === "string" ? body.password : "";
+
+    if (!name || !username || !phone || !password) {
+      return NextResponse.json({ error: "Name, Username, Phone Number, and Password are all required." }, { status: 400 });
+    }
+    if (!isValidUsername(username)) {
+      return NextResponse.json(
+        { error: "Username must be 3-20 characters: letters, numbers, . _ -", field: "username" },
+        { status: 400 },
+      );
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      return NextResponse.json(
+        { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`, field: "password" },
+        { status: 400 },
+      );
     }
 
-    clientId = created.id;
-    displayName = name;
-  }
-
-  const passwordHash = await hashPassword(password);
-
-  const { data: portalAccount, error: insertError } = await supabase
-    .from("client_portal_accounts")
-    .insert({
-      client_id: clientId,
-      phone,
-      password_hash: passwordHash,
-      username,
-    })
-    .select("id, username")
-    .single();
-
-  if (insertError || !portalAccount) {
-    if (insertError?.code === "23505") {
+    if (await isUsernameTaken(supabase, username)) {
       return NextResponse.json(
         { error: "That username is already taken.", field: "username" },
         { status: 409 },
       );
     }
-    return NextResponse.json({ error: "Could not create portal account." }, { status: 500 });
+
+    const { data: existingAccount } = await supabase
+      .from("client_portal_accounts")
+      .select("id")
+      .eq("phone", phone)
+      .maybeSingle();
+
+    if (existingAccount) {
+      // Deliberately generic: do not confirm a phone number already has a
+      // portal account (would leak account existence to an anonymous visitor).
+      return NextResponse.json(
+        { error: "Could not complete registration with these details." },
+        { status: 400 },
+      );
+    }
+
+    const { data: matchedClient } = await supabase
+      .from("clients")
+      .select("id, codename")
+      .eq("phone", phone)
+      .maybeSingle();
+
+    let clientId: string;
+    let displayName: string;
+
+    if (matchedClient) {
+      clientId = matchedClient.id;
+      displayName = matchedClient.codename;
+    } else {
+      let created: { id: string } | null = null;
+      for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS && !created; attempt++) {
+        const { data, error } = await supabase
+          .from("clients")
+          .insert({
+            codename: name,
+            phone,
+            username: generateClientUsername(),
+            member_code: generateMemberCode(),
+          })
+          .select("id")
+          .single();
+
+        if (!error) {
+          created = data;
+        } else if (error.code !== "23505") {
+          return NextResponse.json({ error: "Could not create client record." }, { status: 500 });
+        }
+      }
+
+      if (!created) {
+        return NextResponse.json({ error: "Could not generate a unique client code. Try again." }, { status: 500 });
+      }
+
+      clientId = created.id;
+      displayName = name;
+    }
+
+    const passwordHash = await hashPassword(password);
+
+    const { data: portalAccount, error: insertError } = await supabase
+      .from("client_portal_accounts")
+      .insert({
+        client_id: clientId,
+        phone,
+        password_hash: passwordHash,
+        username,
+      })
+      .select("id, username")
+      .single();
+
+    if (insertError || !portalAccount) {
+      if (insertError?.code === "23505") {
+        return NextResponse.json(
+          { error: "That username is already taken.", field: "username" },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json({ error: "Could not create portal account." }, { status: 500 });
+    }
+
+    await setPortalSession(portalAccount.id);
+
+    return NextResponse.json({ username: portalAccount.username, name: displayName });
+  } catch (err) {
+    console.error("[portal/register error]:", err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Registration failed. Please try again later." },
+      { status: 500 }
+    );
   }
-
-  await setPortalSession(portalAccount.id);
-
-  return NextResponse.json({ username: portalAccount.username, name: displayName });
 }
