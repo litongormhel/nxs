@@ -31,6 +31,21 @@ export type WalkInVisit = {
   payment_method: string | null;
 };
 
+export type MemberVisit = {
+  id: string;
+  client_id: string;
+  date: string;
+  time: string | null;
+  service_name: string | null;
+  therapist_name: string | null;
+  locker_number: number | null;
+  amount: number | null;
+  payment_method: string | null;
+  points_delta: number;
+  entry_type: string;
+  created_at: string;
+};
+
 type Service = {
   id: string;
   name: string;
@@ -44,22 +59,6 @@ type Therapist = { id: string; name: string };
 type Promo = { id: string; label: string; discount: number };
 type Addon = { id: string; name: string; price: number };
 
-type LedgerEntry = {
-  id: string;
-  entry_type: "EARN" | "REDEEM" | "ADJUSTMENT";
-  points_delta: number;
-  source: string;
-  notes: string | null;
-  created_at: string;
-  sales: {
-    amount: number;
-    payment_method: string;
-    services: { name: string } | null;
-    therapists: { name: string } | null;
-    staff: { name: string } | null;
-  } | null;
-};
-
 type GroupedWalkIn = {
   codename: string;
   visitCount: number;
@@ -68,44 +67,20 @@ type GroupedWalkIn = {
   visits: WalkInVisit[];
 };
 
-const REWARD_THRESHOLD = 100;
-const HISTORY_LIMIT = 20;
-
-function getInitial(name: string) {
-  return name.trim().charAt(0).toUpperCase();
-}
-
 function formatSinceDate(iso: string) {
   if (!iso) return "N/A";
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
-function formatLedgerDate(iso: string) {
-  if (!iso) return "N/A";
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 function formatDisplayDate(dateStr: string) {
   if (!dateStr) return "N/A";
-  const d = new Date(dateStr + "T00:00:00");
+  const d = new Date(dateStr + (dateStr.includes("T") ? "" : "T00:00:00"));
   return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
-}
-
-function abbrevName(name: string | null | undefined) {
-  if (!name) return "";
-  const parts = name.trim().split(" ");
-  if (parts.length === 1) return parts[0];
-  return `${parts[0].charAt(0)}. ${parts.slice(1).join(" ")}`;
 }
 
 function formatTime(timeStr: string | null | undefined) {
@@ -124,8 +99,7 @@ function formatTime(timeStr: string | null | undefined) {
   });
 }
 
-
-// Simple QR-code renderer using a free API
+// QR-code renderer using a free API
 function QRImage({ value, size = 160 }: { value: string; size?: number }) {
   const url = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(value)}&size=${size}x${size}&margin=8&bgcolor=1a1a1a&color=c89b3c`;
   return (
@@ -137,6 +111,8 @@ function QRImage({ value, size = 160 }: { value: string; size?: number }) {
 export function ClientBrowser({
   clients = [],
   walkInVisits = [],
+  memberTransactions = [],
+  memberBookings = [],
   services = [],
   staff = [],
   therapists = [],
@@ -147,6 +123,8 @@ export function ClientBrowser({
 }: {
   clients?: Client[];
   walkInVisits?: WalkInVisit[];
+  memberTransactions?: any[];
+  memberBookings?: any[];
   services?: Service[];
   staff?: Staff[];
   therapists?: Therapist[];
@@ -158,44 +136,155 @@ export function ClientBrowser({
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"members" | "walkins">("members");
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<string>(clients[0]?.id ?? "");
 
-  const [history, setHistory] = useState<LedgerEntry[]>([]);
-  const [historyClientId, setHistoryClientId] = useState<string | null>(null);
+  // Pagination states
+  const [membersPageSize, setMembersPageSize] = useState<number>(10);
+  const [membersCurrentPage, setMembersCurrentPage] = useState<number>(1);
 
-  // Walk-In drawer state
+  const [walkInsPageSize, setWalkInsPageSize] = useState<number>(10);
+  const [walkInsCurrentPage, setWalkInsCurrentPage] = useState<number>(1);
+
+  // Modal states for Members
+  const [selectedMemberForProfile, setSelectedMemberForProfile] = useState<Client | null>(null);
+  const [selectedMemberForHistory, setSelectedMemberForHistory] = useState<{
+    client: Client;
+    visits: MemberVisit[];
+  } | null>(null);
+
+  // Modal state for Walk-In history drawer
   const [selectedWalkInCodename, setSelectedWalkInCodename] = useState<string | null>(null);
 
-  // Walk-In pagination state
-  const [pageSize, setPageSize] = useState<number>(10);
-  const [currentPage, setCurrentPage] = useState<number>(1);
-
-  // Reset currentPage to 1 whenever search query or pageSize changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, pageSize]);
-
-  // Modal states
+  // Log visit modal state
   const [showLogVisit, setShowLogVisit] = useState(false);
-  const [logVisitServiceId, setLogVisitServiceId] = useState<string | null>(null);
-  const [showClientCard, setShowClientCard] = useState(false);
+  const [logVisitClient, setLogVisitClient] = useState<Client | null>(null);
 
   // Live locker map (updated by realtime)
   const [lockerMap, setLockerMap] = useState<Record<string, number>>(initialLockerMap);
 
-  const selected = clients.find((c) => c.id === selectedId) ?? clients[0];
-  const historyLoading = selected && historyClientId !== selected.id;
+  // Reset pagination when search or page sizes change
+  useEffect(() => {
+    setMembersCurrentPage(1);
+    setWalkInsCurrentPage(1);
+  }, [search, membersPageSize, walkInsPageSize]);
 
-  // Filter clients for search
+  // Aggregate member visits from point_transactions and memberBookings
+  const memberVisitsMap = useMemo(() => {
+    const map = new Map<string, MemberVisit[]>();
+    const txBookingIds = new Set<string>();
+
+    for (const tx of memberTransactions) {
+      if (!tx.client_id) continue;
+      if (tx.booking_id) txBookingIds.add(tx.booking_id);
+
+      const sale = Array.isArray(tx.sales) ? tx.sales[0] : tx.sales;
+      const booking = Array.isArray(tx.bookings) ? tx.bookings[0] : tx.bookings;
+      const bkLocker = booking?.locker_occupancy
+        ? Array.isArray(booking.locker_occupancy)
+          ? booking.locker_occupancy[0]?.locker_number
+          : booking.locker_occupancy.locker_number
+        : null;
+
+      let serviceName: string | null =
+        sale?.services?.name ?? booking?.services?.name ?? null;
+
+      if (!serviceName && tx.notes) {
+        if (tx.notes.startsWith("Visit: ")) {
+          serviceName = tx.notes.replace("Visit: ", "");
+        } else if (tx.notes.startsWith("Redemption: ")) {
+          serviceName = tx.notes.replace("Redemption: ", "");
+        } else {
+          serviceName = tx.notes;
+        }
+      }
+
+      const therapistName: string | null =
+        sale?.therapists?.name ?? booking?.therapists?.name ?? null;
+
+      const date =
+        booking?.booking_date ??
+        (tx.created_at ? tx.created_at.split("T")[0] : "");
+      const time =
+        booking?.start_time ??
+        (tx.created_at ? tx.created_at.split("T")[1]?.slice(0, 5) : null);
+
+      const visit: MemberVisit = {
+        id: tx.id,
+        client_id: tx.client_id,
+        date,
+        time,
+        service_name: serviceName,
+        therapist_name: therapistName,
+        locker_number: bkLocker ?? null,
+        amount: sale?.amount ?? null,
+        payment_method: sale?.payment_method ?? null,
+        points_delta: tx.points_delta ?? 0,
+        entry_type: tx.entry_type ?? "VISIT",
+        created_at: tx.created_at,
+      };
+
+      const existing = map.get(tx.client_id) ?? [];
+      existing.push(visit);
+      map.set(tx.client_id, existing);
+    }
+
+    for (const bk of memberBookings) {
+      if (!bk.client_id || txBookingIds.has(bk.id)) continue;
+
+      const svc = Array.isArray(bk.services) ? bk.services[0] : bk.services;
+      const thera = Array.isArray(bk.therapists) ? bk.therapists[0] : bk.therapists;
+      const sale = Array.isArray(bk.sales) ? bk.sales[0] : bk.sales;
+      const occ = Array.isArray(bk.locker_occupancy) ? bk.locker_occupancy[0] : bk.locker_occupancy;
+
+      const visit: MemberVisit = {
+        id: bk.id,
+        client_id: bk.client_id,
+        date: bk.booking_date,
+        time: bk.start_time,
+        service_name: svc?.name ?? null,
+        therapist_name: thera?.name ?? null,
+        locker_number: occ?.locker_number ?? null,
+        amount: sale?.amount ?? null,
+        payment_method: sale?.payment_method ?? null,
+        points_delta: 0,
+        entry_type: bk.status ?? "Booked",
+        created_at: bk.created_at,
+      };
+
+      const existing = map.get(bk.client_id) ?? [];
+      existing.push(visit);
+      map.set(bk.client_id, existing);
+    }
+
+    // Sort member visits descending by created_at / date
+    map.forEach((visits) => {
+      visits.sort((a, b) => {
+        const timeA = new Date(a.created_at || a.date).getTime();
+        const timeB = new Date(b.created_at || b.date).getTime();
+        return timeB - timeA;
+      });
+    });
+
+    return map;
+  }, [memberTransactions, memberBookings]);
+
+  // Filter clients for search (by codename, phone, or username)
   const filteredClients = useMemo(() => {
     if (!search.trim()) return clients;
     const q = search.toLowerCase();
     return clients.filter((c) =>
       c.codename.toLowerCase().includes(q) ||
       c.username.toLowerCase().includes(q) ||
-      c.member_code.toLowerCase().includes(q)
+      (c.phone && c.phone.toLowerCase().includes(q))
     );
   }, [clients, search]);
+
+  // Paginated Members calculations
+  const totalMembers = filteredClients.length;
+  const totalMembersPages = Math.ceil(totalMembers / membersPageSize) || 1;
+  const membersStartIndex = (membersCurrentPage - 1) * membersPageSize;
+  const paginatedMembers = useMemo(() => {
+    return filteredClients.slice(membersStartIndex, membersStartIndex + membersPageSize);
+  }, [filteredClients, membersStartIndex, membersPageSize]);
 
   // Aggregate non-member walk-ins by codename
   const groupedWalkIns = useMemo(() => {
@@ -209,7 +298,6 @@ export function ClientBrowser({
 
     const result: GroupedWalkIn[] = [];
     map.forEach((visits, codename) => {
-      // Sort visits descending by date/time
       const sorted = [...visits].sort((a, b) => {
         const dateA = new Date(`${a.booking_date}T${a.start_time || "00:00:00"}`).getTime();
         const dateB = new Date(`${b.booking_date}T${b.start_time || "00:00:00"}`).getTime();
@@ -225,7 +313,6 @@ export function ClientBrowser({
       });
     });
 
-    // Sort grouped walk-ins by latest visit date descending
     return result.sort((a, b) => {
       const dateA = new Date(a.lastVisitDate).getTime();
       const dateB = new Date(b.lastVisitDate).getTime();
@@ -249,11 +336,11 @@ export function ClientBrowser({
 
   // Paginated Walk-In slice calculations
   const totalWalkIns = filteredWalkIns.length;
-  const totalPages = Math.ceil(totalWalkIns / pageSize) || 1;
-  const startIndex = (currentPage - 1) * pageSize;
+  const totalWalkInPages = Math.ceil(totalWalkIns / walkInsPageSize) || 1;
+  const walkInsStartIndex = (walkInsCurrentPage - 1) * walkInsPageSize;
   const paginatedWalkIns = useMemo(() => {
-    return filteredWalkIns.slice(startIndex, startIndex + pageSize);
-  }, [filteredWalkIns, startIndex, pageSize]);
+    return filteredWalkIns.slice(walkInsStartIndex, walkInsStartIndex + walkInsPageSize);
+  }, [filteredWalkIns, walkInsStartIndex, walkInsPageSize]);
 
   // Selected Walk-In drawer record
   const activeWalkInGroup = useMemo(() => {
@@ -261,37 +348,7 @@ export function ClientBrowser({
     return groupedWalkIns.find((g) => g.codename === selectedWalkInCodename) ?? null;
   }, [groupedWalkIns, selectedWalkInCodename]);
 
-  // Load transaction history on selected client change
-  useEffect(() => {
-    if (!selected?.id) return;
-    let cancelled = false;
-
-    const supabase = createClient();
-    supabase
-      .from("point_transactions")
-      .select(
-        `id, entry_type, points_delta, source, notes, created_at,
-         sales(amount, payment_method,
-           services(name),
-           therapists(name),
-           staff!sales_processed_by_fkey(name)
-         )`
-      )
-      .eq("client_id", selected.id)
-      .order("created_at", { ascending: false })
-      .limit(HISTORY_LIMIT)
-      .then(({ data }) => {
-        if (cancelled) return;
-        setHistory((data as LedgerEntry[]) ?? []);
-        setHistoryClientId(selected.id);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selected?.id]);
-
-  // Realtime: subscribe to locker_occupancy changes so locker badge updates live
+  // Realtime: subscribe to locker_occupancy changes so locker badges update live
   useEffect(() => {
     const supabase = createClient();
 
@@ -324,42 +381,6 @@ export function ClientBrowser({
     };
   }, []);
 
-  function refreshHistory() {
-    if (!selected?.id) return;
-    setHistoryClientId(null);
-    const supabase = createClient();
-    supabase
-      .from("point_transactions")
-      .select(
-        `id, entry_type, points_delta, source, notes, created_at,
-         sales(amount, payment_method,
-           services(name),
-           therapists(name),
-           staff!sales_processed_by_fkey(name)
-         )`
-      )
-      .eq("client_id", selected.id)
-      .order("created_at", { ascending: false })
-      .limit(HISTORY_LIMIT)
-      .then(({ data }) => {
-        setHistory((data as LedgerEntry[]) ?? []);
-        setHistoryClientId(selected.id);
-      });
-  }
-
-  function openLogVisit(serviceId?: string) {
-    setLogVisitServiceId(serviceId ?? null);
-    setShowLogVisit(true);
-  }
-
-  const lockerNumber = selected ? lockerMap[selected.id] : undefined;
-  const isCheckedIn = lockerNumber !== undefined;
-  const isEligible = selected ? selected.points_balance >= REWARD_THRESHOLD : false;
-
-  const redeemableService = selected
-    ? services.find((s) => selected.points_balance >= REWARD_THRESHOLD)
-    : undefined;
-
   return (
     <div className="mt-6 flex flex-col gap-5">
       {/* Top-level tab switcher */}
@@ -370,7 +391,7 @@ export function ClientBrowser({
             setActiveTab("members");
             setSearch("");
           }}
-          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
+          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
             activeTab === "members"
               ? "border-gold text-gold"
               : "border-transparent text-muted hover:text-foreground"
@@ -394,7 +415,7 @@ export function ClientBrowser({
             setActiveTab("walkins");
             setSearch("");
           }}
-          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
+          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
             activeTab === "walkins"
               ? "border-gold text-gold"
               : "border-transparent text-muted hover:text-foreground"
@@ -430,7 +451,7 @@ export function ClientBrowser({
           onChange={(e) => setSearch(e.target.value)}
           placeholder={
             activeTab === "members"
-              ? "Search by username, codename, or member code..."
+              ? "Search by codename, phone, or @username..."
               : "Search by guest codename (e.g. Wax, Marky) or date..."
           }
           className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-4 text-sm text-foreground placeholder:text-muted focus:border-gold/50 focus:outline-none"
@@ -439,249 +460,156 @@ export function ClientBrowser({
 
       {/* MEMBERS TAB */}
       {activeTab === "members" && (
-        <>
-          {clients.length === 0 ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+              Registered Member Accounts ({filteredClients.length})
+            </p>
+          </div>
+
+          {filteredClients.length === 0 ? (
             <div className="rounded-lg border border-border bg-surface p-8 text-center text-sm text-muted">
-              No registered member accounts currently on file.
+              {search.trim() ? "No members match your search." : "No registered member accounts currently on file."}
             </div>
           ) : (
-            <>
-              {/* Registered Members label */}
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-                Registered Members ({filteredClients.length})
-              </p>
+            <div className="space-y-4">
+              <div className="overflow-hidden rounded-lg border border-border bg-surface">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-border bg-surface-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                    <tr>
+                      <th className="px-4 py-3">Member</th>
+                      <th className="px-4 py-3">Username</th>
+                      <th className="px-4 py-3">Member Since</th>
+                      <th className="px-4 py-3">Points</th>
+                      <th className="px-4 py-3">Total Visits</th>
+                      <th className="px-4 py-3">Latest Service</th>
+                      <th className="px-4 py-3">Latest Therapist</th>
+                      <th className="px-4 py-3 text-right">Actions / Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border text-foreground">
+                    {paginatedMembers.map((client) => {
+                      const locker = lockerMap[client.id];
+                      const visits = memberVisitsMap.get(client.id) ?? [];
+                      const visitCount = visits.length;
+                      const latest = visits[0];
+                      const latestService = latest?.service_name ?? null;
+                      const latestTherapist = latest?.therapist_name ?? null;
 
-              {/* Client pills row */}
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {filteredClients.map((client) => {
-                  const active = client.id === selected?.id;
-                  const locker = lockerMap[client.id];
-                  return (
-                    <button
-                      key={client.id}
-                      type="button"
-                      onClick={() => setSelectedId(client.id)}
-                      className={`flex shrink-0 items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors ${
-                        active
-                          ? "border-gold bg-gold/10"
-                          : "border-border bg-surface hover:border-gold/30"
-                      }`}
-                    >
-                      {/* Avatar */}
-                      <span
-                        className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${
-                          active
-                            ? "bg-gold text-background"
-                            : "bg-surface-accent text-foreground"
-                        }`}
-                      >
-                        {getInitial(client.codename)}
-                      </span>
-                      <span className="flex flex-col items-start">
-                        <span className={`text-sm font-semibold leading-tight ${active ? "text-gold" : "text-foreground"}`}>
-                          {client.codename}
-                        </span>
-                        <span className="flex items-center gap-1.5 text-[11px] text-muted leading-tight">
-                          <span className="text-gold">★</span>
-                          {client.points_balance} pts
-                          {locker !== undefined && <span>· Locker {locker}</span>}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-                {filteredClients.length === 0 && (
-                  <p className="text-sm text-muted">No members match your search.</p>
-                )}
+                      return (
+                        <tr
+                          key={client.id}
+                          className="hover:bg-gold/5 transition-colors"
+                        >
+                          <td className="px-4 py-3 font-semibold text-gold">
+                            <div className="flex items-center gap-2">
+                              <span>{client.codename}</span>
+                              {locker !== undefined && (
+                                <span className="rounded border border-gold/50 bg-gold/10 px-1.5 py-0.5 text-[10px] font-semibold text-gold">
+                                  Locker {locker}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-xs">
+                            <span className="rounded bg-surface-accent px-2 py-0.5 font-mono text-xs text-foreground">
+                              @{client.username}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted">
+                            {formatSinceDate(client.since_date)}
+                          </td>
+                          <td className="px-4 py-3 text-xs font-semibold text-gold">
+                            {client.points_balance} pts
+                          </td>
+                          <td className="px-4 py-3 text-xs">
+                            <span className="rounded bg-surface-accent px-2 py-0.5 font-mono text-[11px] font-medium text-foreground">
+                              {visitCount} visit{visitCount !== 1 ? "s" : ""}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs font-medium">
+                            {latestService ?? <span className="text-muted italic">None</span>}
+                          </td>
+                          <td className="px-4 py-3 text-xs">
+                            {latestTherapist ?? <span className="text-muted italic">Unassigned</span>}
+                          </td>
+                          <td className="px-4 py-3 text-right text-xs">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMemberForProfile(client)}
+                                className="rounded border border-border bg-surface px-2.5 py-1 font-medium text-gold hover:border-gold/40 hover:bg-gold/10 transition-colors cursor-pointer"
+                              >
+                                View Profile →
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMemberForHistory({ client, visits })}
+                                className="rounded border border-gold/40 bg-gold/10 px-2.5 py-1 font-medium text-gold hover:bg-gold/20 transition-colors cursor-pointer"
+                              >
+                                View Past Stays →
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
 
-              {selected && (
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
-                  {/* Left: client detail card */}
-                  <div className="rounded-lg border border-border bg-surface p-6 space-y-5">
-                    {/* Header row: avatar + info + points */}
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-4">
-                        {/* Avatar */}
-                        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-accent text-2xl font-bold text-gold border border-border shrink-0">
-                          {getInitial(selected.codename)}
-                        </div>
-                        {/* Info */}
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h2 className="text-xl font-semibold text-foreground">{selected.codename}</h2>
-                            {isCheckedIn && (
-                              <span className="rounded border border-gold/50 bg-gold/10 px-2 py-0.5 text-[11px] font-semibold text-gold">
-                                Locker {lockerNumber}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-sm text-muted">
-                            @{selected.username} · Member #{selected.member_code}
-                          </p>
-                          <p className="text-xs text-muted">
-                            Member since {formatSinceDate(selected.since_date)}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setShowClientCard(true)}
-                            className="mt-0.5 flex items-center gap-1 text-xs text-gold/70 hover:text-gold transition-colors underline underline-offset-2 cursor-pointer"
-                          >
-                            View client profile (mobile number, QR) →
-                          </button>
-                        </div>
-                      </div>
+              {/* Members Pagination Controls Bar */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-lg border border-border bg-surface p-4 text-sm">
+                <div className="text-xs text-muted">
+                  Showing <span className="font-medium text-foreground">{membersStartIndex + 1}</span>–
+                  <span className="font-medium text-foreground">
+                    {Math.min(membersStartIndex + membersPageSize, totalMembers)}
+                  </span>{" "}
+                  of <span className="font-medium text-foreground">{totalMembers}</span> members
+                </div>
 
-                      {/* Points balance */}
-                      <div className="text-right shrink-0">
-                        <p className="text-4xl font-bold text-gold leading-none">{selected.points_balance}</p>
-                        <p className="text-[10px] uppercase tracking-widest text-muted mt-1">Available Points</p>
-                        {isEligible && (
-                          <span className="mt-2 inline-block rounded-full border border-gold/50 bg-gold/10 px-3 py-1 text-[11px] font-medium text-gold">
-                            + Eligible for Reward
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* LOG AVAILED SERVICE section */}
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-                          Log Availed Service
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => openLogVisit()}
-                          disabled={services.length === 0 || staff.length === 0 || !selected.has_portal_account}
-                          className="flex items-center gap-1.5 rounded-md border border-gold bg-gold/10 px-3 py-1.5 text-xs font-medium text-gold hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
-                        >
-                          <span>+</span> Log Visit
-                        </button>
-                      </div>
-                      {!selected.has_portal_account && (
-                        <p className="mt-2 text-xs text-accent-red">
-                          Walang portal account — hindi pa mag-eearn/redeem ng points.
-                        </p>
-                      )}
-
-                      {/* Service cards grid */}
-                      {services.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                          {services.map((svc) => (
-                            <button
-                              key={svc.id}
-                              type="button"
-                              onClick={() => openLogVisit(svc.id)}
-                              disabled={staff.length === 0 || !selected.has_portal_account}
-                              className="group rounded-lg border border-border bg-surface-2 p-3 text-left transition-colors hover:border-gold/50 hover:bg-gold/5 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
-                            >
-                              <p className="text-sm font-medium text-foreground leading-tight group-hover:text-gold transition-colors">
-                                {svc.name}
-                              </p>
-                              <p className="mt-1 text-xs text-muted">
-                                <span className="text-gold font-semibold">+{svc.points_earned}</span>{" "}
-                                <span className="text-[10px]">pts</span>
-                              </p>
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-muted">No services configured.</p>
-                      )}
-                    </div>
-
-                    {/* Redemption card */}
-                    {redeemableService && selected.points_balance >= REWARD_THRESHOLD && (
-                      <div className="rounded-lg border border-border bg-surface-2 p-4 flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">Redeem {redeemableService.name}</p>
-                          <p className="text-xs text-muted mt-0.5">
-                            Costs {REWARD_THRESHOLD} points · 0 pts earned on redemption
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          className="shrink-0 rounded-md border border-gold/50 bg-surface px-4 py-1.5 text-xs font-medium text-gold hover:bg-gold/10 transition-colors"
-                        >
-                          Redeem — {REWARD_THRESHOLD} pts
-                        </button>
-                      </div>
-                    )}
+                <div className="flex flex-wrap items-center gap-6">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted">Rows per page:</span>
+                    <select
+                      value={membersPageSize}
+                      onChange={(e) => setMembersPageSize(Number(e.target.value))}
+                      className="rounded-md border border-[#292524] bg-[#141210] px-2.5 py-1 text-xs text-[#f5f5f4] focus:border-gold/50 focus:outline-none"
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
                   </div>
 
-                  {/* Right: Transaction history */}
-                  <div className="rounded-lg border border-border bg-surface flex flex-col overflow-hidden">
-                    <div className="p-4 border-b border-border">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-gold/70">
-                        Immutable Ledger
-                      </p>
-                      <h3 className="text-lg font-bold text-foreground">Transaction History</h3>
-                      <p className="text-xs text-muted">@{selected.username}</p>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto divide-y divide-border">
-                      {historyLoading ? (
-                        <p className="p-4 text-xs text-muted">Loading…</p>
-                      ) : history.length === 0 ? (
-                        <p className="p-4 text-xs text-muted">No transactions yet.</p>
-                      ) : (
-                        history.map((entry) => {
-                          const sale = entry.sales;
-                          const serviceName = sale?.services?.name ?? entry.notes ?? entry.entry_type;
-                          const therapistName = sale?.therapists?.name ?? null;
-                          const processedBy = sale?.staff?.name ?? null;
-                          const amount = sale?.amount ?? null;
-                          const paymentMethod = sale?.payment_method ?? null;
-                          const date = formatLedgerDate(entry.created_at);
-                          const nameLabel = processedBy ? abbrevName(processedBy) : null;
-
-                          return (
-                            <div key={entry.id} className="p-3 flex items-start justify-between gap-3">
-                              <div className="flex-1 min-w-0 space-y-0.5">
-                                <p className="text-sm font-semibold text-foreground truncate">{serviceName}</p>
-                                <p className="text-[11px] text-muted">
-                                  {date}{nameLabel ? ` · ${nameLabel}` : ""}
-                                </p>
-                                {(therapistName || amount !== null || paymentMethod) && (
-                                  <p className="text-[11px] text-muted">
-                                    {therapistName && <span>Therapist: {therapistName}</span>}
-                                    {amount !== null && (
-                                      <span>{therapistName ? " · " : ""}₱{amount.toLocaleString()} · {paymentMethod}</span>
-                                    )}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="flex flex-col items-end gap-1 shrink-0">
-                                <span
-                                  className={`text-sm font-bold ${
-                                    entry.points_delta >= 0 ? "text-gold" : "text-accent-red"
-                                  }`}
-                                >
-                                  {entry.points_delta >= 0 ? "+" : ""}{entry.points_delta}
-                                </span>
-                                <span className="rounded bg-surface-accent px-1.5 py-0.5 text-[9px] font-mono font-semibold text-muted uppercase tracking-wide">
-                                  {entry.source}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-
-                    <div className="p-4 border-t border-border flex items-center justify-between">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-                        Current Balance
-                      </p>
-                      <p className="text-base font-bold text-gold">{selected.points_balance} pts</p>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={membersCurrentPage <= 1}
+                      onClick={() => setMembersCurrentPage((p) => Math.max(1, p - 1))}
+                      className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors cursor-pointer"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs text-muted">
+                      Page <span className="font-medium text-foreground">{membersCurrentPage}</span> of{" "}
+                      <span className="font-medium text-foreground">{totalMembersPages}</span>
+                    </span>
+                    <button
+                      type="button"
+                      disabled={membersCurrentPage >= totalMembersPages}
+                      onClick={() => setMembersCurrentPage((p) => Math.min(totalMembersPages, p + 1))}
+                      className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors cursor-pointer"
+                    >
+                      Next
+                    </button>
                   </div>
                 </div>
-              )}
-            </>
+              </div>
+            </div>
           )}
-        </>
+        </div>
       )}
 
       {/* WALK-IN WITHOUT ACCOUNT TAB */}
@@ -770,7 +698,7 @@ export function ClientBrowser({
                                 e.stopPropagation();
                                 setSelectedWalkInCodename(g.codename);
                               }}
-                              className="rounded border border-gold/40 bg-gold/10 px-2.5 py-1 font-medium text-gold hover:bg-gold/20 transition-colors"
+                              className="rounded border border-gold/40 bg-gold/10 px-2.5 py-1 font-medium text-gold hover:bg-gold/20 transition-colors cursor-pointer"
                             >
                               View Past Stays →
                             </button>
@@ -782,25 +710,22 @@ export function ClientBrowser({
                 </table>
               </div>
 
-              {/* Pagination Controls Bar */}
+              {/* Walk-In Pagination Controls Bar */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-lg border border-border bg-surface p-4 text-sm">
-                {/* Left side: status indicator */}
                 <div className="text-xs text-muted">
-                  Showing <span className="font-medium text-foreground">{startIndex + 1}</span>–
+                  Showing <span className="font-medium text-foreground">{walkInsStartIndex + 1}</span>–
                   <span className="font-medium text-foreground">
-                    {Math.min(startIndex + pageSize, totalWalkIns)}
+                    {Math.min(walkInsStartIndex + walkInsPageSize, totalWalkIns)}
                   </span>{" "}
                   of <span className="font-medium text-foreground">{totalWalkIns}</span> guests
                 </div>
 
-                {/* Right side: controls */}
                 <div className="flex flex-wrap items-center gap-6">
-                  {/* Rows per page selector */}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted">Rows per page:</span>
                     <select
-                      value={pageSize}
-                      onChange={(e) => setPageSize(Number(e.target.value))}
+                      value={walkInsPageSize}
+                      onChange={(e) => setWalkInsPageSize(Number(e.target.value))}
                       className="rounded-md border border-[#292524] bg-[#141210] px-2.5 py-1 text-xs text-[#f5f5f4] focus:border-gold/50 focus:outline-none"
                     >
                       <option value={10}>10</option>
@@ -810,25 +735,24 @@ export function ClientBrowser({
                     </select>
                   </div>
 
-                  {/* Navigation Buttons */}
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      disabled={currentPage <= 1}
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                      disabled={walkInsCurrentPage <= 1}
+                      onClick={() => setWalkInsCurrentPage((p) => Math.max(1, p - 1))}
+                      className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors cursor-pointer"
                     >
                       Previous
                     </button>
                     <span className="text-xs text-muted">
-                      Page <span className="font-medium text-foreground">{currentPage}</span> of{" "}
-                      <span className="font-medium text-foreground">{totalPages}</span>
+                      Page <span className="font-medium text-foreground">{walkInsCurrentPage}</span> of{" "}
+                      <span className="font-medium text-foreground">{totalWalkInPages}</span>
                     </span>
                     <button
                       type="button"
-                      disabled={currentPage >= totalPages}
-                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                      disabled={walkInsCurrentPage >= totalWalkInPages}
+                      onClick={() => setWalkInsCurrentPage((p) => Math.min(totalWalkInPages, p + 1))}
+                      className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors cursor-pointer"
                     >
                       Next
                     </button>
@@ -840,32 +764,11 @@ export function ClientBrowser({
         </div>
       )}
 
-      {/* Log Visit Modal */}
-      {showLogVisit && selected && (
-        <LogVisitModal
-          clients={clients}
-          services={services}
-          staff={staff}
-          therapists={therapists}
-          promos={promos}
-          addons={addons}
-          lockers={lockers}
-          initialClientId={selected.id}
-          initialServiceId={logVisitServiceId}
-          onClose={() => setShowLogVisit(false)}
-          onLogged={() => {
-            setShowLogVisit(false);
-            refreshHistory();
-            router.refresh();
-          }}
-        />
-      )}
-
-      {/* Client Profile Card Modal */}
-      {showClientCard && selected && (
+      {/* CLIENT PROFILE MODAL ("View Profile →") */}
+      {selectedMemberForProfile && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setShowClientCard(false)}
+          onClick={() => setSelectedMemberForProfile(null)}
         >
           <div
             className="w-full max-w-sm rounded-xl border border-border bg-surface p-6 space-y-5"
@@ -874,13 +777,17 @@ export function ClientBrowser({
             {/* Header */}
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-semibold text-foreground">{selected.codename}</h2>
-                <p className="text-xs text-muted">@{selected.username} · #{selected.member_code}</p>
+                <h2 className="text-base font-semibold text-foreground">
+                  {selectedMemberForProfile.codename}
+                </h2>
+                <p className="text-xs font-mono text-muted">
+                  @{selectedMemberForProfile.username}
+                </p>
               </div>
               <button
                 type="button"
-                onClick={() => setShowClientCard(false)}
-                className="rounded-md p-1 text-muted hover:text-foreground transition-colors"
+                onClick={() => setSelectedMemberForProfile(null)}
+                className="rounded-md p-1 text-muted hover:text-foreground transition-colors cursor-pointer"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -894,55 +801,90 @@ export function ClientBrowser({
                 Mobile Number
               </p>
               <p className="text-sm font-mono text-foreground">
-                {selected.phone ?? (
+                {selectedMemberForProfile.phone ?? (
                   <span className="text-muted italic">Not on file</span>
                 )}
               </p>
             </div>
 
-            {/* QR Code */}
+            {/* Member Since (exact registration date) */}
+            <div className="rounded-lg border border-border bg-surface-2 px-4 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted mb-1">
+                Member Since
+              </p>
+              <p className="text-sm text-foreground">
+                {formatDisplayDate(selectedMemberForProfile.since_date)}
+              </p>
+            </div>
+
+            {/* Points balance */}
+            <div className="rounded-lg border border-border bg-surface-2 px-4 py-3 flex items-center justify-between">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+                Available Points
+              </p>
+              <p className="text-sm font-bold text-gold">
+                {selectedMemberForProfile.points_balance} pts
+              </p>
+            </div>
+
+            {/* Member QR Code */}
             <div className="rounded-lg border border-border bg-surface-2 p-4 flex flex-col items-center gap-3">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted self-start">
-                Member QR
+                Digital Member QR
               </p>
-              {selected.qr_token ? (
-                <QRImage value={selected.qr_token} size={160} />
+              {selectedMemberForProfile.qr_token ? (
+                <QRImage value={selectedMemberForProfile.qr_token} size={160} />
               ) : (
                 <p className="text-xs text-muted italic">No QR token assigned</p>
               )}
-              {selected.qr_token && (
+              {selectedMemberForProfile.qr_token && (
                 <p className="text-[10px] font-mono text-muted text-center break-all">
-                  {selected.qr_token}
+                  {selectedMemberForProfile.qr_token}
                 </p>
               )}
             </div>
 
-            {/* Locker status */}
-            {isCheckedIn && (
+            {/* Active Locker status */}
+            {lockerMap[selectedMemberForProfile.id] !== undefined && (
               <div className="rounded-lg border border-gold/30 bg-gold/5 px-4 py-3 flex items-center justify-between">
                 <p className="text-xs text-muted">Currently checked in</p>
                 <span className="rounded border border-gold/50 bg-gold/10 px-2 py-0.5 text-[11px] font-semibold text-gold">
-                  Locker {lockerNumber}
+                  Locker {lockerMap[selectedMemberForProfile.id]}
                 </span>
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={() => setShowClientCard(false)}
-              className="w-full rounded-md border border-border px-4 py-2.5 text-sm text-foreground hover:border-gold/30 transition-colors"
-            >
-              Close
-            </button>
+            {/* Action buttons */}
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setLogVisitClient(selectedMemberForProfile);
+                  setShowLogVisit(true);
+                  setSelectedMemberForProfile(null);
+                }}
+                disabled={services.length === 0 || staff.length === 0}
+                className="w-full flex items-center justify-center gap-1.5 rounded-md border border-gold bg-gold/10 px-4 py-2 text-xs font-semibold text-gold hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                <span>+</span> Log Visit for Member
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedMemberForProfile(null)}
+                className="w-full rounded-md border border-border px-4 py-2 text-sm text-foreground hover:border-gold/30 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* WALK-IN PAST STAYS DRAWER / MODAL */}
-      {activeWalkInGroup && (
+      {/* MEMBER VISIT HISTORY MODAL ("View Past Stays →") */}
+      {selectedMemberForHistory && (
         <div
           className="fixed inset-0 z-50 flex justify-end bg-black/60 transition-opacity"
-          onClick={() => setSelectedWalkInCodename(null)}
+          onClick={() => setSelectedMemberForHistory(null)}
         >
           <div
             className="w-full max-w-lg h-full border-l border-border bg-surface p-6 overflow-y-auto space-y-6 shadow-2xl animate-fade-in"
@@ -952,19 +894,20 @@ export function ClientBrowser({
             <div className="flex items-center justify-between border-b border-border pb-4">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-gold">
-                  Walk-In Guest Visit History
+                  Member Visit History
                 </p>
                 <h2 className="text-xl font-bold text-foreground mt-0.5">
-                  {activeWalkInGroup.codename}
+                  {selectedMemberForHistory.client.codename}
                 </h2>
-                <p className="text-xs text-muted mt-0.5">
-                  {activeWalkInGroup.visitCount} total visit{activeWalkInGroup.visitCount > 1 ? "s" : ""} on record
+                <p className="text-xs font-mono text-muted mt-0.5">
+                  @{selectedMemberForHistory.client.username} · {selectedMemberForHistory.visits.length} total visit
+                  {selectedMemberForHistory.visits.length !== 1 ? "s" : ""} on record
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedWalkInCodename(null)}
-                className="rounded-lg border border-border p-2 text-muted hover:text-foreground hover:border-gold/30 transition-colors"
+                onClick={() => setSelectedMemberForHistory(null)}
+                className="rounded-lg border border-border p-2 text-muted hover:text-foreground hover:border-gold/30 transition-colors cursor-pointer"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -974,92 +917,135 @@ export function ClientBrowser({
 
             {/* Visit Timeline / History Cards */}
             <div className="space-y-3">
-              {activeWalkInGroup.visits.map((visit, idx) => (
-                <div
-                  key={visit.id || idx}
-                  className="rounded-lg border border-border bg-surface-2 p-4 space-y-3"
-                >
-                  <div className="flex items-center justify-between border-b border-border/50 pb-2">
-                    <span className="text-xs font-semibold text-gold">
-                      Visit #{activeWalkInGroup.visitCount - idx}
-                    </span>
-                    <span className="text-xs text-muted font-mono">
-                      {formatDisplayDate(visit.booking_date)}
-                      {visit.start_time ? ` · ${formatTime(visit.start_time)}` : ""}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-muted">Service</p>
-                      <p className="font-medium text-foreground mt-0.5">
-                        {visit.service_name ?? <span className="text-muted italic">Wet Area / None</span>}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-muted">Therapist</p>
-                      <p className="font-medium text-foreground mt-0.5">
-                        {visit.therapist_name ?? <span className="text-muted italic">Unassigned</span>}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-muted">Massage Time</p>
-                      <p className="font-medium text-foreground mt-0.5">
-                        {visit.start_time ? (
-                          formatTime(visit.start_time)
-                        ) : (
-                          <span className="text-muted italic">None (Wet Area)</span>
-                        )}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-muted">Locker</p>
-                      <p className="font-medium text-foreground mt-0.5">
-                        {visit.locker_number ? (
-                          <span className="text-gold font-mono">Locker {visit.locker_number}</span>
-                        ) : (
-                          <span className="text-muted italic">None</span>
-                        )}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-muted">Amount & Payment</p>
-                      <p className="font-medium text-foreground mt-0.5">
-                        {visit.amount !== null ? (
-                          <span>
-                            ₱{visit.amount.toLocaleString()}{" "}
-                            {visit.payment_method && (
-                              <span className="text-muted text-[10px]">({visit.payment_method})</span>
-                            )}
-                          </span>
-                        ) : (
-                          <span className="text-muted italic">—</span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] text-muted pt-1">
-                    <span>Status: <strong className="text-foreground">{visit.status}</strong></span>
-                    <span className="text-[10px] font-mono">ID: {visit.id.slice(0, 8)}</span>
-                  </div>
+              {selectedMemberForHistory.visits.length === 0 ? (
+                <div className="rounded-lg border border-border bg-surface-2 p-6 text-center text-xs text-muted">
+                  No visit records found for this member.
                 </div>
-              ))}
+              ) : (
+                selectedMemberForHistory.visits.map((visit, idx) => (
+                  <div
+                    key={visit.id || idx}
+                    className="rounded-lg border border-border bg-surface-2 p-4 space-y-3"
+                  >
+                    <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                      <span className="text-xs font-semibold text-gold">
+                        Visit #{selectedMemberForHistory.visits.length - idx}
+                      </span>
+                      <span className="text-xs text-muted font-mono">
+                        {formatDisplayDate(visit.date)}
+                        {visit.time ? ` · ${formatTime(visit.time)}` : ""}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted">Service</p>
+                        <p className="font-medium text-foreground mt-0.5">
+                          {visit.service_name ?? <span className="text-muted italic">Wet Area / None</span>}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted">Therapist</p>
+                        <p className="font-medium text-foreground mt-0.5">
+                          {visit.therapist_name ?? <span className="text-muted italic">Unassigned</span>}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted">Massage Time</p>
+                        <p className="font-medium text-foreground mt-0.5">
+                          {visit.time ? (
+                            formatTime(visit.time)
+                          ) : (
+                            <span className="text-muted italic">None (Wet Area)</span>
+                          )}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted">Locker</p>
+                        <p className="font-medium text-foreground mt-0.5">
+                          {visit.locker_number ? (
+                            <span className="text-gold font-mono">Locker {visit.locker_number}</span>
+                          ) : (
+                            <span className="text-muted italic">None</span>
+                          )}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted">Amount & Payment</p>
+                        <p className="font-medium text-foreground mt-0.5">
+                          {visit.amount !== null ? (
+                            <span>
+                              ₱{visit.amount.toLocaleString()}{" "}
+                              {visit.payment_method && (
+                                <span className="text-muted text-[10px]">({visit.payment_method})</span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-muted italic">—</span>
+                          )}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted">Points Delta</p>
+                        <p className="font-medium mt-0.5">
+                          <span
+                            className={
+                              visit.points_delta >= 0 ? "text-gold font-bold" : "text-accent-red font-bold"
+                            }
+                          >
+                            {visit.points_delta >= 0 ? "+" : ""}
+                            {visit.points_delta} pts
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-muted pt-1">
+                      <span>Status: <strong className="text-foreground">{visit.entry_type}</strong></span>
+                      <span className="text-[10px] font-mono">ID: {visit.id.slice(0, 8)}</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             <button
               type="button"
-              onClick={() => setSelectedWalkInCodename(null)}
-              className="w-full rounded-lg border border-border py-2.5 text-sm font-medium text-foreground hover:border-gold/30 transition-colors"
+              onClick={() => setSelectedMemberForHistory(null)}
+              className="w-full rounded-lg border border-border py-2.5 text-sm font-medium text-foreground hover:border-gold/30 transition-colors cursor-pointer"
             >
               Close History
             </button>
           </div>
         </div>
+      )}
+
+      {/* Log Visit Modal */}
+      {showLogVisit && (logVisitClient || clients[0]) && (
+        <LogVisitModal
+          clients={clients}
+          services={services}
+          staff={staff}
+          therapists={therapists}
+          promos={promos}
+          addons={addons}
+          lockers={lockers}
+          initialClientId={(logVisitClient || clients[0]).id}
+          onClose={() => {
+            setShowLogVisit(false);
+            setLogVisitClient(null);
+          }}
+          onLogged={() => {
+            setShowLogVisit(false);
+            setLogVisitClient(null);
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );

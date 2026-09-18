@@ -15,6 +15,8 @@ export default async function ClientsPage() {
     { data: occupancy },
     { data: portalAccounts },
     { data: rawWalkIns },
+    { data: rawMemberTransactions },
+    { data: rawMemberBookings },
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -71,6 +73,52 @@ export default async function ClientsPage() {
       `)
       .is("client_id", null)
       .not("guest_label", "is", null)
+      .order("booking_date", { ascending: false })
+      .order("start_time", { ascending: false }),
+    supabase
+      .from("point_transactions")
+      .select(`
+        id,
+        client_id,
+        booking_id,
+        sale_id,
+        entry_type,
+        points_delta,
+        source,
+        notes,
+        created_at,
+        sales (
+          amount,
+          payment_method,
+          services ( name ),
+          therapists ( name ),
+          staff ! sales_processed_by_fkey ( name )
+        ),
+        bookings (
+          booking_date,
+          start_time,
+          status,
+          services ( name ),
+          therapists ( name ),
+          locker_occupancy ( locker_number )
+        )
+      `)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("bookings")
+      .select(`
+        id,
+        client_id,
+        booking_date,
+        start_time,
+        status,
+        created_at,
+        services ( name ),
+        therapists ( name ),
+        sales ( amount, payment_method ),
+        locker_occupancy ( locker_number )
+      `)
+      .not("client_id", "is", null)
       .order("booking_date", { ascending: false })
       .order("start_time", { ascending: false }),
   ]);
@@ -139,6 +187,8 @@ export default async function ClientsPage() {
         <ClientBrowser
           clients={registeredMembers}
           walkInVisits={walkInVisits}
+          memberTransactions={(rawMemberTransactions ?? []) as any[]}
+          memberBookings={(rawMemberBookings ?? []) as any[]}
           services={services ?? []}
           staff={staff ?? []}
           therapists={therapists ?? []}
