@@ -121,7 +121,7 @@ export function ReassignmentPanel({
                 onClick={() => openTransfer(row)}
                 className="rounded-md border border-[#6b4f1f] bg-surface px-2.5 py-1 text-[10px] font-bold text-accent-amber hover:brightness-125 transition-all"
               >
-                Transfer
+                Reassign Therapist
               </button>
               <button
                 type="button"
@@ -138,7 +138,7 @@ export function ReassignmentPanel({
       {transferBooking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-foreground">Transfer Booking</h3>
+            <h3 className="text-base font-bold text-foreground">Reassign Therapist</h3>
             <p className="text-xs text-muted">
               {transferBooking.clientLabel} · {fmtDate(transferBooking.bookingDate)}{" "}
               {fmtTime(transferBooking.startTime)} · was {transferBooking.therapistName}

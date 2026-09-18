@@ -70,7 +70,8 @@ export async function markAbsentToday(
     .update({ status: "Needs Reassignment" })
     .eq("therapist_id", therapistId)
     .eq("booking_date", date)
-    .eq("status", "Booked")
+    .neq("status", "Completed")
+    .neq("status", "Cancelled")
     .select("id");
   if (flagError) return fail(flagError);
 
@@ -109,7 +110,8 @@ export async function markOnLeave(
     .eq("therapist_id", therapistId)
     .gte("booking_date", startDate)
     .lte("booking_date", endDate)
-    .eq("status", "Booked")
+    .neq("status", "Completed")
+    .neq("status", "Cancelled")
     .select("id");
   if (flagError) return fail(flagError);
 
@@ -148,7 +150,8 @@ export async function archiveTherapist(
     .from("bookings")
     .update({ status: "Needs Reassignment" })
     .eq("therapist_id", therapistId)
-    .eq("status", "Booked")
+    .neq("status", "Completed")
+    .neq("status", "Cancelled")
     .gte("booking_date", currentSpaDate)
     .select("id");
   if (flagError) return fail(flagError);
@@ -229,7 +232,8 @@ export async function toggleDayOff(
       .from("bookings")
       .select("id, booking_date")
       .eq("therapist_id", therapistId)
-      .eq("status", "Booked")
+      .neq("status", "Completed")
+      .neq("status", "Cancelled")
       .gte("booking_date", today);
     if (candError) return fail(candError);
 

@@ -27,7 +27,11 @@ export default async function DashboardPage() {
     totalServices,
     totalRooms,
     totalLockers,
-    { data: dbFlagged },
+    { data: dbFlaggedStatus },
+    { data: dbActiveBookings },
+    { data: dbAbsences },
+    { data: dbLeaves },
+    { data: dbDaysOff },
     { data: dbTherapists },
   ] = await Promise.all([
     getCount(supabase, "therapists", { column: "archived", value: false }),
@@ -37,12 +41,34 @@ export default async function DashboardPage() {
     supabase
       .from("bookings")
       .select(
-        "id, booking_date, start_time, room_number, therapist_id, therapists(name), services(name), clients(codename), guest_label"
+        "id, booking_date, start_time, room_number, therapist_id, therapists(name, archived), services(name), clients(codename), guest_label"
       )
       .eq("status", "Needs Reassignment")
       .gte("booking_date", currentSpaDate)
       .order("booking_date", { ascending: true })
       .order("start_time", { ascending: true }),
+    supabase
+      .from("bookings")
+      .select(
+        "id, booking_date, start_time, room_number, therapist_id, therapists(name, archived), services(name), clients(codename), guest_label"
+      )
+      .gte("booking_date", currentSpaDate)
+      .not("therapist_id", "is", null)
+      .neq("status", "Completed")
+      .neq("status", "Cancelled")
+      .order("booking_date", { ascending: true })
+      .order("start_time", { ascending: true }),
+    supabase
+      .from("therapist_absence")
+      .select("therapist_id, absent_date")
+      .gte("absent_date", currentSpaDate),
+    supabase
+      .from("therapist_leave")
+      .select("therapist_id, start_date, end_date")
+      .gte("end_date", currentSpaDate),
+    supabase
+      .from("therapist_day_off")
+      .select("therapist_id, weekday"),
     supabase
       .from("therapists")
       .select("id, name")
@@ -56,13 +82,60 @@ export default async function DashboardPage() {
     start_time: string;
     room_number: number | null;
     therapist_id: string | null;
-    therapists: { name: string } | null;
+    therapists: { name: string; archived: boolean } | null;
     services: { name: string } | null;
     clients: { codename: string } | null;
     guest_label: string | null;
   };
 
-  const flaggedBookings: FlaggedBooking[] = ((dbFlagged ?? []) as FlaggedRow[]).map((b) => ({
+  const absenceSet = new Set((dbAbsences ?? []).map((a) => `${a.therapist_id}:${a.absent_date}`));
+
+  const isTherapistUnavailable = (
+    therapistId: string,
+    dateStr: string,
+    isArchived?: boolean
+  ) => {
+    if (isArchived) return true;
+    if (absenceSet.has(`${therapistId}:${dateStr}`)) return true;
+
+    const onLeave = (dbLeaves ?? []).some(
+      (l) => l.therapist_id === therapistId && dateStr >= l.start_date && dateStr <= l.end_date
+    );
+    if (onLeave) return true;
+
+    const dateObj = new Date(`${dateStr}T00:00:00`);
+    const weekday = dateObj.getDay();
+    const isDayOff = (dbDaysOff ?? []).some(
+      (d) => d.therapist_id === therapistId && d.weekday === weekday
+    );
+    if (isDayOff) return true;
+
+    return false;
+  };
+
+  const mapById = new Map<string, FlaggedRow>();
+
+  for (const b of (dbFlaggedStatus ?? []) as FlaggedRow[]) {
+    mapById.set(b.id, b);
+  }
+
+  for (const b of (dbActiveBookings ?? []) as FlaggedRow[]) {
+    if (
+      b.therapist_id &&
+      isTherapistUnavailable(b.therapist_id, b.booking_date, b.therapists?.archived)
+    ) {
+      mapById.set(b.id, b);
+    }
+  }
+
+  const sortedRows = Array.from(mapById.values()).sort((a, b) => {
+    if (a.booking_date !== b.booking_date) {
+      return a.booking_date.localeCompare(b.booking_date);
+    }
+    return (a.start_time || "").localeCompare(b.start_time || "");
+  });
+
+  const flaggedBookings: FlaggedBooking[] = sortedRows.map((b) => ({
     id: b.id,
     bookingDate: b.booking_date,
     startTime: b.start_time,
