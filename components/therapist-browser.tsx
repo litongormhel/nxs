@@ -68,6 +68,7 @@ export type BookingInfo = {
   time: string;
   service: string;
   status: string;
+  roomNumber?: number | null;
 };
 
 function todayISO(): string {
@@ -275,7 +276,7 @@ export function TherapistBrowser({
   });
 
   // Filter controls
-  const [viewDate, setViewDate] = useState<string>(() => todayISO());
+  const [viewDate, setViewDate] = useState<string>(() => spaDayNow());
   const [viewTime, setViewTime] = useState<string>("20:30");
   const [filter, setFilter] = useState<string>("all");
   const [showArchived, setShowArchived] = useState<boolean>(false);
@@ -381,9 +382,7 @@ export function TherapistBrowser({
       (b) =>
         b.therapist === t &&
         b.date === date &&
-        (b.status === "Booked" ||
-          b.status === "Completed" ||
-          b.status === "Needs Reassignment") &&
+        b.status !== "Cancelled" &&
         windowOverlap(startMin, dur, timeToMin(b.time), 90)
     );
   };
@@ -457,18 +456,42 @@ export function TherapistBrowser({
   };
 
   // Intercepts "Mark Absent Today" from the kebab menu — checks if the
-  // therapist has active bookings for the current spa-day and opens the
+  // therapist has active bookings for the current spa-day / view date and opens the
   // appropriate confirmation modal (warning variant if bookings exist,
   // simple confirm variant if none).
   const handleRequestMarkAbsent = (t: string) => {
     const todayStr = spaDayNow();
-    const activeBookings = bookings.filter(
-      (b) =>
-        b.therapist === t &&
-        b.date === todayStr &&
-        b.status !== "Completed" &&
-        b.status !== "Cancelled"
-    );
+    const therapistId = therapistIds[t];
+    const activeBookings = bookings.filter((b) => {
+      const matchTherapist =
+        b.therapist === t ||
+        (therapistId && b.therapist === therapistId) ||
+        (b as any).therapist_id === therapistId ||
+        (b as any).therapistId === therapistId;
+
+      const matchDate =
+        b.date === viewDate ||
+        b.date === todayStr ||
+        (b as any).booking_date === viewDate ||
+        (b as any).booking_date === todayStr;
+
+      const st = String(b.status || "").toLowerCase();
+      const isCancelled = st === "cancelled";
+      const isCompleted = st === "completed";
+      const isCheckedIn = [
+        "check-in",
+        "checked-in",
+        "checked_in",
+        "checked in",
+      ].includes(st);
+
+      // Any booking that is NOT 'Completed' and NOT 'Cancelled' is counted as an active booking.
+      // If a booking has check-in status, it is always active.
+      const isActive = (!isCompleted && !isCancelled) || isCheckedIn;
+
+      return matchTherapist && matchDate && isActive;
+    });
+
     setAbsentConfirmTherapist(t);
     setAbsentConfirmBookings(activeBookings);
   };
@@ -491,20 +514,44 @@ export function TherapistBrowser({
     setTherapistMeta((prev) => {
       const meta = prev[t];
       if (!meta) return prev;
+      const updatedAbsent = meta.absentDates.includes(todayStr)
+        ? meta.absentDates.slice()
+        : [...meta.absentDates, todayStr];
+      if (viewDate && !updatedAbsent.includes(viewDate)) {
+        updatedAbsent.push(viewDate);
+      }
       return {
         ...prev,
-        [t]: { ...meta, absentDates: [...meta.absentDates, todayStr] },
+        [t]: { ...meta, absentDates: updatedAbsent },
       };
     });
     let flaggedCount = 0;
     setBookings((prev) =>
       prev.map((b) => {
-        if (
-          b.therapist === t &&
-          b.date === todayStr &&
-          b.status !== "Completed" &&
-          b.status !== "Cancelled"
-        ) {
+        const matchTherapist =
+          b.therapist === t ||
+          (therapistId && b.therapist === therapistId) ||
+          (b as any).therapist_id === therapistId ||
+          (b as any).therapistId === therapistId;
+
+        const matchDate =
+          b.date === viewDate ||
+          b.date === todayStr ||
+          (b as any).booking_date === viewDate ||
+          (b as any).booking_date === todayStr;
+
+        const st = String(b.status || "").toLowerCase();
+        const isCancelled = st === "cancelled";
+        const isCompleted = st === "completed";
+        const isCheckedIn = [
+          "check-in",
+          "checked-in",
+          "checked_in",
+          "checked in",
+        ].includes(st);
+        const isActive = (!isCompleted && !isCancelled) || isCheckedIn;
+
+        if (matchTherapist && matchDate && isActive) {
           flaggedCount++;
           return { ...b, status: "Needs Reassignment" };
         }
@@ -798,7 +845,7 @@ export function TherapistBrowser({
         (b) =>
           b.therapist === t &&
           b.date === viewDate &&
-          (b.status === "Booked" || b.status === "Completed")
+          b.status !== "Cancelled"
       ).length
   );
   const maxCount = Math.max(...counts, 0);
@@ -1243,7 +1290,7 @@ export function TherapistBrowser({
                       (b) =>
                         b.therapist === scheduleModalTherapist &&
                         b.date === viewDate &&
-                        (b.status === "Booked" || b.status === "Completed")
+                        b.status !== "Cancelled"
                     ).length
                   }{" "}
                   / {WEEKEND_SLOTS.length}
@@ -1257,9 +1304,7 @@ export function TherapistBrowser({
                 (b) =>
                   b.therapist === scheduleModalTherapist &&
                   b.date === viewDate &&
-                  (b.status === "Booked" ||
-                    b.status === "Completed" ||
-                    b.status === "Needs Reassignment")
+                  b.status !== "Cancelled"
               ).length === 0 ? (
                 <div className="py-4 text-center text-xs text-muted">
                   No bookings for this date.
@@ -1270,9 +1315,7 @@ export function TherapistBrowser({
                     (b) =>
                       b.therapist === scheduleModalTherapist &&
                       b.date === viewDate &&
-                      (b.status === "Booked" ||
-                        b.status === "Completed" ||
-                        b.status === "Needs Reassignment")
+                      b.status !== "Cancelled"
                   )
                   .sort((a, b) => spaSortMin(a.time) - spaSortMin(b.time))
                   .map((b) => (
@@ -1613,22 +1656,21 @@ export function TherapistBrowser({
             <div>
               <h3 className="text-base font-serif font-bold text-foreground">
                 {absentConfirmBookings.length > 0
-                  ? "Confirm Therapist Absence"
+                  ? "⚠️ Confirm Therapist Absence"
                   : "Confirm Absence"}
               </h3>
               {absentConfirmBookings.length > 0 ? (
                 <p className="text-[11px] text-accent-amber mt-1.5 leading-relaxed">
-                  ⚠️{" "}
                   <span className="font-semibold text-foreground">
                     {absentConfirmTherapist}
                   </span>{" "}
                   has{" "}
                   <span className="font-semibold">
-                    {absentConfirmBookings.length} active booking
-                    {absentConfirmBookings.length !== 1 ? "s" : ""}
+                    {absentConfirmBookings.length} active booking(s)
                   </span>{" "}
-                  scheduled for today. Marking them absent will unassign these
-                  slots and require reassignment on the Dashboard.
+                  scheduled for today (including checked-in clients). Marking
+                  them absent will require these clients to be reassigned on the
+                  Dashboard.
                 </p>
               ) : (
                 <p className="text-[11px] text-muted mt-1.5">
@@ -1649,17 +1691,25 @@ export function TherapistBrowser({
                   .map((b) => (
                     <div
                       key={b.id}
-                      className="text-[11px] text-foreground flex items-center gap-1.5"
+                      className="text-[11px] text-foreground flex items-center justify-between gap-1.5"
                     >
-                      <span className="text-accent-amber">•</span>
-                      <span className="font-mono font-bold text-accent-gold">
-                        {fmtTime(b.time)}
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span className="text-accent-amber">•</span>
+                        <span className="font-mono font-bold text-accent-gold">
+                          {fmtTime(b.time)}
+                        </span>
+                        <span className="text-muted">-</span>
+                        <span className="font-medium text-foreground truncate">
+                          {b.clientName}
+                        </span>
+                        <span className="text-muted truncate">
+                          ({b.service}
+                          {b.roomNumber ? `, Room ${b.roomNumber}` : ""})
+                        </span>
+                      </div>
+                      <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wider bg-accent-gold/15 text-accent-gold border border-accent-gold/30">
+                        [{b.status}]
                       </span>
-                      <span className="text-muted">—</span>
-                      <span>{b.clientName}</span>
-                      {b.service && (
-                        <span className="text-muted">({b.service})</span>
-                      )}
                     </div>
                   ))}
               </div>
@@ -1685,7 +1735,7 @@ export function TherapistBrowser({
                     setAbsentConfirmBookings([]);
                     handleMarkAbsent(t);
                   }}
-                  className="flex-1 rounded-lg bg-rose-500/80 py-2 text-xs font-bold text-white hover:bg-rose-500"
+                  className="flex-1 rounded-lg bg-red-600 hover:bg-red-700 py-2 text-xs font-bold text-white transition-colors"
                 >
                   Yes, Mark Absent
                 </button>

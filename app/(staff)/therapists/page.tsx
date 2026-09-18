@@ -20,7 +20,7 @@ export default async function TherapistsPage() {
     supabase
       .from("bookings")
       .select(
-        "id, booking_date, start_time, status, therapists(name), services(name), clients(codename), guest_label"
+        "id, booking_date, start_time, room_number, status, therapists(name), services(name), clients(codename), guest_label, locker_occupancy(id, checked_in_at, checked_out_at)"
       )
       .order("start_time", { ascending: true }),
     supabase.from("therapist_day_off").select("therapist_id, weekday"),
@@ -100,15 +100,28 @@ export default async function TherapistsPage() {
     (servicesByTherapist[row.therapist_id] ??= []).push(service.name);
   });
 
-  const bookings: BookingInfo[] = (dbBookings ?? []).map((b: any) => ({
-    id: b.id,
-    therapist: b.therapists?.name ?? "",
-    clientName: b.clients?.codename ?? b.guest_label ?? "Walk-in",
-    date: b.booking_date,
-    time: b.start_time,
-    service: b.services?.name ?? "Massage",
-    status: b.status,
-  }));
+  const bookings: BookingInfo[] = (dbBookings ?? []).map((b: any) => {
+    const activeOcc = (b.locker_occupancy ?? []).find(
+      (o: any) => !o.checked_out_at
+    );
+    const isCheckedIn =
+      !!activeOcc ||
+      ["check-in", "checked-in", "checked_in", "checked in"].includes(
+        String(b.status).toLowerCase()
+      );
+    const effectiveStatus = isCheckedIn ? "Checked-in" : b.status;
+
+    return {
+      id: b.id,
+      therapist: b.therapists?.name ?? "",
+      clientName: b.clients?.codename ?? b.guest_label ?? "Walk-in",
+      date: b.booking_date,
+      time: b.start_time,
+      service: b.services?.name ?? "Massage",
+      roomNumber: b.room_number ?? null,
+      status: effectiveStatus,
+    };
+  });
 
   return (
     <div className="p-8">

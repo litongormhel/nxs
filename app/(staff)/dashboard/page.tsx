@@ -41,7 +41,7 @@ export default async function DashboardPage() {
     supabase
       .from("bookings")
       .select(
-        "id, booking_date, start_time, room_number, therapist_id, therapists(name, archived), services(name), clients(codename), guest_label"
+        "id, booking_date, start_time, room_number, therapist_id, status, therapists(name, archived), services(name), clients(codename), guest_label"
       )
       .eq("status", "Needs Reassignment")
       .gte("booking_date", currentSpaDate)
@@ -50,11 +50,10 @@ export default async function DashboardPage() {
     supabase
       .from("bookings")
       .select(
-        "id, booking_date, start_time, room_number, therapist_id, therapists(name, archived), services(name), clients(codename), guest_label"
+        "id, booking_date, start_time, room_number, therapist_id, status, therapists(name, archived), services(name), clients(codename), guest_label, locker_occupancy(id, checked_in_at, checked_out_at)"
       )
       .gte("booking_date", currentSpaDate)
       .not("therapist_id", "is", null)
-      .neq("status", "Completed")
       .neq("status", "Cancelled")
       .order("booking_date", { ascending: true })
       .order("start_time", { ascending: true }),
@@ -82,13 +81,26 @@ export default async function DashboardPage() {
     start_time: string;
     room_number: number | null;
     therapist_id: string | null;
+    status: string;
     therapists: { name: string; archived: boolean } | null;
     services: { name: string } | null;
     clients: { codename: string } | null;
     guest_label: string | null;
+    locker_occupancy?: { id: string; checked_in_at: string; checked_out_at: string | null }[] | null;
   };
 
-  const absenceSet = new Set((dbAbsences ?? []).map((a) => `${a.therapist_id}:${a.absent_date}`));
+  const normId = (id: string | null | undefined) => String(id || "").trim().toLowerCase();
+  const normDate = (d: string | null | undefined) => String(d || "").slice(0, 10);
+
+  const absenceSet = new Set(
+    (dbAbsences ?? []).map((a) => `${normId(a.therapist_id)}:${normDate(a.absent_date)}`)
+  );
+
+  const absentTherapistIdsToday = new Set(
+    (dbAbsences ?? [])
+      .filter((a) => normDate(a.absent_date) === currentSpaDate)
+      .map((a) => normId(a.therapist_id))
+  );
 
   const isTherapistUnavailable = (
     therapistId: string,
@@ -96,17 +108,22 @@ export default async function DashboardPage() {
     isArchived?: boolean
   ) => {
     if (isArchived) return true;
-    if (absenceSet.has(`${therapistId}:${dateStr}`)) return true;
+    const nid = normId(therapistId);
+    const ndate = normDate(dateStr);
+    if (absenceSet.has(`${nid}:${ndate}`)) return true;
 
     const onLeave = (dbLeaves ?? []).some(
-      (l) => l.therapist_id === therapistId && dateStr >= l.start_date && dateStr <= l.end_date
+      (l) =>
+        normId(l.therapist_id) === nid &&
+        ndate >= normDate(l.start_date) &&
+        ndate <= normDate(l.end_date)
     );
     if (onLeave) return true;
 
-    const dateObj = new Date(`${dateStr}T00:00:00`);
+    const dateObj = new Date(`${ndate}T00:00:00`);
     const weekday = dateObj.getDay();
     const isDayOff = (dbDaysOff ?? []).some(
-      (d) => d.therapist_id === therapistId && d.weekday === weekday
+      (d) => normId(d.therapist_id) === nid && d.weekday === weekday
     );
     if (isDayOff) return true;
 
@@ -120,8 +137,20 @@ export default async function DashboardPage() {
   }
 
   for (const b of (dbActiveBookings ?? []) as FlaggedRow[]) {
+    if (!b.therapist_id) continue;
+    const nid = normId(b.therapist_id);
+    const ndate = normDate(b.booking_date);
+    const isAbsentToday = ndate === currentSpaDate && absentTherapistIdsToday.has(nid);
+
+    // Active booking: not cancelled, and either not completed OR checked-in (has active locker stay)
+    const isCheckedIn = (b.locker_occupancy ?? []).some((o) => !o.checked_out_at);
+    const isActiveBooking =
+      b.status !== "Cancelled" && (b.status !== "Completed" || isCheckedIn);
+
+    if (!isActiveBooking) continue;
+
     if (
-      b.therapist_id &&
+      isAbsentToday ||
       isTherapistUnavailable(b.therapist_id, b.booking_date, b.therapists?.archived)
     ) {
       mapById.set(b.id, b);
@@ -135,7 +164,7 @@ export default async function DashboardPage() {
     return (a.start_time || "").localeCompare(b.start_time || "");
   });
 
-  const flaggedBookings: FlaggedBooking[] = sortedRows.map((b) => ({
+  const reassignmentBookings: FlaggedBooking[] = sortedRows.map((b) => ({
     id: b.id,
     bookingDate: b.booking_date,
     startTime: b.start_time,
@@ -145,6 +174,19 @@ export default async function DashboardPage() {
     therapistId: b.therapist_id,
     therapistName: b.therapists?.name ?? "Unassigned",
   }));
+
+  console.log("[Dashboard] Today:", currentSpaDate);
+  console.log("[Dashboard] Absences:", dbAbsences);
+  console.log(
+    "[Dashboard] Active Bookings:",
+    dbActiveBookings?.map((b) => ({
+      id: b.id,
+      therapist: b.therapist_id,
+      status: b.status,
+      date: b.booking_date,
+    }))
+  );
+  console.log("[Dashboard] Reassignment List:", reassignmentBookings);
 
   const therapistOptions = (dbTherapists ?? []).map((t) => ({ id: t.id, name: t.name }));
 
@@ -175,7 +217,7 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      <ReassignmentPanel initialFlagged={flaggedBookings} therapists={therapistOptions} />
+      <ReassignmentPanel bookings={reassignmentBookings} therapists={therapistOptions} />
     </div>
   );
 }

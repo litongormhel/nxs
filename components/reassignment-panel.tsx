@@ -32,12 +32,15 @@ function fmtDate(iso: string): string {
 }
 
 export function ReassignmentPanel({
+  bookings,
   initialFlagged,
-  therapists,
+  therapists = [],
 }: {
-  initialFlagged: FlaggedBooking[];
-  therapists: TherapistOption[];
+  bookings?: FlaggedBooking[];
+  initialFlagged?: FlaggedBooking[];
+  therapists?: TherapistOption[];
 }) {
+  const flagged = bookings ?? initialFlagged ?? [];
   const { sessionStaff } = useStaffSim();
   const router = useRouter();
 
@@ -94,15 +97,15 @@ export function ReassignmentPanel({
     router.refresh();
   }
 
-  if (initialFlagged.length === 0) return null;
+  if (flagged.length === 0) return null;
 
   return (
     <div className="mt-6 rounded-lg border border-[#6b4f1f] bg-surface p-5">
       <h2 className="text-sm font-bold text-accent-amber uppercase tracking-wide">
-        Needs Reassignment ({initialFlagged.length})
+        Needs Reassignment ({flagged.length})
       </h2>
       <div className="mt-3 space-y-2">
-        {initialFlagged.map((row) => (
+        {flagged.map((row) => (
           <div
             key={row.id}
             className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface-2 px-3 py-2"

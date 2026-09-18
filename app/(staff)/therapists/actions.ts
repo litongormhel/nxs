@@ -66,21 +66,41 @@ export async function markAbsentToday(
     );
   if (absenceError) return fail(absenceError);
 
-  const { data: flagged, error: flagError } = await supabase
+  // Fetch active bookings for this therapist today, including checked-in clients
+  // (bookings with status != 'Completed', or status == 'Completed' with unclosed locker occupancy)
+  const { data: therapistBookings, error: fetchError } = await supabase
     .from("bookings")
-    .update({ status: "Needs Reassignment" })
+    .select("id, status, locker_occupancy(id, checked_out_at)")
     .eq("therapist_id", therapistId)
     .eq("booking_date", date)
-    .neq("status", "Completed")
-    .neq("status", "Cancelled")
-    .select("id");
-  if (flagError) return fail(flagError);
+    .neq("status", "Cancelled");
+
+  if (fetchError) return fail(fetchError);
+
+  const idsToFlag = (therapistBookings ?? [])
+    .filter(
+      (b) =>
+        b.status !== "Completed" ||
+        (b.locker_occupancy ?? []).some((o: any) => !o.checked_out_at)
+    )
+    .map((b) => b.id);
+
+  let flaggedCount = 0;
+  if (idsToFlag.length > 0) {
+    const { data: flagged, error: flagError } = await supabase
+      .from("bookings")
+      .update({ status: "Needs Reassignment" })
+      .in("id", idsToFlag)
+      .select("id");
+    if (flagError) return fail(flagError);
+    flaggedCount = flagged?.length ?? 0;
+  }
 
   await logAction(
     supabase,
     staffId,
     "therapist_mark_absent",
-    `therapist=${therapistId} date=${date} flagged=${flagged?.length ?? 0}`
+    `therapist=${therapistId} date=${date} flagged=${flaggedCount}`
   );
   revalidatePath("/therapists");
   revalidatePath("/dashboard");
