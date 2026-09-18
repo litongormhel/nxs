@@ -305,6 +305,10 @@ export function TherapistBrowser({
   const [editName, setEditName] = useState<string>("");
   const [editError, setEditError] = useState<string | null>(null);
 
+  // Absent confirmation modal state
+  const [absentConfirmTherapist, setAbsentConfirmTherapist] = useState<string | null>(null);
+  const [absentConfirmBookings, setAbsentConfirmBookings] = useState<BookingInfo[]>([]);
+
   // Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const showToast = (msg: string) => setToastMessage(msg);
@@ -452,13 +456,33 @@ export function TherapistBrowser({
     showToast(`${t} now ${!offers ? "offers" : "no longer offers"} ${s}`);
   };
 
+  // Intercepts "Mark Absent Today" from the kebab menu — checks if the
+  // therapist has active bookings for the current spa-day and opens the
+  // appropriate confirmation modal (warning variant if bookings exist,
+  // simple confirm variant if none).
+  const handleRequestMarkAbsent = (t: string) => {
+    const todayStr = spaDayNow();
+    const activeBookings = bookings.filter(
+      (b) =>
+        b.therapist === t &&
+        b.date === todayStr &&
+        b.status !== "Completed" &&
+        b.status !== "Cancelled"
+    );
+    setAbsentConfirmTherapist(t);
+    setAbsentConfirmBookings(activeBookings);
+  };
+
   // Mark absent today handler — writes through to therapist_absence and
-  // flags that day's Booked appointments as Needs Reassignment.
+  // flags that day's active appointments as Needs Reassignment.
+  // Uses spaDayNow() (Manila spa-day) — NOT viewDate — so the stored
+  // absent_date always matches what the server-side dashboard query expects.
   const handleMarkAbsent = async (t: string) => {
     const therapistId = therapistIds[t];
     if (!therapistId || !sessionStaff) return;
 
-    const res = await markAbsentTodayAction(therapistId, viewDate, sessionStaff.id);
+    const todayStr = spaDayNow();
+    const res = await markAbsentTodayAction(therapistId, todayStr, sessionStaff.id);
     if (!res.ok) {
       showToast(`Couldn't mark ${t} absent — ${res.error}`);
       return;
@@ -469,13 +493,18 @@ export function TherapistBrowser({
       if (!meta) return prev;
       return {
         ...prev,
-        [t]: { ...meta, absentDates: [...meta.absentDates, viewDate] },
+        [t]: { ...meta, absentDates: [...meta.absentDates, todayStr] },
       };
     });
     let flaggedCount = 0;
     setBookings((prev) =>
       prev.map((b) => {
-        if (b.therapist === t && b.date === viewDate && b.status === "Booked") {
+        if (
+          b.therapist === t &&
+          b.date === todayStr &&
+          b.status !== "Completed" &&
+          b.status !== "Cancelled"
+        ) {
           flaggedCount++;
           return { ...b, status: "Needs Reassignment" };
         }
@@ -483,7 +512,7 @@ export function TherapistBrowser({
       })
     );
     showToast(
-      `${t} marked absent on ${fmtDate(viewDate)}${
+      `${t} marked absent on ${fmtDate(todayStr)}${
         flaggedCount > 0 ? ` · ${flaggedCount} booking(s) flagged` : ""
       }`
     );
@@ -1009,7 +1038,7 @@ export function TherapistBrowser({
                               <div
                                 onClick={() => {
                                   setOpenKebab(null);
-                                  handleMarkAbsent(t);
+                                  handleRequestMarkAbsent(t);
                                 }}
                                 className="px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-surface cursor-pointer border-b border-border"
                               >
@@ -1566,6 +1595,114 @@ export function TherapistBrowser({
               >
                 Save
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Confirm Mark Absent Today */}
+      {absentConfirmTherapist && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div
+            className={`w-full max-w-sm rounded-2xl border bg-surface p-5 shadow-2xl space-y-4 ${
+              absentConfirmBookings.length > 0
+                ? "border-[#6b4f1f]"
+                : "border-border"
+            }`}
+          >
+            <div>
+              <h3 className="text-base font-serif font-bold text-foreground">
+                {absentConfirmBookings.length > 0
+                  ? "Confirm Therapist Absence"
+                  : "Confirm Absence"}
+              </h3>
+              {absentConfirmBookings.length > 0 ? (
+                <p className="text-[11px] text-accent-amber mt-1.5 leading-relaxed">
+                  ⚠️{" "}
+                  <span className="font-semibold text-foreground">
+                    {absentConfirmTherapist}
+                  </span>{" "}
+                  has{" "}
+                  <span className="font-semibold">
+                    {absentConfirmBookings.length} active booking
+                    {absentConfirmBookings.length !== 1 ? "s" : ""}
+                  </span>{" "}
+                  scheduled for today. Marking them absent will unassign these
+                  slots and require reassignment on the Dashboard.
+                </p>
+              ) : (
+                <p className="text-[11px] text-muted mt-1.5">
+                  Are you sure you want to mark{" "}
+                  <span className="font-semibold text-foreground">
+                    {absentConfirmTherapist}
+                  </span>{" "}
+                  absent for today?
+                </p>
+              )}
+            </div>
+
+            {absentConfirmBookings.length > 0 && (
+              <div className="rounded-lg border border-[#6b4f1f] bg-surface-2 px-3.5 py-2.5 space-y-1.5">
+                {absentConfirmBookings
+                  .slice()
+                  .sort((a, b) => spaSortMin(a.time) - spaSortMin(b.time))
+                  .map((b) => (
+                    <div
+                      key={b.id}
+                      className="text-[11px] text-foreground flex items-center gap-1.5"
+                    >
+                      <span className="text-accent-amber">•</span>
+                      <span className="font-mono font-bold text-accent-gold">
+                        {fmtTime(b.time)}
+                      </span>
+                      <span className="text-muted">—</span>
+                      <span>{b.clientName}</span>
+                      {b.service && (
+                        <span className="text-muted">({b.service})</span>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setAbsentConfirmTherapist(null);
+                  setAbsentConfirmBookings([]);
+                }}
+                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+              {absentConfirmBookings.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = absentConfirmTherapist;
+                    setAbsentConfirmTherapist(null);
+                    setAbsentConfirmBookings([]);
+                    handleMarkAbsent(t);
+                  }}
+                  className="flex-1 rounded-lg bg-rose-500/80 py-2 text-xs font-bold text-white hover:bg-rose-500"
+                >
+                  Yes, Mark Absent
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = absentConfirmTherapist;
+                    setAbsentConfirmTherapist(null);
+                    setAbsentConfirmBookings([]);
+                    handleMarkAbsent(t);
+                  }}
+                  className="flex-1 rounded-lg bg-gold py-2 text-xs font-bold text-black hover:brightness-110"
+                >
+                  Confirm
+                </button>
+              )}
             </div>
           </div>
         </div>
