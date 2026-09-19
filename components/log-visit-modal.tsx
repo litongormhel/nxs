@@ -150,7 +150,7 @@ export function LogVisitModal({
 
   const [manualDiscountOn, setManualDiscountOn] = useState(false);
   const [discountType, setDiscountType] = useState<"pct" | "fixed">("pct");
-  const [discountValue, setDiscountValue] = useState(25);
+  const [discountValue, setDiscountValue] = useState(20);
 
   const [addonIds, setAddonIds] = useState<string[]>([]);
   const [promoId, setPromoId] = useState<string>(initialBooking?.promo_id ?? "none");
