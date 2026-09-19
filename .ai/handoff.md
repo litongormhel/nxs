@@ -5,6 +5,23 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Set Default Manual Discount Percentage to 20% — complete**
+  (`ohm#3c8f1e2a`, 2026-09-19).
+  - Implementation plan presented and approved before code execution.
+  - **Quick Walk-in Modal (`components/quick-walkin-modal.tsx`)**:
+    - Updated initial `discountValue` state from `25` to `20`.
+    - Updated `onManualDiscountToggle(checked: boolean)`: when checked and `discountType === "pct"`, resets `discountValue` to `20`.
+    - Updated `wk-discount-type` select `onChange`: when switching type to `"pct"`, sets `discountValue` to `20`.
+    - Verified amount calculations (`amount` and `servicePaidAmount`) immediately reflect the 20% discount upon checking the "Manual discount (e.g. Senior or PWD)" box.
+  - **Log Visit Modal (`components/log-visit-modal.tsx`)**:
+    - Confirmed initial `discountValue` state is `20`.
+    - Updated `onManualDiscountToggle(checked: boolean)`: when checked and `discountType === "pct"`, resets `discountValue` to `20`.
+    - Updated `fDiscountType` select `onChange`: when switching type to `"pct"`, sets `discountValue` to `20`.
+    - Verified total amount calculations (`computedAmount` and `servicePaidAmount`) immediately reflect the 20% discount upon checking the box.
+  - **New Booking Modal (`components/booking-form-modal.tsx`)**:
+    - Confirmed untouched (scheduling only; no manual discount or price calculations).
+  - `npm run build` clean (0 compilation / TypeScript errors). See [[bookings_state]] and `.ai/briefing.md`.
+
 - **Fix Schema Cache Error for Lockers is_maintenance Column — complete**
   (`ohm#5b7c2e9a`, 2026-09-19).
   - Implementation plan presented and approved before code execution.

@@ -96,7 +96,7 @@ export function QuickWalkinModal({
   const [promoId, setPromoId] = useState<string>("none");
   const [manualDiscountOn, setManualDiscountOn] = useState(false);
   const [discountType, setDiscountType] = useState<"pct" | "fixed">("pct");
-  const [discountValue, setDiscountValue] = useState(25);
+  const [discountValue, setDiscountValue] = useState(20);
   const [addonIds, setAddonIds] = useState<string[]>([]);
   const [splitCashAmount, setSplitCashAmount] = useState<number | "">(0);
   const [splitGcashAmount, setSplitGcashAmount] = useState<number | "">(0);
@@ -424,7 +424,12 @@ export function QuickWalkinModal({
 
   function onManualDiscountToggle(checked: boolean) {
     setManualDiscountOn(checked);
-    if (checked) setPromoId("none");
+    if (checked) {
+      setPromoId("none");
+      if (discountType === "pct") {
+        setDiscountValue(20);
+      }
+    }
   }
 
   const isLockerValid =
@@ -927,7 +932,13 @@ export function QuickWalkinModal({
                   <select
                     id="wk-discount-type"
                     value={discountType}
-                    onChange={(e) => setDiscountType(e.target.value as "pct" | "fixed")}
+                    onChange={(e) => {
+                      const nextType = e.target.value as "pct" | "fixed";
+                      setDiscountType(nextType);
+                      if (nextType === "pct") {
+                        setDiscountValue(20);
+                      }
+                    }}
                     className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
                   >
                     <option value="pct">Percentage</option>

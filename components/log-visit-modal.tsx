@@ -320,6 +320,9 @@ export function LogVisitModal({
     setManualDiscountOn(checked);
     if (checked) {
       setPromoId("none");
+      if (discountType === "pct") {
+        setDiscountValue(20);
+      }
     }
   }
 
@@ -975,7 +978,13 @@ export function LogVisitModal({
                   <select
                     id="fDiscountType"
                     value={discountType}
-                    onChange={(e) => setDiscountType(e.target.value as "pct" | "fixed")}
+                    onChange={(e) => {
+                      const nextType = e.target.value as "pct" | "fixed";
+                      setDiscountType(nextType);
+                      if (nextType === "pct") {
+                        setDiscountValue(20);
+                      }
+                    }}
                     className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
                   >
                     <option value="pct">Percentage</option>

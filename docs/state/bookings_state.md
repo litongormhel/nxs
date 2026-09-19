@@ -478,6 +478,14 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Revalidates paths `/bookings`, `/dashboard`, and `/call-sheet`.
   - Confirmed cancellation cleanly drops row from active upcoming views and top `<ReassignmentPanel />`.
 
+**Correction, `ohm#3c8f1e2a` (2026-09-19)** — Set default manual discount percentage to 20%.
+
+- **Default Percentage Value**:
+  - `QuickWalkinModal` (`components/quick-walkin-modal.tsx`): Updated initial `discountValue` state from `25` to `20`. Updated `onManualDiscountToggle` and type switch dropdown `onChange` so that toggling manual discount on or switching type back to "pct" immediately resets/defaults `discountValue` to `20`.
+  - `LogVisitModal` (`components/log-visit-modal.tsx`): Confirmed initial `discountValue` state is `20`. Updated `onManualDiscountToggle` and type switch dropdown `onChange` so that toggling manual discount on or switching type to "pct" resets/defaults `discountValue` to `20`.
+- **Immediate Calculation**: Amount computations in both modals immediately reflect the 20% discount upon checking the "Manual discount (e.g. Senior or PWD)" box.
+- `components/booking-form-modal.tsx` confirmed untouched (does not implement manual discount or pricing).
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - Therapist options are not filtered by `therapist_services` (which
