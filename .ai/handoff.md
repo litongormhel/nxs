@@ -5,6 +5,33 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Fix Therapist Cards Theme Styling to Support Light Mode — complete**
+  (`ohm#8e2c4b1d`, 2026-09-19).
+  - Implementation plan presented and approved before code execution.
+  - **TherapistCard Semantic Tokens (`components/therapist-card.tsx`)**:
+    - Replaced all hardcoded dark-theme hex colors with semantic Tailwind CSS theme tokens.
+    - Card container: `bg-[#14100c] border-white/10` → `bg-surface border-border`.
+    - Avatar: `bg-gradient-to-br from-[#f3d48b]` → `from-accent-gold`; unavailable: `bg-[#5f5e5a] text-[#f2ede4]` → `bg-surface-2 text-muted`.
+    - Name: `text-[#f2ede4]` → `text-foreground`. Status line: `text-[#8a8378]` → `text-muted`.
+    - Status dots: all `bg-[#8a8378]` → `bg-muted`.
+    - Kebab menu: `text-[#8a8378] hover:text-[#f2ede4] hover:bg-white/5` → `text-muted hover:text-foreground hover:bg-foreground/5`.
+    - Dropdown: `bg-[#221c15] border-white/15 text-[#d8d2c4]` → `bg-surface border-border text-foreground`. All 8 `hover:bg-white/5` → `hover:bg-foreground/5`. Both `border-white/10` hr separators → `border-border`.
+    - Progress bar: track `bg-white/10` → `bg-border`. Labels `text-[#8a8378]` → `text-muted`.
+    - All 3 section headers: `text-[#8a8378]` → `text-muted`.
+    - Slot buttons (5 states): all `border-white/N text-[#...]` → `border-border text-foreground|text-muted`. Selected: `bg-[#f2ede4] text-[#1a1512]` → `bg-foreground text-background`.
+    - Day-off toggles: off `bg-[#993556] text-[#fbeaf0]` → `bg-accent-red text-white`; on `border-white/10 text-[#8a8378]` → `border-border text-muted`.
+    - Service toggles: offered `bg-[#3b6d11] text-[#EAF3DE]` → `bg-accent-green text-white`; not offered `border-white/10 text-[#8a8378]/70` → `border-border text-muted/70`.
+    - Disabled CTA: `bg-white/5 text-[#4d493f] border-white/5` → `bg-surface-2 text-muted border-border`.
+  - **TherapistBrowser Cleanup (`components/therapist-browser.tsx`)**:
+    - Add Therapist button: `border-[#a97e2e] hover:bg-[#c89b3c]/10` → `border-gold hover:bg-gold/10`.
+    - Add modal toggle gradients (2×): `from-gold to-[#a97e2e]` → `from-gold to-gold-hover`.
+    - Absent confirm modal border: `border-[#6b4f1f]` → `border-gold/50` (2 occurrences).
+    - Toast: `border-[#a97e2e]` → `border-gold`.
+  - **Light Mode Gold Tokens (`app/globals.css`)**:
+    - Added `--gold: #a07820` and `--gold-hover: #b8891a` to `body.light` block.
+  - Zero hardcoded hex values remain in either file (verified via ripgrep `#[0-9a-fA-F]{3,8}`).
+  - `npm run build` clean (0 errors).
+
 - **Enable Interactive Slot Selection on Therapist Cards to Launch Pre-filled Quick Walk-in Modal — complete**
   (`ohm#2d9a4b8f`, 2026-09-19).
   - Implementation plan presented and approved before code execution.

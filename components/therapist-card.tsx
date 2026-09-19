@@ -174,22 +174,22 @@ export function TherapistCard({
       : nextSlot;
 
   // Status Line and Dot derivation
-  let statusDotClass = "bg-[#8a8378]"; // Default unavailable gray
+  let statusDotClass = "bg-muted"; // Default unavailable gray
   let statusText = "";
 
   if (isArchived) {
-    statusDotClass = "bg-[#8a8378]";
+    statusDotClass = "bg-muted";
     statusText = "Archived";
   } else if (isOnLeave) {
-    statusDotClass = "bg-[#8a8378]";
+    statusDotClass = "bg-muted";
     statusText = meta.leave?.end
       ? `On leave until ${fmtDate(meta.leave.end)}`
       : "On leave";
   } else if (isAbsentToday) {
-    statusDotClass = "bg-[#8a8378]";
+    statusDotClass = "bg-muted";
     statusText = "Absent today";
   } else if (isDayOff) {
-    statusDotClass = "bg-[#8a8378]";
+    statusDotClass = "bg-muted";
     statusText = "Day off";
   } else if (isAvailable) {
     if (nextSlot) {
@@ -217,7 +217,7 @@ export function TherapistCard({
 
   return (
     <div
-      className={`relative rounded-2xl border border-white/10 bg-[#14100c] p-4 sm:p-5 transition-all flex flex-col justify-between ${
+      className={`relative rounded-2xl border border-border bg-surface p-4 sm:p-5 transition-all flex flex-col justify-between ${
         isArchived ? "opacity-60" : ""
       }`}
       data-thera={therapistId ?? therapist}
@@ -231,8 +231,8 @@ export function TherapistCard({
               onClick={onViewSchedule}
               className={`w-10 h-10 rounded-full flex items-center justify-center font-serif font-bold text-sm shrink-0 cursor-pointer transition-transform hover:scale-105 ${
                 isAvailable
-                  ? "bg-gradient-to-br from-[#f3d48b] to-[#8b5a2b] text-black"
-                  : "bg-[#5f5e5a] text-[#f2ede4]"
+                  ? "bg-gradient-to-br from-accent-gold to-[#8b5a2b] text-black"
+                  : "bg-surface-2 text-muted"
               }`}
               title={`View ${therapist}'s schedule`}
             >
@@ -244,7 +244,7 @@ export function TherapistCard({
               <div className="flex items-center gap-1.5">
                 <span
                   onClick={onViewSchedule}
-                  className="font-medium text-[15px] sm:text-base text-[#f2ede4] truncate cursor-pointer hover:text-gold transition-colors"
+                  className="font-medium text-[15px] sm:text-base text-foreground truncate cursor-pointer hover:text-gold transition-colors"
                 >
                   {therapist}
                 </span>
@@ -253,7 +253,7 @@ export function TherapistCard({
                   aria-hidden="true"
                 />
               </div>
-              <div className="text-[11.5px] text-[#8a8378] truncate mt-0.5">
+              <div className="text-[11.5px] text-muted truncate mt-0.5">
                 {statusText}
               </div>
             </div>
@@ -277,7 +277,7 @@ export function TherapistCard({
               <button
                 type="button"
                 onClick={toggleMenu}
-                className="p-1 rounded-md text-[#8a8378] hover:text-[#f2ede4] hover:bg-white/5 transition-colors"
+                className="p-1 rounded-md text-muted hover:text-foreground hover:bg-foreground/5 transition-colors"
                 aria-label="More actions"
               >
                 <svg
@@ -296,7 +296,7 @@ export function TherapistCard({
 
               {/* Overflow Menu Dropdown */}
               {menuOpen && (
-                <div className="absolute right-0 top-7 z-30 min-w-[170px] rounded-xl border border-white/15 bg-[#221c15] p-1.5 shadow-2xl overflow-hidden animate-fade-in text-xs font-medium text-[#d8d2c4]">
+                <div className="absolute right-0 top-7 z-30 min-w-[170px] rounded-xl border border-border bg-surface p-1.5 shadow-2xl overflow-hidden animate-fade-in text-xs font-medium text-foreground">
                   {!isArchived ? (
                     <>
                       <button
@@ -305,7 +305,7 @@ export function TherapistCard({
                           closeMenu();
                           onRequestEdit();
                         }}
-                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 transition-colors flex items-center gap-2"
+                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-foreground/5 transition-colors flex items-center gap-2"
                       >
                         Edit
                       </button>
@@ -317,7 +317,7 @@ export function TherapistCard({
                             closeMenu();
                             onMarkPresent();
                           }}
-                          className="w-full text-left px-3 py-2 rounded-lg text-emerald-400 hover:bg-white/5 transition-colors flex items-center gap-2"
+                          className="w-full text-left px-3 py-2 rounded-lg text-emerald-400 hover:bg-foreground/5 transition-colors flex items-center gap-2"
                         >
                           <svg
                             width="12"
@@ -340,7 +340,7 @@ export function TherapistCard({
                             closeMenu();
                             onRequestMarkAbsent();
                           }}
-                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 transition-colors"
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-foreground/5 transition-colors"
                         >
                           Mark as absent
                         </button>
@@ -353,13 +353,13 @@ export function TherapistCard({
                             closeMenu();
                             onRequestLeave();
                           }}
-                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 transition-colors"
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-foreground/5 transition-colors"
                         >
                           Mark on leave
                         </button>
                       )}
 
-                      <hr className="border-t border-white/10 my-1 mx-1" />
+                      <hr className="border-t border-border my-1 mx-1" />
 
                       <button
                         type="button"
@@ -367,7 +367,7 @@ export function TherapistCard({
                           closeMenu();
                           onRequestArchive();
                         }}
-                        className="w-full text-left px-3 py-2 rounded-lg text-rose-400 hover:bg-white/5 transition-colors"
+                        className="w-full text-left px-3 py-2 rounded-lg text-rose-400 hover:bg-foreground/5 transition-colors"
                       >
                         Archive
                       </button>
@@ -380,18 +380,18 @@ export function TherapistCard({
                           closeMenu();
                           onUnarchive();
                         }}
-                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 transition-colors"
+                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-foreground/5 transition-colors"
                       >
                         Unarchive
                       </button>
-                      <hr className="border-t border-white/10 my-1 mx-1" />
+                      <hr className="border-t border-border my-1 mx-1" />
                       <button
                         type="button"
                         onClick={() => {
                           closeMenu();
                           onRequestEdit();
                         }}
-                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 transition-colors"
+                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-foreground/5 transition-colors"
                       >
                         Edit
                       </button>
@@ -406,13 +406,13 @@ export function TherapistCard({
         {/* Progress Row / Unavailable Note */}
         {isAvailable ? (
           <div className="mb-3.5">
-            <div className="flex justify-between items-center text-xs text-[#8a8378] mb-1.5">
+            <div className="flex justify-between items-center text-xs text-muted mb-1.5">
               <span>Booked today</span>
               <span className="text-accent-gold font-medium">
                 {bookedToday} / {totalSlots} slots
               </span>
             </div>
-            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+            <div className="h-1.5 rounded-full bg-border overflow-hidden">
               <div
                 className="h-full bg-gold rounded-full transition-all duration-300"
                 style={{ width: `${progressPct}%` }}
@@ -420,14 +420,14 @@ export function TherapistCard({
             </div>
           </div>
         ) : (
-          <div className="text-xs text-[#8a8378] mb-3.5">
+          <div className="text-xs text-muted mb-3.5">
             Not accepting bookings today.
           </div>
         )}
 
         {/* Available Slots Section */}
         <div className="mb-3.5">
-          <div className="text-[11px] text-[#8a8378] tracking-[0.03em] mb-2 uppercase font-medium">
+          <div className="text-[11px] text-muted tracking-[0.03em] mb-2 uppercase font-medium">
             Available slots
           </div>
           <div
@@ -442,7 +442,7 @@ export function TherapistCard({
                 return (
                   <span
                     key={slot}
-                    className="text-center text-xs py-1.5 rounded-lg border border-white/10 text-[#4d493f] bg-none"
+                    className="text-center text-xs py-1.5 rounded-lg border border-border text-muted bg-none"
                   >
                     {fmtTime(slot)}
                   </span>
@@ -455,7 +455,7 @@ export function TherapistCard({
                     key={slot}
                     type="button"
                     onClick={() => onSelectSlot?.(slot)}
-                    className="text-center text-xs py-1.5 rounded-lg font-semibold bg-[#f2ede4] text-[#1a1512] border-none shadow-sm cursor-pointer hover:brightness-105 transition-all"
+                    className="text-center text-xs py-1.5 rounded-lg font-semibold bg-foreground text-background border-none shadow-sm cursor-pointer hover:brightness-105 transition-all"
                     title={`Selected slot: ${fmtTime(slot)}`}
                   >
                     {fmtTime(slot)}
@@ -467,7 +467,7 @@ export function TherapistCard({
                 return (
                   <span
                     key={slot}
-                    className="text-center text-xs py-1.5 rounded-lg border border-white/5 text-[#4d493f] line-through cursor-default pointer-events-none"
+                    className="text-center text-xs py-1.5 rounded-lg border border-border/50 text-muted line-through cursor-default pointer-events-none"
                     title={`${fmtTime(slot)} has passed`}
                   >
                     {fmtTime(slot)}
@@ -479,7 +479,7 @@ export function TherapistCard({
                 return (
                   <span
                     key={slot}
-                    className="text-center text-xs py-1.5 rounded-lg border border-dashed border-white/10 text-[#6f6a60] line-through cursor-not-allowed"
+                    className="text-center text-xs py-1.5 rounded-lg border border-dashed border-border text-muted line-through cursor-not-allowed"
                     title={`${fmtTime(slot)} is already booked`}
                   >
                     {fmtTime(slot)}
@@ -493,7 +493,7 @@ export function TherapistCard({
                   key={slot}
                   type="button"
                   onClick={() => onSelectSlot?.(slot)}
-                  className="text-center text-xs py-1.5 rounded-lg border border-white/15 text-[#d8d2c4] hover:border-gold hover:text-gold transition-colors cursor-pointer"
+                  className="text-center text-xs py-1.5 rounded-lg border border-border text-foreground hover:border-gold hover:text-gold transition-colors cursor-pointer"
                   title={`Select ${fmtTime(slot)}`}
                 >
                   {fmtTime(slot)}
@@ -505,7 +505,7 @@ export function TherapistCard({
 
         {/* Weekly Day(s) Off Section */}
         <div className="mb-3.5">
-          <div className="text-[11px] text-[#8a8378] tracking-[0.03em] mb-2 uppercase font-medium">
+          <div className="text-[11px] text-muted tracking-[0.03em] mb-2 uppercase font-medium">
             Weekly day(s) off
           </div>
           <div className="flex gap-1">
@@ -518,8 +518,8 @@ export function TherapistCard({
                   onClick={() => onToggleDayOff(d)}
                   className={`flex-1 py-1 rounded-md text-[10px] font-semibold transition-all text-center ${
                     isOff
-                      ? "bg-[#993556] text-[#fbeaf0] border border-transparent shadow-sm"
-                      : "border border-white/10 text-[#8a8378] hover:border-gold/40 hover:text-foreground"
+                      ? "bg-accent-red text-white border border-transparent shadow-sm"
+                      : "border border-border text-muted hover:border-gold/40 hover:text-foreground"
                   }`}
                   title={`${therapist} - ${d} ${isOff ? "Day Off" : "Working"}`}
                 >
@@ -532,7 +532,7 @@ export function TherapistCard({
 
         {/* Services Offered Section */}
         <div className="mb-4">
-          <div className="text-[11px] text-[#8a8378] tracking-[0.03em] mb-2 uppercase font-medium">
+          <div className="text-[11px] text-muted tracking-[0.03em] mb-2 uppercase font-medium">
             Services offered
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -545,8 +545,8 @@ export function TherapistCard({
                   onClick={() => onToggleService(s)}
                   className={`py-1 px-2.5 rounded-md text-[10.5px] font-semibold transition-all text-center ${
                     isOffered
-                      ? "bg-[#3b6d11] text-[#EAF3DE] border border-transparent shadow-sm"
-                      : "border border-white/10 text-[#8a8378]/70 hover:border-gold/40 hover:text-foreground"
+                      ? "bg-accent-green text-white border border-transparent shadow-sm"
+                      : "border border-border text-muted/70 hover:border-gold/40 hover:text-foreground"
                   }`}
                   title={`${therapist} - ${s} ${isOffered ? "Offered" : "Not Offered"}`}
                 >
@@ -573,7 +573,7 @@ export function TherapistCard({
             <button
               type="button"
               disabled
-              className="w-full bg-white/5 text-[#4d493f] font-semibold text-xs py-2.5 rounded-lg cursor-not-allowed border border-white/5"
+              className="w-full bg-surface-2 text-muted font-semibold text-xs py-2.5 rounded-lg cursor-not-allowed border border-border"
             >
               No slots left today
             </button>
