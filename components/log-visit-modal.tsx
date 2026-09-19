@@ -141,6 +141,7 @@ export function LogVisitModal({
 
   const [lockerNumber, setLockerNumber] = useState<number | "">("");
   const [activeOccupancies, setActiveOccupancies] = useState<ActiveOccupancy[]>([]);
+  const [maintenanceLockers, setMaintenanceLockers] = useState<Map<number, string | null>>(new Map());
 
   const [isRedemption, setIsRedemption] = useState(false);
   const [isUpgraded, setIsUpgraded] = useState(false);
@@ -167,14 +168,15 @@ export function LogVisitModal({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [pointsWarning, setPointsWarning] = useState<string | null>(null);
-  const [showSummary, setShowSummary] = useState(false);
+  const showSummaryState = useState(false);
+  const [showSummary, setShowSummary] = showSummaryState;
 
   const [loyaltySettings, setLoyaltySettings] = useState<{
     mode: LoyaltyFormulaMode;
     pesoPerPoint: number | null;
   }>({ mode: "proportional", pesoPerPoint: null });
 
-  // Fetch open bookings, occupied lockers, and loyalty settings on mount
+  // Fetch open bookings, occupied lockers, out-of-order lockers, and loyalty settings on mount
   useEffect(() => {
     const supabase = createClient();
     supabase
@@ -185,6 +187,20 @@ export function LogVisitModal({
       .in("status", ["Booked", "Needs Reassignment"])
       .order("booking_date", { ascending: true })
       .then(({ data }) => setOpenBookings((data as BookingOption[]) ?? []));
+
+    supabase
+      .from("lockers")
+      .select("number, status, is_maintenance, maintenance_note")
+      .eq("active", true)
+      .then(({ data }) => {
+        const map = new Map<number, string | null>();
+        for (const l of data ?? []) {
+          if (l.is_maintenance || l.status === "out_of_order" || l.status === "maintenance") {
+            map.set(l.number, l.maintenance_note ?? null);
+          }
+        }
+        setMaintenanceLockers(map);
+      });
 
     supabase
       .from("locker_occupancy")
@@ -221,14 +237,18 @@ export function LogVisitModal({
         ((!!selectedBookingId && occ.booking_id === selectedBookingId) ||
           (!!clientId && occ.client_id === clientId));
       const isOccupied = !!occ && !isMine;
+      const isMaintenance = maintenanceLockers.has(num);
+      const maintenanceNote = maintenanceLockers.get(num) ?? null;
 
       return {
         number: num,
         isOccupied,
         isMine,
+        isMaintenance,
+        maintenanceNote,
       };
     });
-  }, [lockers, activeOccupancies, selectedBookingId, clientId]);
+  }, [lockers, activeOccupancies, selectedBookingId, clientId, maintenanceLockers]);
 
   // Filtered booking search results
   const matchingBookings = useMemo(() => {
@@ -434,6 +454,11 @@ export function LogVisitModal({
     }
     if (!lockerNumber) {
       setError("Please assign a locker.");
+      return;
+    }
+    if (maintenanceLockers.has(Number(lockerNumber))) {
+      const note = maintenanceLockers.get(Number(lockerNumber));
+      setError(`Locker #${lockerNumber} is out of order${note ? ` (${note})` : ""} and cannot be assigned.`);
       return;
     }
     if (!isSplitValid) {
@@ -838,16 +863,27 @@ export function LogVisitModal({
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
             >
               <option value="">— select a free locker —</option>
-              {lockerOptions.map((opt) => (
-                <option
-                  key={opt.number}
-                  value={opt.number}
-                  disabled={opt.isOccupied}
-                  className={opt.isOccupied ? "text-muted" : undefined}
-                >
-                  Locker {opt.number}{opt.isOccupied ? " — Occupied" : opt.isMine ? " (Assigned)" : ""}
-                </option>
-              ))}
+              {lockerOptions.map((opt) => {
+                const disabled = opt.isOccupied || opt.isMaintenance;
+                return (
+                  <option
+                    key={opt.number}
+                    value={opt.number}
+                    disabled={disabled}
+                    className={disabled ? "text-muted" : undefined}
+                  >
+                    Locker {opt.number}{
+                      opt.isMaintenance
+                        ? ` — Out of Order${opt.maintenanceNote ? ` (${opt.maintenanceNote})` : ""}`
+                        : opt.isOccupied
+                        ? " — Occupied"
+                        : opt.isMine
+                        ? " (Assigned)"
+                        : ""
+                    }
+                  </option>
+                );
+              })}
             </select>
           </div>
 

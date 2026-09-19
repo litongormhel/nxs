@@ -5,6 +5,32 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Add Maintenance / Out of Order Status and Notes for Lockers — complete**
+  (`ohm#4f7b9e2a`, 2026-09-19).
+  - Implementation plan presented and approved before code execution.
+  - **Database Migration & Schema (`supabase/migrations/20260919100000_lockers_maintenance.sql`, `lib/types/database.ts`)**:
+    - Added columns to `public.lockers`: `status` (`text default 'available'`), `is_maintenance` (`boolean default false`), and `maintenance_note` (`text`).
+    - Added `staff_update` RLS policy on `public.lockers` (`USING (is_staff()) WITH CHECK (is_staff())`) enabling authenticated staff to toggle locker maintenance, while capacity additions remain supervisor-only.
+    - Updated `quick_walkin` PL/pgSQL RPC to validate and reject assignments to out-of-order lockers.
+  - **Server Action & Backend Guards (`app/(staff)/lockers/actions.ts`, `app/(staff)/bookings/actions.ts`)**:
+    - Created `toggleLockerMaintenance(lockerNumber, isMaintenance, note?, staffId)`:
+      - Validates that the locker is not currently occupied by an active guest (`locker_occupancy` where `checked_out_at IS NULL`), rejecting with an error requiring checkout first.
+      - Updates `public.lockers` with maintenance status and note.
+      - Audits action to `action_logs` (`locker_marked_maintenance` or `locker_cleared_maintenance`).
+      - Revalidates `/lockers`, `/bookings`, `/call-sheet`, and `/clients`.
+    - Added backend validation guards to `quickWalkin` and `updateBooking` in `app/(staff)/bookings/actions.ts` to prevent assigning out-of-order lockers.
+  - **Locker Board UI (`app/(staff)/lockers/page.tsx`, `components/locker-board.tsx`)**:
+    - Resiliently queries `status`, `is_maintenance`, and `maintenance_note` from `public.lockers` with query fallback.
+    - Visual status rendering: Out-of-order lockers feature a distinct red dashed border (`border-red-500/60`), muted dark red background (`bg-red-950/20`), "Out of Order" badge, and maintenance note preview.
+    - Free locker click opens modal with two options: "Assign to Client" (navigates to `/bookings`) or "Mark Out of Order" (with optional note text input).
+    - Out-of-order locker click opens modal displaying current maintenance note and "Mark as Available / Clear Maintenance" button.
+    - Header metric dynamically computes and displays active working capacity vs total lockers and shows an alert badge when lockers are out of order (`X out of order`).
+  - **Check-in Selector Exclusion (`components/quick-walkin-modal.tsx`, `components/log-visit-modal.tsx`, `components/booking-browser.tsx`)**:
+    - Fetches out-of-order lockers on mount.
+    - Excludes/disables out-of-order lockers in all locker assignment dropdowns with clear labels: `Locker X — Out of Order (Note)`.
+    - Front-end validation prevents submitting an out-of-order locker.
+  - `npm run build` clean (0 compilation / TypeScript errors). See [[lockers_state]], [[bookings_state]], and `.ai/briefing.md`.
+
 - **Remove Dashboard, Set Bookings as Default Landing, and Reorder Sidebar Navigation — complete**
   (`ohm#8b3f1a9c`, 2026-09-19).
   - Implementation plan presented and approved before code execution.

@@ -900,6 +900,7 @@ function EditBookingModal({
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [unavailableTherapists, setUnavailableTherapists] = useState<Map<string, string>>(new Map());
   const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
+  const [maintenanceLockers, setMaintenanceLockers] = useState<Map<number, string | null>>(new Map());
   const [occupiedRooms, setOccupiedRooms] = useState<Set<number>>(new Set());
   const [salePaidAmount, setSalePaidAmount] = useState<number | null>(null);
 
@@ -934,6 +935,21 @@ function EditBookingModal({
 
   useEffect(() => {
     const supabase = createClient();
+
+    supabase
+      .from("lockers")
+      .select("number, status, is_maintenance, maintenance_note")
+      .eq("active", true)
+      .then(({ data }) => {
+        const map = new Map<number, string | null>();
+        for (const l of data ?? []) {
+          if (l.is_maintenance || l.status === "out_of_order" || l.status === "maintenance") {
+            map.set(l.number, l.maintenance_note ?? null);
+          }
+        }
+        setMaintenanceLockers(map);
+      });
+
     supabase
       .from("locker_occupancy")
       .select("id, locker_number, booking_id")
@@ -1073,6 +1089,12 @@ function EditBookingModal({
         setError("Please select an available room for massage service.");
         return;
       }
+    }
+
+    if (typeof lockerNumber === "number" && maintenanceLockers.has(lockerNumber)) {
+      const note = maintenanceLockers.get(lockerNumber);
+      setError(`Locker #${lockerNumber} is out of order${note ? ` (${note})` : ""}.`);
+      return;
     }
 
     setSaving(true);
@@ -1297,10 +1319,19 @@ function EditBookingModal({
             {lockers.map((num) => {
               const occupied = occupiedLockers.has(num);
               const isCurrent = initialOccupancy?.locker_number === num;
-              const disabled = occupied && !isCurrent;
+              const isMaintenance = maintenanceLockers.has(num);
+              const maintenanceNote = maintenanceLockers.get(num);
+              const disabled = (occupied && !isCurrent) || isMaintenance;
               return (
                 <option key={num} value={num} disabled={disabled}>
-                  Locker #{num} {isCurrent ? " (Current)" : occupied ? " (Occupied)" : ""}
+                  Locker #{num}
+                  {isMaintenance
+                    ? ` — Out of Order${maintenanceNote ? ` (${maintenanceNote})` : ""}`
+                    : isCurrent
+                    ? " (Current)"
+                    : occupied
+                    ? " (Occupied)"
+                    : ""}
                 </option>
               );
             })}

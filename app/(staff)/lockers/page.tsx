@@ -12,12 +12,22 @@ export default async function LockersPage() {
     // Ignore RPC failure if migration not yet applied
   }
 
-  const [{ data: lockers }, { data: occupancy }] = await Promise.all([
+  const [lockersRes, { data: occupancy }] = await Promise.all([
     supabase
       .from("lockers")
-      .select("number")
+      .select("number, status, is_maintenance, maintenance_note")
       .eq("active", true)
-      .order("number", { ascending: true }),
+      .order("number", { ascending: true })
+      .then(async (res) => {
+        if (res.error) {
+          return supabase
+            .from("lockers")
+            .select("number")
+            .eq("active", true)
+            .order("number", { ascending: true });
+        }
+        return res;
+      }),
     supabase
       .from("locker_occupancy")
       .select(`
@@ -28,6 +38,20 @@ export default async function LockersPage() {
       `)
       .is("checked_out_at", null),
   ]);
+
+  const rawLockers = (lockersRes.data ?? []) as Array<{
+    number: number;
+    status?: string;
+    is_maintenance?: boolean;
+    maintenance_note?: string | null;
+  }>;
+
+  const formattedLockers = rawLockers.map((l) => ({
+    number: l.number,
+    status: l.status ?? (l.is_maintenance ? "out_of_order" : "available"),
+    isMaintenance: Boolean(l.is_maintenance || l.status === "out_of_order" || l.status === "maintenance"),
+    maintenanceNote: l.maintenance_note ?? null,
+  }));
 
   const today = spaDayNow();
 
@@ -64,7 +88,8 @@ export default async function LockersPage() {
         Lockers
       </h1>
       <LockerBoard
-        lockerNumbers={(lockers ?? []).map((l) => l.number)}
+        lockers={formattedLockers}
+        lockerNumbers={formattedLockers.map((l) => l.number)}
         occupancy={Object.fromEntries(occupancyByLocker)}
       />
     </div>

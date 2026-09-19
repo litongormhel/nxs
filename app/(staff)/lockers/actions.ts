@@ -83,3 +83,59 @@ export async function checkOutOverdueLockers(
 
   return { ok: true, count };
 }
+
+export async function toggleLockerMaintenance(
+  lockerNumber: number,
+  isMaintenance: boolean,
+  note?: string | null,
+  staffId?: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  // 1. Restrict marking as maintenance if currently occupied by an active guest
+  if (isMaintenance) {
+    const { data: activeOcc, error: occError } = await supabase
+      .from("locker_occupancy")
+      .select("id, client_id, guest_label")
+      .eq("locker_number", lockerNumber)
+      .is("checked_out_at", null)
+      .maybeSingle();
+
+    if (occError) return fail(occError);
+
+    if (activeOcc) {
+      const occupant = activeOcc.guest_label || "an active guest";
+      return {
+        ok: false,
+        error: `Cannot mark Locker #${lockerNumber} as out of order while occupied by ${occupant}. Please check out the guest first.`,
+      };
+    }
+  }
+
+  // 2. Update lockers table
+  const { error } = await supabase
+    .from("lockers")
+    .update({
+      is_maintenance: isMaintenance,
+      status: isMaintenance ? "out_of_order" : "available",
+      maintenance_note: isMaintenance ? (note?.trim() || null) : null,
+    })
+    .eq("number", lockerNumber);
+
+  if (error) return fail(error);
+
+  // 3. Audit log
+  await supabase.from("action_logs").insert({
+    staff_id: staffId || null,
+    action: isMaintenance ? "locker_marked_maintenance" : "locker_cleared_maintenance",
+    detail: `Locker ${lockerNumber}${isMaintenance && note?.trim() ? ` (Note: ${note.trim()})` : ""}`,
+  });
+
+  // 4. Revalidate paths
+  revalidatePath("/lockers");
+  revalidatePath("/bookings");
+  revalidatePath("/call-sheet");
+  revalidatePath("/clients");
+
+  return { ok: true };
+}

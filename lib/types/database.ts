@@ -467,15 +467,24 @@ export type Database = {
       lockers: {
         Row: {
           active: boolean
+          is_maintenance: boolean
+          maintenance_note: string | null
           number: number
+          status: string
         }
         Insert: {
           active?: boolean
+          is_maintenance?: boolean
+          maintenance_note?: string | null
           number: number
+          status?: string
         }
         Update: {
           active?: boolean
+          is_maintenance?: boolean
+          maintenance_note?: string | null
           number?: number
+          status?: string
         }
         Relationships: []
       }

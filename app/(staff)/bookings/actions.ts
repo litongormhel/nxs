@@ -563,6 +563,25 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
   if (input.lockerNumber !== null) {
     const lockerChanged = !existingOcc || existingOcc.locker_number !== input.lockerNumber;
     if (lockerChanged) {
+      const { data: targetLocker } = await supabase
+        .from("lockers")
+        .select("status, is_maintenance, maintenance_note")
+        .eq("number", input.lockerNumber)
+        .maybeSingle();
+
+      if (
+        targetLocker &&
+        (targetLocker.is_maintenance ||
+          targetLocker.status === "out_of_order" ||
+          targetLocker.status === "maintenance")
+      ) {
+        return {
+          ok: false,
+          field: "locker",
+          error: `Locker #${input.lockerNumber} is out of order${targetLocker.maintenance_note ? ` (${targetLocker.maintenance_note})` : ""}.`,
+        };
+      }
+
       const { data: activeOcc } = await supabase
         .from("locker_occupancy")
         .select("id, booking_id")
@@ -929,6 +948,25 @@ export async function logVisitBooking(
       );
 
   // 2. Assign Locker Occupancy FIRST (validates locker/room constraints before updating booking status)
+  const { data: targetLocker } = await supabase
+    .from("lockers")
+    .select("status, is_maintenance, maintenance_note")
+    .eq("number", input.lockerNumber)
+    .maybeSingle();
+
+  if (
+    targetLocker &&
+    (targetLocker.is_maintenance ||
+      targetLocker.status === "out_of_order" ||
+      targetLocker.status === "maintenance")
+  ) {
+    return {
+      ok: false,
+      field: "locker",
+      error: `Locker #${input.lockerNumber} is out of order${targetLocker.maintenance_note ? ` (${targetLocker.maintenance_note})` : ""}.`,
+    };
+  }
+
   let existingOcc: { id: string } | null = null;
   if (input.bookingId) {
     const { data: occByBooking } = await supabase

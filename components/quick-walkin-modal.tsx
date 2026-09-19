@@ -110,6 +110,7 @@ export function QuickWalkinModal({
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [unavailableTherapists, setUnavailableTherapists] = useState<Map<string, string>>(new Map());
   const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
+  const [maintenanceLockers, setMaintenanceLockers] = useState<Map<number, string | null>>(new Map());
   const [clientBookings, setClientBookings] = useState<
     Array<{ client_id: string | null; guest_label: string | null; start_time: string }>
   >([]);
@@ -138,6 +139,20 @@ export function QuickWalkinModal({
             start_time: b.start_time,
           }))
         );
+      });
+
+    supabase
+      .from("lockers")
+      .select("number, status, is_maintenance, maintenance_note")
+      .eq("active", true)
+      .then(({ data }) => {
+        const map = new Map<number, string | null>();
+        for (const l of data ?? []) {
+          if (l.is_maintenance || l.status === "out_of_order" || l.status === "maintenance") {
+            map.set(l.number, l.maintenance_note ?? null);
+          }
+        }
+        setMaintenanceLockers(map);
       });
 
     supabase
@@ -443,6 +458,11 @@ export function QuickWalkinModal({
     }
     if (typeof lockerNumber === "number" && occupiedLockers.has(lockerNumber) && lockerNumber !== activeLockerForClient) {
       setError("That locker is currently occupied. Please select an unoccupied locker.");
+      return;
+    }
+    if (typeof lockerNumber === "number" && maintenanceLockers.has(lockerNumber)) {
+      const note = maintenanceLockers.get(lockerNumber);
+      setError(`Locker #${lockerNumber} is out of order${note ? ` (${note})` : ""} and cannot be assigned.`);
       return;
     }
     if (isSplitPayment && !isSplitValid) {
@@ -822,7 +842,9 @@ export function QuickWalkinModal({
               {lockers.map((n) => {
                 const isOccupied = occupiedLockers.has(n);
                 const isReusing = activeLockerForClient === n;
-                const disabled = isOccupied && !isReusing;
+                const isMaintenance = maintenanceLockers.has(n);
+                const maintenanceNote = maintenanceLockers.get(n);
+                const disabled = (isOccupied && !isReusing) || isMaintenance;
                 return (
                   <option
                     key={n}
@@ -830,7 +852,15 @@ export function QuickWalkinModal({
                     disabled={disabled}
                     className={disabled ? "text-muted" : undefined}
                   >
-                    Locker {n}{isReusing ? " — Active Locker (Reusing)" : isOccupied ? " — Occupied" : ""}
+                    Locker {n}{
+                      isMaintenance
+                        ? ` — Out of Order${maintenanceNote ? ` (${maintenanceNote})` : ""}`
+                        : isReusing
+                        ? " — Active Locker (Reusing)"
+                        : isOccupied
+                        ? " — Occupied"
+                        : ""
+                    }
                   </option>
                 );
               })}
