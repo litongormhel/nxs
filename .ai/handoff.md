@@ -5,6 +5,62 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Remove Dashboard, Set Bookings as Default Landing, and Reorder Sidebar Navigation — complete**
+  (`ohm#8b3f1a9c`, 2026-09-19).
+  - Implementation plan presented and approved before code execution.
+  - **Removed Standalone Dashboard Route (`app/(staff)/dashboard/`)**:
+    - Completely deleted obsolete standalone dashboard files `app/(staff)/dashboard/page.tsx` and `app/(staff)/dashboard/error.tsx`.
+    - Added permanent redirect in `next.config.ts` (`/dashboard` -> `/bookings`) to ensure legacy bookmarks or direct visits safely resolve to Bookings without 404s.
+  - **Set Bookings as Default Landing Route (`app/(staff)/page.tsx`, `proxy.ts`, `app/(auth)/login/`)**:
+    - Updated `app/(staff)/page.tsx` with server-side `redirect("/bookings")` for instant 307 landing.
+    - Updated `proxy.ts` middleware gate so authenticated staff hitting public paths (like `/login`) immediately redirect to `/bookings`.
+    - Updated default `next` path fallbacks in `app/(auth)/login/actions.ts` (`safeNextPath`), `app/(auth)/login/page.tsx`, and `components/my-profile-form.tsx` to `/bookings`.
+  - **Relocated Needs Reassignment Alert into Bookings (`app/(staff)/bookings/page.tsx`)**:
+    - Embedded `<ReassignmentPanel />` directly above `<BookingBrowser />` inside `app/(staff)/bookings/page.tsx`.
+    - Integrated queries for `Needs Reassignment` status, active bookings, therapist absences, leaves, and days off.
+    - Derived `reassignmentKey` hashed from flagged booking IDs, therapist IDs, and time slots, passing `key={reassignmentKey}` to `<BookingBrowser />` so completing a transfer or cancellation automatically remounts and refreshes the bookings table beneath it.
+  - **Reordered Sidebar Navigation (`lib/nav.ts`)**:
+    - Removed `Dashboard` navigation item.
+    - Ordered navigation items to exact sequence:
+      1. Bookings (`/bookings`)
+      2. Call Sheet (`/call-sheet`)
+      3. Therapists (`/therapists`)
+      4. Lockers (`/lockers`)
+      5. Sales (`/sales`)
+      6. Clients (`/clients`)
+      7. Analytics (`/analytics`, `ownerOnly: true`)
+      8. Staff (`/staff`, `ownerOnly: true`)
+      9. Logs (`/logs`, `ownerOnly: true`)
+      10. Settings (`/settings`)
+  - `npm run build` clean (0 compilation / TypeScript errors). See [[dashboard_state]], [[bookings_state]], and `.ai/briefing.md`.
+
+- **Allow Therapist Selection with Time Slot Picker in Reassign Modal — complete**
+  (`ohm#alignreassignmentslotsandselection`, 2026-09-18).
+  - Implementation plan presented and approved before code execution.
+  - **Dropdown Selection Rules (`components/reassignment-panel.tsx`)**:
+    - In the "New Therapist" dropdown, disable ONLY therapists who are strictly unavailable for the entire day: `Day Off`, `Absent`, `On Leave`, or `Fully Booked` (no free slots remaining today).
+    - Label disabled options accordingly:
+      - `[Name] — Day Off`
+      - `[Name] — Absent`
+      - `[Name] — On Leave`
+      - `[Name] — Fully Booked`
+    - Working therapists with at least 1 free slot remain selectable (even if booked at the client's current time slot).
+    - Candidates sorted with selectable therapists first (alphabetical by name) and disabled therapists last.
+  - **Interactive Time Slot Selection (`components/reassignment-panel.tsx`)**:
+    - Added clickable time slot pills below the therapist selector with the original booking time pre-selected.
+    - Occupied slots for the selected therapist visually indicated as disabled, struck-through, red, and labeled `Booked`.
+    - Free slots for the selected therapist styled with emerald/green accent borders and labeled `Free`.
+    - Active selected slot styled with a gold gradient.
+    - If the selected therapist is already booked at the original time, displays an inline warning (`Therapist is already booked at [Time]. Please select an available time slot above.`) and keeps Confirm disabled until the receptionist clicks a free slot.
+    - Clicking any green/free slot updates the session time, previews the reschedule notice (`Session time will be updated from [Old] to [New].`), and enables the Confirm button.
+  - **Server Action Update (`app/(staff)/bookings/actions.ts`)**:
+    - Updated `changeBookingTherapist(bookingId: string, newTherapistId: string, staffId: string, newStartTime?: string)` to accept an optional `newStartTime?: string`.
+    - Normalized start times with `slice(0, 5)` to detect whether the time actually changed.
+    - Updates both `therapist_id` and (if changed) `start_time` on the booking record.
+    - Restores status from `Needs Reassignment` back to `Booked`.
+    - Logs audit detail in `action_logs` and revalidates paths `/dashboard`, `/bookings`, and `/call-sheet`.
+  - `npm run build` clean (0 compilation / TypeScript errors). See [[dashboard_state]], [[bookings_state]], and `.ai/briefing.md`.
+
 - **Replace Client Select Dropdown in New Booking Modal with Searchable Combobox — complete**
   (`ohm#newbookingclientcombobox`, 2026-09-17).
   - **Active Members Filter (`components/client-combobox.tsx`)**: Excludes archived clients (`is_archived !== true && archived_at == null`) and filters records where `is_active !== false`.

@@ -39,7 +39,7 @@ export function MyProfileForm({ forced }: { forced: boolean }) {
     setNewPassword("");
     setConfirmPassword("");
     if (forced) {
-      router.push("/dashboard");
+      router.push("/bookings");
       router.refresh();
     }
   };

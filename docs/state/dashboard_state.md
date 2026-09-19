@@ -9,24 +9,44 @@ for "this booking needs a new therapist." `therapist_absence`/
 `therapist_leave` gained RLS policies (`ohm#3f8q1w6z`, 2026-08-30,
 `20260830024144_therapist_absence_leave_rls.sql`) — see [[therapists_state]].
 
-## Implemented (app level, `ohm#3f8q1w6z`, 2026-08-30)
+## Standalone Dashboard Removed (`ohm#8b3f1a9c`, 2026-09-19)
 
-`app/(staff)/dashboard/page.tsx` (server component, previously 4 static
-count cards only) now also fetches all `bookings` rows with
+The standalone `/dashboard` route and view (`app/(staff)/dashboard/`) were completely removed.
+- **Default landing**: Authenticated staff visits to `/` or post-login now redirect directly to `/bookings`. `next.config.ts` includes a permanent redirect from `/dashboard` to `/bookings`.
+- **Sidebar navigation**: "Dashboard" was removed from navigation. The updated sidebar sequence starts directly with `Bookings`, followed by `Call Sheet`, `Therapists`, `Lockers`, `Sales`, `Clients`, `Analytics`, `Staff`, `Logs`, and `Settings`.
+- **ReassignmentPanel relocation**: The `<ReassignmentPanel />` component has been relocated into `app/(staff)/bookings/page.tsx` directly above `<BookingBrowser />`. See [[bookings_state]].
+
+## Implemented (app level, historical context)
+
+Previously rendered on `app/(staff)/dashboard/page.tsx`, `ReassignmentPanel` fetched all `bookings` rows with
 `status = 'Needs Reassignment'` (embedded-joined to `therapists(name)`,
 `services(name)`, `clients(codename)`, plus `guest_label`/`room_number`)
-and all non-archived `therapists(id, name)`, passed into a new client
+and all non-archived `therapists(id, name)`, passed into client
 component `components/reassignment-panel.tsx` (`ReassignmentPanel`).
 
 - Renders a "Needs Reassignment (N)" panel below the stat cards, one row
   per flagged booking (date/time, client or guest label, service, room if
   any, and the therapist who was on it), each with a **Transfer** button.
-- Transfer opens a modal with a therapist `<select>` (excludes the
-  currently-assigned therapist, excludes archived therapists) and calls
-  the existing `changeBookingTherapist()` server action
-  (`app/(staff)/bookings/actions.ts`) with the booking's unchanged
-  `start_time` — no time-change UI here, deliberately narrower than the
-  Bookings tab's Change/Reassign modal (out of this task's scope).
+- **Reassign Therapist Modal** (`ohm#alignreassignmentslotsandselection`, 2026-09-18) —
+  Transfer/Reassign opens a modal with a therapist `<select>` and interactive
+  time slot picker:
+  - **Therapist selection rules**: Excludes the currently-assigned therapist and
+    archived therapists. Disables ONLY therapists who are strictly unavailable
+    for the whole day (`Day Off`, `Absent`, `On Leave`, or `Fully Booked`). Working
+    therapists with at least 1 free slot remain selectable even if booked at the
+    original session time.
+  - **Interactive Time Slot Picker**: Renders clickable time pills below the
+    therapist selector with the original booking time pre-selected. Occupied slots
+    for the chosen therapist are disabled, struck-through, red, and marked "Booked".
+    Free slots are styled with emerald/green borders and labeled "Free". Selected
+    slot is styled with a gold gradient.
+  - **Reschedule & Validation**: If the selected therapist is occupied at the
+    original session time, an inline warning prompts the receptionist to pick an
+    available slot and disables Confirm. Picking a free slot updates the session
+    time and enables Confirm.
+  - Calls `changeBookingTherapist(bookingId, newTherapistId, staffId, selectedSlot)`
+    in `app/(staff)/bookings/actions.ts`, which updates `therapist_id` and (if changed)
+    `start_time`, resets status back to `Booked`, and revalidates `/dashboard` and `/bookings`.
 - **Cancel** (`ohm#9d4k7m2x`, 2026-09-02) — a second button next to
   Transfer, with its own confirm dialog (client, service, room, time)
   before committing. Calls new `cancelReassignmentBooking(bookingId,

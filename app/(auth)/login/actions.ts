@@ -6,7 +6,7 @@ import { staffSyntheticEmail } from "@/lib/staff/service-client";
 
 function safeNextPath(next: FormDataEntryValue | null): string {
   const value = String(next ?? "");
-  if (!value.startsWith("/") || value.startsWith("//")) return "/dashboard";
+  if (!value.startsWith("/") || value.startsWith("//")) return "/bookings";
   return value;
 }
 

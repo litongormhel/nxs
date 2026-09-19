@@ -393,7 +393,7 @@ export async function changeBookingTherapist(
   bookingId: string,
   newTherapistId: string,
   staffId: string,
-  newStartTime: string
+  newStartTime?: string
 ): Promise<ChangeTherapistResult> {
   const supabase = await createClient();
 
@@ -414,20 +414,31 @@ export async function changeBookingTherapist(
     };
   }
 
+  const effectiveStartTime = newStartTime ?? booking.start_time;
   const therapistChanged = booking.therapist_id !== newTherapistId;
-  const timeChanged = booking.start_time !== newStartTime;
+  const timeChanged =
+    newStartTime !== undefined &&
+    booking.start_time.slice(0, 5) !== newStartTime.slice(0, 5);
 
   if (!therapistChanged && !timeChanged) {
     return { ok: false, error: "No changes were made." };
   }
 
+  const updateData: {
+    therapist_id: string;
+    start_time?: string;
+    status?: BookingStatus;
+  } = {
+    therapist_id: newTherapistId,
+    ...(booking.status === "Needs Reassignment" ? { status: "Booked" } : {}),
+  };
+  if (timeChanged) {
+    updateData.start_time = effectiveStartTime;
+  }
+
   const { error: updateErr } = await supabase
     .from("bookings")
-    .update({
-      therapist_id: newTherapistId,
-      start_time: newStartTime,
-      ...(booking.status === "Needs Reassignment" ? { status: "Booked" } : {}),
-    })
+    .update(updateData)
     .eq("id", bookingId);
 
   if (updateErr) {

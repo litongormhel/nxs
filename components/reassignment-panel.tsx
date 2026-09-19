@@ -128,6 +128,7 @@ export function ReassignmentPanel({
 
   const [transferBooking, setTransferBooking] = useState<FlaggedBooking | null>(null);
   const [transferTherapistId, setTransferTherapistId] = useState("");
+  const [selectedSlot, setSelectedSlot] = useState<string>("");
   const [transferError, setTransferError] = useState<string | null>(null);
   const [transferSaving, setTransferSaving] = useState(false);
 
@@ -201,6 +202,7 @@ export function ReassignmentPanel({
   function openTransfer(row: FlaggedBooking) {
     setTransferBooking(row);
     setTransferTherapistId("");
+    setSelectedSlot(row.startTime.slice(0, 5));
     setTransferError(null);
   }
 
@@ -228,14 +230,15 @@ export function ReassignmentPanel({
   }
 
   async function handleConfirmTransfer() {
-    if (!transferBooking || !transferTherapistId || !sessionStaff) return;
+    if (!transferBooking || !transferTherapistId || !selectedSlot || !sessionStaff) return;
+    if (isSlotOccupied(selectedSlot)) return;
     setTransferSaving(true);
     setTransferError(null);
     const res = await changeBookingTherapist(
       transferBooking.id,
       transferTherapistId,
       sessionStaff.id,
-      transferBooking.startTime
+      selectedSlot
     );
     setTransferSaving(false);
     if (!res.ok) {
@@ -251,7 +254,14 @@ export function ReassignmentPanel({
   const targetDuration = transferBooking?.durationMinutes ?? 90;
   const targetWeekday = targetDate ? new Date(`${targetDate}T00:00:00`).getDay() : -1;
 
-  type CandidateStatus = "available" | "Day Off" | "Absent" | "On Leave" | "Booked";
+  const displaySlots = useMemo(() => {
+    const orig = transferBooking ? transferBooking.startTime.slice(0, 5) : "";
+    const set = new Set(targetSlots);
+    if (orig) set.add(orig);
+    return spaSortTimes(Array.from(set));
+  }, [targetSlots, transferBooking]);
+
+  type CandidateStatus = "available" | "Day Off" | "Absent" | "On Leave" | "Fully Booked";
 
   const therapistCandidates = useMemo(() => {
     if (!transferBooking) return [];
@@ -311,21 +321,29 @@ export function ReassignmentPanel({
           label = `${t.name} — Day Off`;
           disabled = true;
         } else {
-          const hasConflict = relevantBookings.some(
-            (b) =>
-              normId(b.therapist_id) === nid &&
-              checkOverlap(
-                targetTime,
-                targetDuration,
-                b.start_time.slice(0, 5),
-                b.duration_minutes ?? 90
+          const therapistBookings = relevantBookings.filter(
+            (b) => normId(b.therapist_id) === nid
+          );
+          const hasFreeSlot = displaySlots.some(
+            (slot) =>
+              !therapistBookings.some((b) =>
+                checkOverlap(
+                  slot,
+                  targetDuration,
+                  b.start_time.slice(0, 5),
+                  b.duration_minutes ?? 90
+                )
               )
           );
 
-          if (hasConflict) {
-            status = "Booked";
-            label = `${t.name} — Booked at ${fmtTime(targetTime)}`;
+          if (!hasFreeSlot) {
+            status = "Fully Booked";
+            label = `${t.name} — Fully Booked`;
             disabled = true;
+          } else {
+            status = "available";
+            label = t.name;
+            disabled = false;
           }
         }
 
@@ -340,8 +358,8 @@ export function ReassignmentPanel({
 
     // Automatically sort available candidates to the top of the list
     return candidates.sort((a, b) => {
-      const aAvailable = a.status === "available";
-      const bAvailable = b.status === "available";
+      const aAvailable = !a.disabled;
+      const bAvailable = !b.disabled;
       if (aAvailable && !bAvailable) return -1;
       if (!aAvailable && bAvailable) return 1;
       return a.name.localeCompare(b.name);
@@ -350,13 +368,13 @@ export function ReassignmentPanel({
     transferBooking,
     therapists,
     targetDate,
-    targetTime,
     targetDuration,
     targetWeekday,
     targetAbsences,
     targetLeaves,
     targetDaysOff,
     targetBookings,
+    displaySlots,
   ]);
 
   const selectedCandidate = useMemo(() => {
@@ -364,30 +382,35 @@ export function ReassignmentPanel({
     return therapistCandidates.find((t) => t.id === transferTherapistId) ?? null;
   }, [transferTherapistId, therapistCandidates]);
 
-  const schedulePreview = useMemo(() => {
-    if (!transferBooking || !transferTherapistId || !selectedCandidate) return null;
-
+  const therapistBookingsToday = useMemo(() => {
+    if (!transferBooking || !transferTherapistId) return [];
     const normId = (id: string | null | undefined) => String(id || "").trim().toLowerCase();
     const selId = normId(transferTherapistId);
-
-    const therapistBookingsToday = targetBookings.filter(
+    return targetBookings.filter(
       (b) =>
         b.booking_date?.slice(0, 10) === targetDate &&
         normId(b.therapist_id) === selId &&
         b.status !== "Cancelled" &&
         b.id !== transferBooking.id
     );
+  }, [transferBooking, transferTherapistId, targetBookings, targetDate]);
 
-    const isFreeAtTarget =
-      selectedCandidate.status === "available" &&
-      !therapistBookingsToday.some((b) =>
-        checkOverlap(
-          targetTime,
-          targetDuration,
-          b.start_time.slice(0, 5),
-          b.duration_minutes ?? 90
-        )
-      );
+  const isSlotOccupied = (slot: string): boolean => {
+    if (!transferTherapistId) return false;
+    return therapistBookingsToday.some((b) =>
+      checkOverlap(
+        slot,
+        targetDuration,
+        b.start_time.slice(0, 5),
+        b.duration_minutes ?? 90
+      )
+    );
+  };
+
+  const schedulePreview = useMemo(() => {
+    if (!transferBooking || !transferTherapistId || !selectedCandidate) return null;
+
+    const isFreeAtTarget = !isSlotOccupied(targetTime);
 
     const bookedSlotTimes = spaSortTimes(
       Array.from(new Set(therapistBookingsToday.map((b) => b.start_time.slice(0, 5))))
@@ -397,13 +420,10 @@ export function ReassignmentPanel({
     if (
       selectedCandidate.status !== "Day Off" &&
       selectedCandidate.status !== "Absent" &&
-      selectedCandidate.status !== "On Leave"
+      selectedCandidate.status !== "On Leave" &&
+      selectedCandidate.status !== "Fully Booked"
     ) {
-      availableSlotsToday = targetSlots.filter((slot) => {
-        return !therapistBookingsToday.some((b) =>
-          checkOverlap(slot, 90, b.start_time.slice(0, 5), b.duration_minutes ?? 90)
-        );
-      });
+      availableSlotsToday = displaySlots.filter((slot) => !isSlotOccupied(slot));
     }
 
     return {
@@ -415,11 +435,9 @@ export function ReassignmentPanel({
     transferBooking,
     transferTherapistId,
     selectedCandidate,
-    targetBookings,
-    targetDate,
     targetTime,
-    targetDuration,
-    targetSlots,
+    therapistBookingsToday,
+    displaySlots,
   ]);
 
   if (flagged.length === 0) return null;
@@ -479,7 +497,11 @@ export function ReassignmentPanel({
               <select
                 id="transfer-therapist"
                 value={transferTherapistId}
-                onChange={(e) => setTransferTherapistId(e.target.value)}
+                onChange={(e) => {
+                  setTransferTherapistId(e.target.value);
+                  setSelectedSlot(targetTime);
+                  setTransferError(null);
+                }}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
               >
                 <option value="" disabled>
@@ -498,57 +520,76 @@ export function ReassignmentPanel({
               </select>
             </div>
 
-            {selectedCandidate && schedulePreview && (
-              <div className="rounded-lg border border-border bg-surface-2 p-3 space-y-2.5 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-foreground">Schedule Preview</span>
-                  {schedulePreview.isFreeAtTarget ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-accent-green/30 bg-accent-green/15 px-2.5 py-0.5 text-[11px] font-semibold text-accent-green">
-                      ✓ Free at {fmtTime(targetTime)}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-accent-red/30 bg-accent-red/15 px-2.5 py-0.5 text-[11px] font-semibold text-accent-red">
-                      ✕ Occupied at {fmtTime(targetTime)}
-                    </span>
-                  )}
-                </div>
+            {/* Time Slot Picker */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-muted">Time Slot</label>
+                {transferTherapistId && (
+                  <span className="text-[11px]">
+                    {isSlotOccupied(selectedSlot) ? (
+                      <span className="text-accent-red font-medium">Occupied at {fmtTime(selectedSlot)}</span>
+                    ) : selectedSlot !== targetTime ? (
+                      <span className="text-accent-amber font-medium">New time: {fmtTime(selectedSlot)}</span>
+                    ) : (
+                      <span className="text-accent-green font-medium">✓ Available at {fmtTime(selectedSlot)}</span>
+                    )}
+                  </span>
+                )}
+              </div>
 
-                <div>
-                  <div className="text-[11px] font-medium text-muted mb-1">
-                    Available Slots Today:
-                  </div>
-                  {schedulePreview.availableSlotsToday.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {schedulePreview.availableSlotsToday.map((s) => (
-                        <span
-                          key={s}
-                          className="rounded border border-border bg-background px-2 py-0.5 font-mono text-[11px] text-foreground"
-                        >
-                          {fmtTime(s)}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-[11px] text-muted italic">No available slots today</span>
-                  )}
-                </div>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {displaySlots.map((s) => {
+                  const isOccupied = isSlotOccupied(s);
+                  const isSelected = selectedSlot === s;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      disabled={isOccupied}
+                      onClick={() => {
+                        setSelectedSlot(s);
+                        setTransferError(null);
+                      }}
+                      className={`min-h-[44px] sm:min-h-0 rounded-md border px-2 py-2 font-mono text-xs transition-all flex flex-col items-center justify-center ${
+                        isOccupied
+                          ? "border-dashed border-red-500/30 bg-red-950/10 text-red-400/60 line-through opacity-60 cursor-not-allowed"
+                          : isSelected
+                          ? "border-gold bg-gradient-to-br from-[#c89b3c] to-[#a97e2e] text-black font-bold shadow-sm ring-1 ring-gold"
+                          : transferTherapistId
+                          ? "border-emerald-500/30 bg-emerald-950/15 text-emerald-400 hover:border-emerald-500 hover:bg-emerald-950/30 cursor-pointer"
+                          : "border-border bg-background text-foreground hover:border-gold/50 cursor-pointer"
+                      }`}
+                    >
+                      <span>{fmtTime(s)}</span>
+                      {isOccupied ? (
+                        <span className="text-[9px] no-underline font-sans text-red-400/80">Booked</span>
+                      ) : transferTherapistId && !isSelected ? (
+                        <span className="text-[9px] no-underline font-sans text-emerald-400/80">Free</span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-                <div className="text-[11px] text-muted">
-                  <span className="font-medium text-foreground">Booked Slots Today: </span>
-                  {schedulePreview.bookedSlotTimes.length > 0 ? (
-                    <span className="font-mono text-accent-gold">
-                      Booked: {schedulePreview.bookedSlotTimes.map((s) => fmtTime(s)).join(", ")}
-                    </span>
-                  ) : (
-                    <span className="italic">None</span>
-                  )}
-                </div>
+            {selectedCandidate && schedulePreview && schedulePreview.bookedSlotTimes.length > 0 && (
+              <div className="text-[11px] text-muted">
+                <span className="font-medium text-foreground">Booked today: </span>
+                <span className="font-mono text-accent-gold">
+                  {schedulePreview.bookedSlotTimes.map((s) => fmtTime(s)).join(", ")}
+                </span>
               </div>
             )}
 
-            {selectedCandidate && schedulePreview && !schedulePreview.isFreeAtTarget && (
+            {selectedCandidate && isSlotOccupied(selectedSlot) && (
               <p className="text-xs font-medium text-accent-red">
-                Therapist is already booked at {fmtTime(targetTime)}. Please select another therapist.
+                Therapist is already booked at {fmtTime(selectedSlot)}. Please select an available time slot above.
+              </p>
+            )}
+
+            {selectedCandidate && !isSlotOccupied(selectedSlot) && selectedSlot !== targetTime && (
+              <p className="text-xs font-medium text-accent-amber">
+                Session time will be updated from {fmtTime(targetTime)} to {fmtTime(selectedSlot)}.
               </p>
             )}
 
@@ -566,7 +607,8 @@ export function ReassignmentPanel({
                 disabled={
                   !transferTherapistId ||
                   transferSaving ||
-                  (schedulePreview !== null && !schedulePreview.isFreeAtTarget)
+                  !selectedSlot ||
+                  isSlotOccupied(selectedSlot)
                 }
                 onClick={handleConfirmTransfer}
                 className="flex-1 rounded-lg border border-[#a97e2e] bg-gold/10 py-2 text-xs font-bold text-accent-gold hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-50"

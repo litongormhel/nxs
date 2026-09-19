@@ -80,7 +80,23 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-17 — Replace Client Select Dropdown in New Booking Modal with Searchable Combobox**
+1. **2026-09-19 — Remove Dashboard, Set Bookings as Default Landing, and Reorder Sidebar Navigation**
+   (`ohm#8b3f1a9c`). Implementation plan presented and approved before code execution.
+   - **Removed Dashboard Route (`app/(staff)/dashboard/`)**: Obsolete standalone dashboard page and error boundary removed. Added permanent redirect from `/dashboard` to `/bookings` in `next.config.ts`.
+   - **Default Landing Route (`app/(staff)/page.tsx`, `proxy.ts`, `app/(auth)/login/`)**: Configured `/bookings` as the default landing route for root `/`, post-login redirection, and authenticated navigation.
+   - **Reordered Sidebar Navigation (`lib/nav.ts`)**: Removed Dashboard and updated navigation order to exact sequence: Bookings, Call Sheet, Therapists, Lockers, Sales, Clients, Analytics, Staff, Logs, Settings.
+   - **Relocated Needs Reassignment Alert (`app/(staff)/bookings/page.tsx`)**: Mounted `<ReassignmentPanel />` directly above the bookings table/browser with live therapist/absence/leave checks and keyed remount reactivity on `<BookingBrowser />`.
+   - `npm run build` clean. See [[dashboard_state]], [[bookings_state]], and `.ai/handoff.md`.
+
+2. **2026-09-18 — Allow Therapist Selection with Time Slot Picker in Reassign Modal**
+   (`ohm#alignreassignmentslotsandselection`).
+   - **Dropdown Selection Rules (`components/reassignment-panel.tsx`)**: In the "New Therapist" dropdown, disable ONLY therapists who are Day Off, Absent, On Leave, or Fully Booked. Label disabled options accordingly (`[Name] — Day Off`, `[Name] — Absent`, `[Name] — On Leave`, `[Name] — Fully Booked`). Working therapists with at least 1 free slot remain selectable even if booked at the original session time.
+   - **Interactive Time Slot Picker (`components/reassignment-panel.tsx`)**: Added clickable time slot pills below the therapist selector pre-selecting the original booking time. Occupied slots for the selected therapist appear disabled, struck-through, red, and marked "Booked"; available slots appear with emerald/green accent styling and "Free" indicator.
+   - **Reschedule & Validation Workflow**: If the pre-selected time is occupied, prompts the receptionist to pick an available slot and disables the Confirm button. Selecting a free slot displays a reschedule preview and enables the Confirm button.
+   - **Server Action Update (`app/(staff)/bookings/actions.ts`)**: Updated `changeBookingTherapist` to accept an optional `newStartTime?: string`. Updates both `therapist_id` and (if changed) `start_time`, resets `Needs Reassignment` status back to `Booked`, and revalidates paths `/dashboard` and `/bookings`.
+   - `npm run build` clean. See [[dashboard_state]], [[bookings_state]], and `.ai/handoff.md`.
+
+3. **2026-09-17 — Replace Client Select Dropdown in New Booking Modal with Searchable Combobox**
    (`ohm#newbookingclientcombobox`).
    - **Active Members Filter (`components/client-combobox.tsx`)**: Excludes archived clients (`is_archived !== true && archived_at == null`) and filters records where `is_active !== false`.
    - **Searchable Combobox / Typeahead (`components/client-combobox.tsx`, `components/booking-form-modal.tsx`)**: Replaced native `<select>` dropdown with searchable combobox typeahead component. Defaults to `No Account` (`"— Walk-in / No account —"`).
@@ -89,14 +105,14 @@ Full invariant list: [[nxs-architecture-locks]].
    - **Data Source Query (`app/(staff)/bookings/page.tsx`)**: Updated Supabase client query to include `member_code` for member code search matching.
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-1. **2026-09-17 — Enforce Proportional Points Calculation & Display Earned Points in Confirm Check-in**
+4. **2026-09-17 — Enforce Proportional Points Calculation & Display Earned Points in Confirm Check-in**
    (`ohm#proportionalpointscheckin`).
    - **Dynamic Proportional Calculation (`components/log-visit-modal.tsx`)**: Fetches `app_settings` on mount (defaulting to `"proportional"` if unset). Dynamically recomputes `pointsDelta` reactively using `computeLoyaltyPoints(mode, servicePaidAmount, price, basePoints, pesoPerPoint)` whenever service, promo, manual discount, or total amount changes.
    - **Points Earned Row in Confirm Check-in (`components/log-visit-modal.tsx`)**: Added `Points Earned: +X pts` (styled with gold accent text `text-accent-gold`) inside the `Confirm Check-in` receipt card for Member clients (`clientId`), while omitting points display for walk-ins without an account.
    - **Backend Action Alignment (`app/(staff)/bookings/actions.ts` & `lib/loyalty.ts`)**: Updated `resolveEarnedPoints` to default to `"proportional"` mode when `loyalty_formula_mode` is null in `app_settings`, and guarded `computeLoyaltyPoints` against zero-price division and negative results.
    - `npm run build` clean. See [[points_ledger_state]] and `.ai/handoff.md`.
 
-2. **2026-09-17 — Universal Edit/Void/Restore with Mandatory Manager PIN on Daily Sales Remittance**
+5. **2026-09-17 — Universal Edit/Void/Restore with Mandatory Manager PIN on Daily Sales Remittance**
    (`ohm#salesvoidrestorepin`, `ohm#fixmissingsales`). Implementation plan presented and approved before code execution.
    - **Header Clean Up (`components/sales-browser.tsx`)**: Removed `(Spa Operational Window 8:00 AM – 2:00 AM)` pill/badge from title header.
    - **Universal Row Actions (`components/sales-browser.tsx`)**: Removed `is_walkin` action blocking (`No action — walk-in, no account`). All sales rows (members & walk-ins) feature `[Edit]` and `[Void]` buttons when active, and `[Restore]` button when voided.
@@ -104,23 +120,3 @@ Full invariant list: [[nxs-architecture-locks]].
    - **Backend Actions & RPC (`app/(staff)/sales/actions.ts` & `20260917170000_sales_void_restore_pin.sql`)**: Implemented `voidSale` and `restoreSale` server actions backed by SECURITY DEFINER RPCs (`void_sale_with_pin`, `restore_sale_with_pin`) validating PIN against `app_settings.void_auth_code_hash`, auditing into `action_logs`, and updating sales void status & `void_reason`.
    - **Query Resilience & Fallback (`app/(staff)/sales/page.tsx`)**: Added `salesResFirstTry.error` logging and automated fallback query without `void_reason`, ensuring sales records are never hidden even if DB migrations are unapplied.
    - `npm run build` clean. See [[sales_state]] and `.ai/handoff.md`.
-
-3. **2026-09-17 — Restrict Payment Method dropdown options & remove Logged by Staff in Quick Walk-In**
-   (`ohm#quickwalkinpaymethods`).
-   - **Dropdown Options Restricted (`components/quick-walkin-modal.tsx`)**: Removed `Card` and `Maya` options from Quick Walk-In payment method `<select>` dropdown, strictly restricting choices to `Cash`, `GCash`, and `Split (Cash + GCash)`. Updated reference number input label span to `(optional — GCash)`.
-   - **Removed Logged by Staff Field (`components/quick-walkin-modal.tsx`)**: Removed redundant visible "Logged by (staff)" field from Quick Walk-In modal UI while preserving staff attribution in backend actions via `useStaffSim()`.
-   - **Split Logic Intact (`components/quick-walkin-modal.tsx`)**: Preserved auto-balancing, dual numerical inputs, and backend split sales ledger logic intact.
-   - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
-
-4. **2026-09-17 — Scale down Call Sheet typography and row density to match Bookings table styling**
-   (`ohm#callsheettypography`).
-   - **Table Header & Filter Controls (`components/call-sheet-browser.tsx`)**: Standardized header text size to `text-xs font-medium tracking-wider uppercase text-muted` with `px-4 py-2.5` padding. Scaled filter pill buttons to `px-3.5 py-1.5 text-xs font-semibold`.
-   - **Row Cell Density & Typography (`components/call-sheet-browser.tsx`)**: Reduced row padding from `px-6 py-5` to `px-4 py-2.5 text-sm`. Scaled Locker/Room to `font-mono text-sm font-medium text-foreground`, Service to `text-sm font-medium text-gold`, Therapist to `text-sm text-foreground`, Client to `text-sm font-semibold text-foreground`, Time to `font-mono text-xs text-muted`, and Status badges to `px-2.5 py-0.5 text-xs`.
-   - `npm run build` clean. See [[operations_state]] and `.ai/handoff.md`.
-
-5. **2026-09-17 — Align Quick Walk-in Split Payment UI to dropdown option "Split (Cash + GCash)"**
-   (`ohm#quickwalkindropdownsplit`). Implementation plan presented and approved before code execution.
-   - **Split Payment Dropdown Option (`components/quick-walkin-modal.tsx`)**: Removed standalone `Split Payment` checkbox. Added `Split (Cash + GCash)` directly to Payment Method dropdown options (`Cash`, `GCash`, `Card`, `Maya`, `Split (Cash + GCash)`).
-   - **Dual Column Inputs & Auto-balancing (`components/quick-walkin-modal.tsx`)**: Renders side-by-side `Cash Amount (₱)` and `GCash Amount (₱)` inputs with auto-balancing and validation feedback. Reference number field displayed when GCash amount > 0.
-   - **Backend Action Parameter Alignment (`app/(staff)/bookings/actions.ts`)**: Updated `quickWalkin` action to extract `splitCashAmount` and `splitGcashAmount`, preserving backend split sales ledger logic.
-   - `npm run build` clean. See [[bookings_state]], [[sales_state]], and `.ai/handoff.md`.

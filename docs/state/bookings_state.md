@@ -244,9 +244,9 @@ therapist availability greying.
   in the select. A "Checking availability…" hint shows while the query is
   in flight. Room availability is **not** checked here — explicitly out of
   scope per task instructions.
-- **Server action extended** (`changeBookingTherapist`): now accepts a
-  fourth parameter `newStartTime: string`. Writes `start_time` to the
-  `bookings` row alongside `therapist_id`; `trg_bookings_set_computed_fields`
+- **Server action extended** (`changeBookingTherapist`, updated `ohm#alignreassignmentslotsandselection`, 2026-09-18):
+  accepts optional fourth parameter `newStartTime?: string`. Writes `start_time`
+  to the `bookings` row alongside `therapist_id` if changed; `trg_bookings_set_computed_fields`
   fires on UPDATE and recomputes `start_ts`/`end_ts` automatically, so
   `no_double_book_therapist` GiST constraint enforces on the new time window.
   23P01 error path unchanged. **No migration required.**
@@ -451,6 +451,12 @@ Day-Off therapist (Leo) could be saved from New Booking.
 - **Unused State & Modal Cleanup (`components/booking-browser.tsx`)**: Removed `CheckoutConfirmModal` import and `checkoutTarget` state binding from `BookingBrowser`.
 - **Clean Grid Alignment (`components/booking-browser.tsx`)**: Re-aligned Check-in table columns cleanly to 8 columns: `EDIT`, `MASSAGE TIME`, `CLIENT`, `SERVICE`, `ROOM`, `THERAPIST`, `CHECK-IN TIME`, `LOCKER #`. Locker checkout remains strictly handled under the **Lockers** tab (`components/locker-board.tsx`), protected by `CheckoutConfirmModal`.
 
+**Correction, `ohm#8b3f1a9c` (2026-09-19)** — Remove Dashboard, Set Bookings as Default Landing, and Mount Needs Reassignment Panel.
+
+- **Needs Reassignment Relocation (`app/(staff)/bookings/page.tsx`)**: Embedded `<ReassignmentPanel />` directly at the top of the Bookings page, between the page title and `<BookingBrowser />`.
+- **Live Availability & Flagging Queries**: Added queries for `Needs Reassignment` status, active bookings, therapist absences, leaves, and days off into the page-level `Promise.all`.
+- **Dynamic Reassignment Key & Reactivity**: Derived `reassignmentKey` from the flagged bookings list and passed `key={reassignmentKey}` to `<BookingBrowser />`. Completing a reassignment or cancellation triggers `router.refresh()`, mutating `reassignmentKey` and automatically re-fetching fresh booking rows in the bookings table below.
+- **Default Landing Route**: Bookings (`/bookings`) is now the default landing route across `/`, `proxy.ts`, and staff login flows. Standalone `/dashboard` route was completely deleted, with a permanent redirect configured in `next.config.ts`.
 
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
