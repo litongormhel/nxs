@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { updateBookingStatus, changeBookingTherapist, editBooking } from "@/app/(staff)/bookings/actions";
+import { updateBookingStatus, changeBookingTherapist, editBooking, cancelBooking } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
 import { slotsOverlap, compareSlotTimes, sortSlotTimes } from "@/lib/bookings/slots";
 import { BookingFormModal } from "@/components/booking-form-modal";
@@ -149,6 +149,10 @@ export function BookingBrowser({
   const [logVisitBooking, setLogVisitBooking] = useState<LogVisitInitialBooking | null>(null);
   const [reassignBooking, setReassignBooking] = useState<BookingRow | null>(null);
   const [editBookingRow, setEditBookingRow] = useState<BookingRow | null>(null);
+  const [cancelBookingRow, setCancelBookingRow] = useState<BookingRow | null>(null);
+  const [cancelReason, setCancelReason] = useState("Client decided not to reschedule");
+  const [cancelSaving, setCancelSaving] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [reassignTherapistId, setReassignTherapistId] = useState("");
   const [reassignStartTime, setReassignStartTime] = useState("");
   const [reassignError, setReassignError] = useState<string | null>(null);
@@ -388,6 +392,27 @@ export function BookingBrowser({
     router.refresh();
   }
 
+  function openCancel(row: BookingRow) {
+    setCancelBookingRow(row);
+    setCancelReason("Client decided not to reschedule");
+    setCancelError(null);
+  }
+
+  async function handleConfirmCancel() {
+    if (!cancelBookingRow) return;
+    setCancelSaving(true);
+    setCancelError(null);
+    const res = await cancelBooking(cancelBookingRow.id, sessionStaff?.id, cancelReason);
+    setCancelSaving(false);
+    if (!res.ok) {
+      setCancelError(res.error);
+      return;
+    }
+    setCancelBookingRow(null);
+    reload();
+    router.refresh();
+  }
+
   function renderActions(row: BookingRow) {
     const canEarnRedeem =
       !row.client_id || (clients.find((c) => c.id === row.client_id)?.has_portal_account ?? false);
@@ -421,13 +446,22 @@ export function BookingBrowser({
           </>
         )}
         {row.status === "Needs Reassignment" && (
-          <button
-            type="button"
-            onClick={() => openReassign(row)}
-            className="rounded-md border border-[#6b4f1f] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-amber hover:brightness-125 transition-all"
-          >
-            Reassign
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => openReassign(row)}
+              className="rounded-md border border-[#6b4f1f] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-amber hover:brightness-125 transition-all"
+            >
+              Reassign
+            </button>
+            <button
+              type="button"
+              onClick={() => openCancel(row)}
+              className="rounded border border-red-500/30 px-2 py-1 text-xs text-red-400 hover:bg-red-500/10"
+            >
+              Cancel
+            </button>
+          </>
         )}
         {(row.status === "Booked" || row.status === "No-show") && (
           <button
@@ -856,6 +890,55 @@ export function BookingBrowser({
             router.refresh();
           }}
         />
+      )}
+
+      {cancelBookingRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-foreground">Cancel Booking</h3>
+            <p className="text-xs text-muted">
+              This will cancel the booking for{" "}
+              <strong className="text-foreground">{clientLabel(cancelBookingRow)}</strong> —{" "}
+              {serviceName(cancelBookingRow.service_id)}
+              {cancelBookingRow.room_number ? ` · Room ${cancelBookingRow.room_number}` : ""} ·{" "}
+              {cancelBookingRow.booking_date} {fmtTime(cancelBookingRow.start_time)}. This cannot be undone.
+            </p>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted" htmlFor="cancel-reason">
+                Cancellation Reason
+              </label>
+              <input
+                id="cancel-reason"
+                type="text"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Reason for cancellation"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+              />
+            </div>
+
+            {cancelError && <p className="text-xs text-accent-red">{cancelError}</p>}
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setCancelBookingRow(null)}
+                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                disabled={cancelSaving}
+                onClick={handleConfirmCancel}
+                className="flex-1 rounded-lg border border-accent-red bg-accent-red/10 py-2 text-xs font-bold text-accent-red hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {cancelSaving ? "Cancelling…" : "Confirm Cancel"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

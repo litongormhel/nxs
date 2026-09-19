@@ -773,9 +773,70 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
   return { ok: true };
 }
 
-export type CancelReassignmentResult =
+export type CancelBookingResult =
   | { ok: true }
   | { ok: false; error: string };
+
+export async function cancelBooking(
+  bookingId: string,
+  staffId?: string,
+  reason?: string
+): Promise<CancelBookingResult> {
+  const supabase = await createClient();
+
+  const { data: booking, error: fetchErr } = await supabase
+    .from("bookings")
+    .select("id, status, booking_date")
+    .eq("id", bookingId)
+    .single();
+
+  if (fetchErr || !booking) {
+    return { ok: false, error: fetchErr?.message ?? "Booking not found." };
+  }
+
+  if (booking.status === "Cancelled") {
+    return { ok: false, error: "Booking is already cancelled." };
+  }
+
+  if (booking.status === "Completed") {
+    return { ok: false, error: "Cannot cancel a completed booking." };
+  }
+
+  const { error: updateErr } = await supabase
+    .from("bookings")
+    .update({ status: "Cancelled" })
+    .eq("id", bookingId);
+
+  if (updateErr) {
+    return { ok: false, error: updateErr.message };
+  }
+
+  if (staffId) {
+    const actionName =
+      booking.status === "Needs Reassignment"
+        ? "cancel_reassignment_booking"
+        : "cancel_booking";
+    const cancelReason =
+      reason ||
+      (booking.status === "Needs Reassignment"
+        ? "Client decided not to pursue"
+        : "Staff cancelled booking");
+
+    await supabase.from("action_logs").insert({
+      staff_id: staffId,
+      action: actionName,
+      detail: `booking_id=${bookingId} date=${booking.booking_date} reason=${cancelReason}`,
+    });
+  }
+
+  revalidatePath("/bookings");
+  revalidatePath("/dashboard");
+  revalidatePath("/call-sheet");
+
+  return { ok: true };
+}
+
+export type CancelReassignmentResult = CancelBookingResult;
 
 export async function cancelReassignmentBooking(
   bookingId: string,
@@ -785,7 +846,7 @@ export async function cancelReassignmentBooking(
 
   const { data: booking, error: fetchErr } = await supabase
     .from("bookings")
-    .select("status, booking_date")
+    .select("status")
     .eq("id", bookingId)
     .single();
 
@@ -800,26 +861,7 @@ export async function cancelReassignmentBooking(
     };
   }
 
-  const { error: updateErr } = await supabase
-    .from("bookings")
-    .update({ status: "Cancelled" })
-    .eq("id", bookingId);
-
-  if (updateErr) {
-    return { ok: false, error: updateErr.message };
-  }
-
-  await supabase.from("action_logs").insert({
-    staff_id: staffId,
-    action: "cancel_reassignment_booking",
-    detail: `booking_id=${bookingId} date=${booking.booking_date} reason=Client decided not to pursue`,
-  });
-
-  revalidatePath("/bookings");
-  revalidatePath("/dashboard");
-  revalidatePath("/call-sheet");
-
-  return { ok: true };
+  return cancelBooking(bookingId, staffId, "Client decided not to pursue");
 }
 
 export type ResolveMemberQrResult =

@@ -5,6 +5,29 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Add Cancel Action Button Beside Reassign in Bookings Table — complete**
+  (`ohm#6c9d3e1a`, 2026-09-19).
+  - Implementation plan presented and approved before code execution.
+  - **Bookings Action Cell UI (`components/booking-browser.tsx`)**:
+    - Located `row.status === "Needs Reassignment"` action button branch in `renderActions`.
+    - Added a `Cancel` button adjacent to `Reassign` styled with `<button ... className="rounded border border-red-500/30 px-2 py-1 text-xs text-red-400 hover:bg-red-500/10">Cancel</button>`.
+    - Wired `onClick={() => openCancel(row)}` to trigger the cancellation confirmation modal.
+  - **Cancellation Confirmation Modal (`components/booking-browser.tsx`)**:
+    - Created modal state `cancelBookingRow`, `cancelReason`, `cancelSaving`, and `cancelError`.
+    - Modal displays target client codename, service, room (if assigned), booking date, and start time.
+    - Added input for cancellation reason (prefilled with `"Client decided not to reschedule"`).
+    - Features "Back" button to dismiss and "Confirm Cancel" button triggering `handleConfirmCancel`.
+    - On confirmation, calls `cancelBooking(cancelBookingRow.id, sessionStaff?.id, cancelReason)`.
+    - On success: closes modal, triggers `reload()` to refresh client table state, and invokes `router.refresh()` to update parent page queries and `<ReassignmentPanel />`.
+  - **Cancellation Server Action (`app/(staff)/bookings/actions.ts`)**:
+    - Implemented and exported `cancelBooking(bookingId, staffId?, reason?)`.
+    - Validates booking exists and rejects already `Cancelled` or `Completed` bookings.
+    - Updates `bookings.status = 'Cancelled'`, automatically dropping the row from the `no_double_book_therapist` and `no_double_book_room` GiST exclusion constraint predicates to free the slot immediately.
+    - Inserts audit log in `action_logs` (`cancel_reassignment_booking` or `cancel_booking`) attributing the acting staff member and reason.
+    - Revalidates paths `/bookings`, `/dashboard`, `/call-sheet`.
+    - Delegated `cancelReassignmentBooking` to `cancelBooking` preserving existing caller contracts.
+  - `npm run build` clean (0 compilation / TypeScript errors). See [[bookings_state]] and `.ai/briefing.md`.
+
 - **Disable Time Slot Selection Until Therapist Is Selected in Quick Walk-in and New Booking — complete**
   (`ohm#7d2a5f1e`, 2026-09-19).
   - Implementation plan presented and approved before code execution.

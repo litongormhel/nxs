@@ -466,6 +466,18 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Added visual feedback below Time Slot section: helper text `"Select a therapist first to see available slots"` is displayed when `!isTherapistSelected`.
   - In both modals, resetting or clearing the therapist selection (`!nextId`) automatically resets `slotTime` to empty and `useCustomTime` to `false`, immediately returning the Time Slot section to the disabled state.
 
+**Correction, `ohm#6c9d3e1a` (2026-09-19)** — Add Cancel Action Button Beside Reassign in Bookings Table.
+
+- **Bookings Action Cell UI (`components/booking-browser.tsx`)**:
+  - Located `row.status === "Needs Reassignment"` row action branch under the ACTION column.
+  - Added `Cancel` button right beside `Reassign` styled with `rounded border border-red-500/30 px-2 py-1 text-xs text-red-400 hover:bg-red-500/10`.
+  - Clicking `Cancel` opens a confirmation dialog showing client name, service, room, date, and time, with an editable cancellation reason input.
+- **Cancellation Logic & Cleanup (`app/(staff)/bookings/actions.ts`, `components/booking-browser.tsx`)**:
+  - Exported `cancelBooking(bookingId, staffId?, reason?)`: sets `bookings.status = 'Cancelled'`, which automatically releases the room and slot from `no_double_book_room` and `no_double_book_therapist` GiST exclusion constraints.
+  - Inserts audit log in `action_logs` (`cancel_reassignment_booking` or `cancel_booking`) with staff attribution and reason.
+  - Revalidates paths `/bookings`, `/dashboard`, and `/call-sheet`.
+  - Confirmed cancellation cleanly drops row from active upcoming views and top `<ReassignmentPanel />`.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - Therapist options are not filtered by `therapist_services` (which
