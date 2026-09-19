@@ -120,14 +120,17 @@ export async function toggleLockerMaintenance(
     }
 
     // 2. Update lockers table
-    let { error } = await supabase
+    let updateRes = await supabase
       .from("lockers")
       .update({
         is_maintenance: isMaintenance,
         status: isMaintenance ? "out_of_order" : "available",
         maintenance_note: isMaintenance ? (note?.trim() || null) : null,
       })
-      .eq("number", lockerNumber);
+      .eq("number", lockerNumber)
+      .select();
+
+    let error = updateRes.error;
 
     // Graceful fallback handling:
     // If PostgREST returns a schema cache missing column error for is_maintenance,
@@ -148,10 +151,12 @@ export async function toggleLockerMaintenance(
           status: isMaintenance ? "out_of_order" : "available",
           maintenance_note: isMaintenance ? (note?.trim() || null) : null,
         })
-        .eq("number", lockerNumber);
+        .eq("number", lockerNumber)
+        .select();
 
       if (!fallback.error) {
         error = null;
+        updateRes = fallback;
       } else if (
         fallback.error.message?.includes("maintenance_note") ||
         fallback.error.code === "PGRST204"
@@ -162,9 +167,11 @@ export async function toggleLockerMaintenance(
           .update({
             status: isMaintenance ? "out_of_order" : "available",
           })
-          .eq("number", lockerNumber);
+          .eq("number", lockerNumber)
+          .select();
 
         error = statusOnlyFallback.error;
+        updateRes = statusOnlyFallback;
       } else {
         error = fallback.error;
       }
@@ -184,6 +191,13 @@ export async function toggleLockerMaintenance(
       return fail(error);
     }
 
+    if (!updateRes.data || updateRes.data.length === 0) {
+      console.warn(`[toggleLockerMaintenance] 0 rows updated for locker #${lockerNumber}.`);
+      return fail(
+        `Locker #${lockerNumber} was not updated (record not found or insufficient permission).`
+      );
+    }
+
     // 3. Audit log
     await supabase.from("action_logs").insert({
       staff_id: staffId || null,
@@ -194,6 +208,7 @@ export async function toggleLockerMaintenance(
     // 4. Revalidate paths
     revalidatePath("/lockers");
     revalidatePath("/bookings");
+    revalidatePath("/dashboard");
     revalidatePath("/call-sheet");
     revalidatePath("/clients");
 

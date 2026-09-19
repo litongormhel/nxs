@@ -1,6 +1,6 @@
 # Lockers State
 
-Last updated: 2026-09-19 (`ohm#5b7c2e9a`)
+Last updated: 2026-09-19 (`ohm#6e3a9c2d`)
 
 ## Overview
 
@@ -43,9 +43,9 @@ Append/audit tracking of locker check-ins and check-outs.
 
 1. **`toggleLockerMaintenance(lockerNumber, isMaintenance, note?, staffId?)`**:
    - **Active Occupancy Guard**: If `isMaintenance` is `true`, queries `locker_occupancy` for an active occupant (`checked_out_at IS NULL`). Rejects with an error requiring guest checkout before the locker can be marked out of order.
-   - **Database Update & Schema Resilience**: Updates `is_maintenance`, `status`, and `maintenance_note` on `public.lockers`. If PostgREST returns a schema cache missing column error for `is_maintenance` (`PGRST204`), falls back gracefully to updating `status` (`'out_of_order'` or `'available'`) and `maintenance_note` (or `status` only) without failing unhandled. Documented and executed `NOTIFY pgrst, 'reload schema'` in `20260919100000_lockers_maintenance.sql`.
+   - **Database Update & Mutation Verification**: Updates `is_maintenance`, `status`, and `maintenance_note` on `public.lockers` chaining `.select()` to ensure rows were committed and guard against silent RLS rejections (fails with a descriptive error if 0 rows are updated). If PostgREST returns a schema cache missing column error for `is_maintenance` (`PGRST204`), falls back gracefully to updating `status` (`'out_of_order'` or `'available'`) and `maintenance_note` (or `status` only) without failing unhandled.
    - **Action Log**: Inserts audit log into `action_logs` (`locker_marked_maintenance` or `locker_cleared_maintenance`).
-   - **Revalidation**: Revalidates `/lockers`, `/bookings`, `/call-sheet`, and `/clients`.
+   - **Revalidation**: Revalidates `/lockers`, `/bookings`, `/dashboard`, `/call-sheet`, and `/clients`.
 
 2. **`checkOutLocker(occupancyId, actorStaffId)`**:
    - Sets `checked_out_at = now()` and `checked_out_by = actorStaffId`.
@@ -62,6 +62,7 @@ Append/audit tracking of locker check-ins and check-outs.
 ## UI Components & Workflow
 
 ### 1. Locker Board (`/lockers`, `components/locker-board.tsx`)
+- **Page Resilient Cascading Query (`app/(staff)/lockers/page.tsx`)**: Queries `lockers` with staged fallback (`number, status, is_maintenance, maintenance_note` -> `number, status, maintenance_note` -> `number, status` -> `number`). Prevents schema cache cache misses on `is_maintenance` from dropping the `status` column. Normalizes items with `isMaintenance: Boolean(l.is_maintenance || l.status === "out_of_order" || l.status === "maintenance")`.
 - **Header Metrics**: Reflects total occupied lockers, total working capacity (excluding out-of-order lockers), and displays an amber/red badge if any lockers are currently out of order (`X out of order`).
 - **Locker Cards**:
   - **Occupied**: Gold border (or dashed red if stale from previous spa day), displaying client/guest name and "Check Out" button.

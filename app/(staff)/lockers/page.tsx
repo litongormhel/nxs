@@ -2,6 +2,59 @@ import { createClient } from "@/lib/supabase/server";
 import { LockerBoard } from "@/components/locker-board";
 import { toSpaDay, spaDayNow } from "@/lib/analytics/spa-day";
 
+type RawLocker = {
+  number: number;
+  status?: string;
+  is_maintenance?: boolean;
+  maintenance_note?: string | null;
+};
+
+async function fetchLockers(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<RawLocker[]> {
+  // 1. Try full query with is_maintenance and maintenance_note
+  const res1 = await supabase
+    .from("lockers")
+    .select("number, status, is_maintenance, maintenance_note")
+    .eq("active", true)
+    .order("number", { ascending: true });
+
+  if (!res1.error && res1.data) {
+    return res1.data as RawLocker[];
+  }
+
+  // 2. Fallback to status + maintenance_note if is_maintenance is not in schema cache
+  const res2 = await supabase
+    .from("lockers")
+    .select("number, status, maintenance_note")
+    .eq("active", true)
+    .order("number", { ascending: true });
+
+  if (!res2.error && res2.data) {
+    return res2.data as RawLocker[];
+  }
+
+  // 3. Fallback to status only if maintenance_note is also not in schema cache
+  const res3 = await supabase
+    .from("lockers")
+    .select("number, status")
+    .eq("active", true)
+    .order("number", { ascending: true });
+
+  if (!res3.error && res3.data) {
+    return res3.data as RawLocker[];
+  }
+
+  // 4. Last-resort fallback to number only
+  const res4 = await supabase
+    .from("lockers")
+    .select("number")
+    .eq("active", true)
+    .order("number", { ascending: true });
+
+  return (res4.data ?? []) as RawLocker[];
+}
+
 export default async function LockersPage() {
   const supabase = await createClient();
 
@@ -12,22 +65,8 @@ export default async function LockersPage() {
     // Ignore RPC failure if migration not yet applied
   }
 
-  const [lockersRes, { data: occupancy }] = await Promise.all([
-    supabase
-      .from("lockers")
-      .select("number, status, is_maintenance, maintenance_note")
-      .eq("active", true)
-      .order("number", { ascending: true })
-      .then(async (res) => {
-        if (res.error) {
-          return supabase
-            .from("lockers")
-            .select("number")
-            .eq("active", true)
-            .order("number", { ascending: true });
-        }
-        return res;
-      }),
+  const [rawLockers, { data: occupancy }] = await Promise.all([
+    fetchLockers(supabase),
     supabase
       .from("locker_occupancy")
       .select(`
@@ -39,19 +78,17 @@ export default async function LockersPage() {
       .is("checked_out_at", null),
   ]);
 
-  const rawLockers = (lockersRes.data ?? []) as Array<{
-    number: number;
-    status?: string;
-    is_maintenance?: boolean;
-    maintenance_note?: string | null;
-  }>;
-
-  const formattedLockers = rawLockers.map((l) => ({
-    number: l.number,
-    status: l.status ?? (l.is_maintenance ? "out_of_order" : "available"),
-    isMaintenance: Boolean(l.is_maintenance || l.status === "out_of_order" || l.status === "maintenance"),
-    maintenanceNote: l.maintenance_note ?? null,
-  }));
+  const formattedLockers = rawLockers.map((l) => {
+    const isMaintenance = Boolean(
+      l.is_maintenance || l.status === "out_of_order" || l.status === "maintenance"
+    );
+    return {
+      number: l.number,
+      status: l.status ?? (isMaintenance ? "out_of_order" : "available"),
+      isMaintenance,
+      maintenanceNote: l.maintenance_note ?? null,
+    };
+  });
 
   const today = spaDayNow();
 

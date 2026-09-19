@@ -56,6 +56,10 @@ export function LockerBoard({
   });
 
   useEffect(() => {
+    setOcc(occupancy);
+  }, [occupancy]);
+
+  useEffect(() => {
     const map: Record<number, { note: string | null }> = {};
     for (const l of lockers ?? []) {
       if (l.isMaintenance || l.status === "out_of_order" || l.status === "maintenance") {

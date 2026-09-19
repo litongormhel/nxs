@@ -5,6 +5,26 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Fix Locker Out of Order Persistence and Board State Refresh — complete**
+  (`ohm#6e3a9c2d`, 2026-09-19).
+  - Implementation plan presented and approved before code execution.
+  - **Mutation Verification (`app/(staff)/lockers/actions.ts`)**:
+    - Added `.select()` chained to `.update()` in `toggleLockerMaintenance` to verify rows were committed in Postgres and catch silent RLS denials (returning an explicit error if 0 rows are updated).
+    - Preserved schema cache resilience for missing columns (`PGRST204`).
+    - Added `revalidatePath("/dashboard")` alongside `/lockers`, `/bookings`, `/call-sheet`, and `/clients`.
+  - **Resilient Cascading Query (`app/(staff)/lockers/page.tsx`)**:
+    - Replaced the abrupt `.select("number")` fallback with a cascading query in `fetchLockers`:
+      1. Full query: `number, status, is_maintenance, maintenance_note`
+      2. Fallback 1: `number, status, maintenance_note`
+      3. Fallback 2: `number, status`
+      4. Fallback 3: `number`
+    - Prevents missing `is_maintenance` schema cache columns from dropping the `status` column, ensuring `status = 'out_of_order'` persists across page re-renders.
+    - Accurately normalizes `isMaintenance: Boolean(l.is_maintenance || l.status === "out_of_order" || l.status === "maintenance")` and maps to `<LockerBoard>`.
+  - **Board State Refresh & Sync (`components/locker-board.tsx`)**:
+    - Added `useEffect` to sync `occ` state when `occupancy` prop updates from `router.refresh()`.
+    - Preserved optimistic maintenance status in `maintenanceMap` on action completion, ensuring cards transition to Out of Order without reverting to Free on refresh.
+  - `npm run build` clean (0 errors). See [[lockers_state]], `.ai/briefing.md`.
+
 - **Fix Therapist Cards Theme Styling to Support Light Mode — complete**
   (`ohm#8e2c4b1d`, 2026-09-19).
   - Implementation plan presented and approved before code execution.
