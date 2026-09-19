@@ -5,6 +5,30 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Fix Missing void_reason Column Error in Sales Void and Convert Reason to Dropdown — complete**
+  (`ohm#8d4f2b1a`, 2026-09-19).
+  - Implementation plan presented and approved before code execution.
+  - **Schema & Migration (`supabase/migrations/20260919110000_add_sales_void_reason.sql`)**:
+    - Created migration file with `alter table public.sales add column if not exists void_reason text;`.
+  - **Action Resilience & Audit Guarantee (`app/(staff)/sales/actions.ts`)**:
+    - Updated `voidSale` and `restoreSale` server actions with automated fallback: attempts update with `void_reason`, but if PostgREST schema cache reports the column missing (`Could not find the 'void_reason' column of 'sales' in the schema cache`), falls back to updating without `void_reason`.
+    - Guaranteed insertion of `sale_void` and `sale_restore` audit records into `action_logs` including formatted staff attribution and void/restore reason.
+  - **Standardized Dropdown Selector (`components/sales-browser.tsx`)**:
+    - Replaced free-text void reason input in the PIN confirmation modal with a standardized `<select>` dropdown populated with prescribed reasons:
+      1. `Double booking / Duplicate entry`
+      2. `Client cancelled / No-show`
+      3. `Incorrect service / Amount encoded`
+      4. `Incorrect payment method`
+      5. `Test transaction`
+      6. `Other`
+    - Added reactive state for `selectedVoidReason` and `otherReasonDetail`.
+    - When `Other` is selected, renders a secondary details text input (`Specify Details (optional)`).
+    - If `Other` is selected with custom details, formats submitted reason as `Other: [Details]`; if submitted without details, defaults cleanly to `"Other"`.
+    - Preserved text input for `mode === "restore"`.
+  - **Immediate Remittance Updates (`components/sales-browser.tsx`)**:
+    - Maintained optimistic state updates via `setSales`, immediately recalculating `cashRemit`, `onlineRemit`, and `totalShiftSales`, removing voided sales from active totals, and applying line-through and "Voided" badge styling.
+  - `npm run build` clean (0 compilation / TypeScript errors). See [[sales_state]] and `.ai/briefing.md`.
+
 - **Remove Assign to Client Section and Fix [object Object] Error in Locker Modal — complete**
   (`ohm#9a4b2c8e`, 2026-09-19).
   - Implementation plan presented and approved before code execution.

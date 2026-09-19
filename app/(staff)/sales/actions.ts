@@ -146,8 +146,8 @@ export async function voidSale(
       return { ok: false, error: "Invalid Manager / Owner PIN." };
     }
 
-    // Step 3: Directly update public.sales
-    const { error: updateError } = await adminClient
+    // Step 3: Directly update public.sales with fallback if void_reason column is not in DB cache
+    let { error: updateError } = await adminClient
       .from("sales")
       .update({
         voided: true,
@@ -157,19 +157,32 @@ export async function voidSale(
       })
       .eq("id", saleId);
 
+    if (updateError && updateError.message?.includes("void_reason")) {
+      console.warn(
+        "[voidSale] void_reason column not found in schema cache. Falling back to update without void_reason. Audit log preserves reason."
+      );
+      const fallback = await adminClient
+        .from("sales")
+        .update({
+          voided: true,
+          voided_at: new Date().toISOString(),
+          voided_by: formattedStaffId,
+        })
+        .eq("id", saleId);
+      updateError = fallback.error;
+    }
+
     if (updateError) {
       console.error("[voidSale Direct Update Error]:", updateError);
       return { ok: false, error: updateError.message || "Failed to void sale." };
     }
 
-    // Step 4: Insert audit record into action_logs directly
-    if (formattedStaffId) {
-      await adminClient.from("action_logs").insert({
-        staff_id: formattedStaffId,
-        action: "sale_void",
-        detail: `sale_id=${saleId} voided_by=${formattedStaffId} reason=${reason.trim()}`,
-      });
-    }
+    // Step 4: Insert audit record into action_logs directly (ensures reason is always persisted)
+    await adminClient.from("action_logs").insert({
+      staff_id: formattedStaffId,
+      action: "sale_void",
+      detail: `sale_id=${saleId} voided_by=${formattedStaffId ?? "unknown"} reason=${reason.trim()}`,
+    });
 
     // Step 5: Return { ok: true } and call revalidatePath("/sales")
     revalidatePath("/sales");
@@ -228,8 +241,8 @@ export async function restoreSale(
       return { ok: false, error: "Invalid Manager / Owner PIN." };
     }
 
-    // Step 3: Directly update public.sales
-    const { error: updateError } = await adminClient
+    // Step 3: Directly update public.sales with fallback if void_reason column is not in DB cache
+    let { error: updateError } = await adminClient
       .from("sales")
       .update({
         voided: false,
@@ -239,19 +252,32 @@ export async function restoreSale(
       })
       .eq("id", saleId);
 
+    if (updateError && updateError.message?.includes("void_reason")) {
+      console.warn(
+        "[restoreSale] void_reason column not found in schema cache. Falling back to update without void_reason."
+      );
+      const fallback = await adminClient
+        .from("sales")
+        .update({
+          voided: false,
+          voided_at: null,
+          voided_by: null,
+        })
+        .eq("id", saleId);
+      updateError = fallback.error;
+    }
+
     if (updateError) {
       console.error("[restoreSale Direct Update Error]:", updateError);
       return { ok: false, error: updateError.message || "Failed to restore sale." };
     }
 
     // Step 4: Insert audit record into action_logs directly
-    if (formattedStaffId) {
-      await adminClient.from("action_logs").insert({
-        staff_id: formattedStaffId,
-        action: "sale_restore",
-        detail: `sale_id=${saleId} restored_by=${formattedStaffId} reason=${reason.trim()}`,
-      });
-    }
+    await adminClient.from("action_logs").insert({
+      staff_id: formattedStaffId,
+      action: "sale_restore",
+      detail: `sale_id=${saleId} restored_by=${formattedStaffId ?? "unknown"} reason=${reason.trim()}`,
+    });
 
     // Step 5: Return { ok: true } and call revalidatePath("/sales")
     revalidatePath("/sales");

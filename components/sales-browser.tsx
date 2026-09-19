@@ -34,6 +34,15 @@ type PinModalTarget = {
 
 const PAYMENT_METHODS = ["Cash", "GCash", "Card", "Points"] as const;
 
+export const STANDARD_VOID_REASONS = [
+  "Double booking / Duplicate entry",
+  "Client cancelled / No-show",
+  "Incorrect service / Amount encoded",
+  "Incorrect payment method",
+  "Test transaction",
+  "Other",
+] as const;
+
 function fmtPhtTime(isoString: string, selectedSpaDate: string): string {
   const d = new Date(isoString);
   const phtMs = d.getTime() + 8 * 60 * 60 * 1000;
@@ -88,6 +97,8 @@ export function SalesBrowser({
   // Mandatory Security PIN Confirmation Modal State
   const [pinModalTarget, setPinModalTarget] = useState<PinModalTarget | null>(null);
   const [pinInput, setPinInput] = useState("");
+  const [selectedVoidReason, setSelectedVoidReason] = useState<string>(STANDARD_VOID_REASONS[0]);
+  const [otherReasonDetail, setOtherReasonDetail] = useState("");
   const [reasonInput, setReasonInput] = useState("");
   const [pinModalError, setPinModalError] = useState<string | null>(null);
   const [pinModalBusy, setPinModalBusy] = useState(false);
@@ -194,6 +205,8 @@ export function SalesBrowser({
   const openVoidModal = (sale: Sale) => {
     setPinModalTarget({ sale, mode: "void" });
     setPinInput("");
+    setSelectedVoidReason(STANDARD_VOID_REASONS[0]);
+    setOtherReasonDetail("");
     setReasonInput("");
     setPinModalError(null);
   };
@@ -208,6 +221,8 @@ export function SalesBrowser({
   const closePinModal = () => {
     setPinModalTarget(null);
     setPinInput("");
+    setSelectedVoidReason(STANDARD_VOID_REASONS[0]);
+    setOtherReasonDetail("");
     setReasonInput("");
     setPinModalError(null);
   };
@@ -216,16 +231,26 @@ export function SalesBrowser({
     if (!pinModalTarget) return;
 
     const trimmedPin = pinInput.trim();
-    const trimmedReason = reasonInput.trim();
 
     if (!trimmedPin) {
       setPinModalError("Manager / Owner PIN is required.");
       return;
     }
 
-    if (!trimmedReason) {
-      setPinModalError(`Reason for ${pinModalTarget.mode} is required.`);
-      return;
+    let effectiveReason = "";
+    if (pinModalTarget.mode === "void") {
+      if (selectedVoidReason === "Other") {
+        const customDetail = otherReasonDetail.trim();
+        effectiveReason = customDetail ? `Other: ${customDetail}` : "Other";
+      } else {
+        effectiveReason = selectedVoidReason;
+      }
+    } else {
+      effectiveReason = reasonInput.trim();
+      if (!effectiveReason) {
+        setPinModalError("Reason for restore is required.");
+        return;
+      }
     }
 
     setPinModalBusy(true);
@@ -238,7 +263,7 @@ export function SalesBrowser({
         const res = await voidSale({
           saleId: pinModalTarget.sale.id,
           pin: trimmedPin,
-          reason: trimmedReason,
+          reason: effectiveReason,
           staffId,
         });
 
@@ -257,7 +282,7 @@ export function SalesBrowser({
               ? {
                   ...s,
                   voided: true,
-                  void_reason: trimmedReason,
+                  void_reason: effectiveReason,
                   voided_by_name: sessionStaff?.name ?? "Manager",
                 }
               : s
@@ -270,7 +295,7 @@ export function SalesBrowser({
         const res = await restoreSale({
           saleId: pinModalTarget.sale.id,
           pin: trimmedPin,
-          reason: trimmedReason,
+          reason: effectiveReason,
           staffId,
         });
 
@@ -620,22 +645,54 @@ export function SalesBrowser({
                   autoFocus
                 />
               </div>
-              <div>
-                <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
-                  Reason for {pinModalTarget.mode} <span className="text-accent-red">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={reasonInput}
-                  onChange={(e) => setReasonInput(e.target.value)}
-                  placeholder={
-                    pinModalTarget.mode === "void"
-                      ? "e.g. Accidental double entry / Client cancelled"
-                      : "e.g. Reverting accidental void"
-                  }
-                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
-                />
-              </div>
+              {pinModalTarget.mode === "void" ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
+                      Reason for Void <span className="text-accent-red">*</span>
+                    </label>
+                    <select
+                      value={selectedVoidReason}
+                      onChange={(e) => setSelectedVoidReason(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold cursor-pointer"
+                    >
+                      {STANDARD_VOID_REASONS.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {selectedVoidReason === "Other" && (
+                    <div className="animate-fade-in">
+                      <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
+                        Specify Details <span className="text-muted lowercase font-normal">(optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={otherReasonDetail}
+                        onChange={(e) => setOtherReasonDetail(e.target.value)}
+                        placeholder="Enter additional details..."
+                        className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                        autoFocus
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
+                    Reason for Restore <span className="text-accent-red">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={reasonInput}
+                    onChange={(e) => setReasonInput(e.target.value)}
+                    placeholder="e.g. Reverting accidental void"
+                    className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                  />
+                </div>
+              )}
               {pinModalError && (
                 <div className="text-[11px] font-semibold text-accent-red bg-accent-red/10 p-2 rounded-md border border-accent-red/20">
                   {pinModalError}

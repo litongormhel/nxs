@@ -29,8 +29,10 @@
 - **Universal Actions & Manager PIN Security Guard (`sales-browser.tsx`, `actions.ts`, `ohm#salesvoidrestorepin`, 2026-09-17)**:
   - **Header Clean Up**: Removed `(Spa Operational Window 8:00 AM – 2:00 AM)` pill/badge from Daily Sales Remittance header.
   - **Universal Actions**: Removed `is_walkin` action blocking (`No action — walk-in, no account`). All sales rows (members & walk-ins) feature `[Edit]` and `[Void]` buttons when active, and `[Restore]` button when voided.
-  - **Mandatory Manager PIN Confirmation Modal**: Mandates entering a valid 4 to 6 digit Manager/Owner PIN and required reason string before committing `Void` or `Restore` actions.
-  - **Backend Actions & Audit**: `voidSale` and `restoreSale` server actions validate PIN against `app_settings.void_auth_code_hash` via `void_sale_with_pin` and `restore_sale_with_pin` RPCs, record `void_reason` and audit logs in `action_logs`, and update sales void status.
+  - **Mandatory Manager PIN Confirmation Modal & Standardized Reasons (`sales-browser.tsx`, `actions.ts`, `ohm#salesvoidrestorepin`, `ohm#8d4f2b1a`, 2026-09-19)**:
+    - Mandates entering a valid 4 to 6 digit Manager/Owner PIN before committing `Void` or `Restore` actions.
+    - Replaced free-text void reason input with a standardized `<select>` dropdown (`Double booking / Duplicate entry`, `Client cancelled / No-show`, `Incorrect service / Amount encoded`, `Incorrect payment method`, `Test transaction`, `Other`), rendering a secondary details text input when `Other` is selected.
+    - **Backend Actions & Schema Resilience (`actions.ts`, `20260919110000_add_sales_void_reason.sql`)**: `voidSale` and `restoreSale` server actions validate PIN against `app_settings.void_auth_code_hash`, update `public.sales` with resilient fallback if `void_reason` is missing from schema cache, and guarantee reason persistence in `action_logs`.
 - `processed_by` is the real authenticated staff member (`sessionStaff.id`).
 - **RLS, real role-based as of Staff Auth 6C-2 (`ohm#5m8t2x6b`,
   2026-08-29)**: the additive `public_select`/`public_insert`/
