@@ -146,3 +146,6 @@ begin
   return query select v_booking_id, v_sale_id, v_ledger_id;
 end;
 $function$;
+
+-- Notify PostgREST to reload schema cache so changes to public.lockers are immediately recognized
+notify pgrst, 'reload schema';

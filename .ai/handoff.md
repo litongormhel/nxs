@@ -5,6 +5,22 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Fix Schema Cache Error for Lockers is_maintenance Column — complete**
+  (`ohm#5b7c2e9a`, 2026-09-19).
+  - Implementation plan presented and approved before code execution.
+  - **Schema & Migration (`supabase/migrations/20260919100000_lockers_maintenance.sql`)**:
+    - Appended `notify pgrst, 'reload schema';` at the end of the migration file to ensure PostgREST immediately invalidates and reloads its schema cache upon migration application.
+  - **Action Resilience & Graceful Schema Cache Fallback (`app/(staff)/lockers/actions.ts`)**:
+    - Updated `toggleLockerMaintenance`:
+      - Executes primary update setting `is_maintenance`, `status`, and `maintenance_note`.
+      - Detects PostgREST schema cache missing column error (`is_maintenance`, `schema cache`, or error code `PGRST204`).
+      - Logs warning to server console: `[toggleLockerMaintenance] 'is_maintenance' missing in schema cache (...). Falling back to status update.`.
+      - Gracefully falls back to updating `status` (`'out_of_order'` or `'available'`) and `maintenance_note`.
+      - If `maintenance_note` is also missing from schema cache, falls back to updating `status` alone (`'out_of_order'` or `'available'`), which is fully recognized across the board UI and booking validation.
+      - If all updates fail, logs diagnostic error and returns clean user-facing error message instructing schema cache reload rather than failing unhandled.
+      - Preserved full audit logging in `action_logs` (`locker_marked_maintenance` / `locker_cleared_maintenance`) recording staff attribution and maintenance note.
+  - `npm run build` clean (0 compilation / TypeScript errors). See [[lockers_state]] and `.ai/briefing.md`.
+
 - **Fix Missing void_reason Column Error in Sales Void and Convert Reason to Dropdown — complete**
   (`ohm#8d4f2b1a`, 2026-09-19).
   - Implementation plan presented and approved before code execution.

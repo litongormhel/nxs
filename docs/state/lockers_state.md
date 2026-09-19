@@ -1,6 +1,6 @@
 # Lockers State
 
-Last updated: 2026-09-19 (`ohm#9a4b2c8e`)
+Last updated: 2026-09-19 (`ohm#5b7c2e9a`)
 
 ## Overview
 
@@ -43,7 +43,7 @@ Append/audit tracking of locker check-ins and check-outs.
 
 1. **`toggleLockerMaintenance(lockerNumber, isMaintenance, note?, staffId?)`**:
    - **Active Occupancy Guard**: If `isMaintenance` is `true`, queries `locker_occupancy` for an active occupant (`checked_out_at IS NULL`). Rejects with an error requiring guest checkout before the locker can be marked out of order.
-   - **Database Update**: Updates `is_maintenance`, `status`, and `maintenance_note` on `public.lockers`.
+   - **Database Update & Schema Resilience**: Updates `is_maintenance`, `status`, and `maintenance_note` on `public.lockers`. If PostgREST returns a schema cache missing column error for `is_maintenance` (`PGRST204`), falls back gracefully to updating `status` (`'out_of_order'` or `'available'`) and `maintenance_note` (or `status` only) without failing unhandled. Documented and executed `NOTIFY pgrst, 'reload schema'` in `20260919100000_lockers_maintenance.sql`.
    - **Action Log**: Inserts audit log into `action_logs` (`locker_marked_maintenance` or `locker_cleared_maintenance`).
    - **Revalidation**: Revalidates `/lockers`, `/bookings`, `/call-sheet`, and `/clients`.
 

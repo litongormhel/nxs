@@ -120,7 +120,7 @@ export async function toggleLockerMaintenance(
     }
 
     // 2. Update lockers table
-    const { error } = await supabase
+    let { error } = await supabase
       .from("lockers")
       .update({
         is_maintenance: isMaintenance,
@@ -129,7 +129,60 @@ export async function toggleLockerMaintenance(
       })
       .eq("number", lockerNumber);
 
-    if (error) return fail(error);
+    // Graceful fallback handling:
+    // If PostgREST returns a schema cache missing column error for is_maintenance,
+    // fallback cleanly to status update (supported throughout UI and booking validation).
+    if (
+      error &&
+      (error.message?.includes("is_maintenance") ||
+        error.message?.includes("schema cache") ||
+        error.code === "PGRST204")
+    ) {
+      console.warn(
+        `[toggleLockerMaintenance] 'is_maintenance' missing in schema cache (${error.message}). Falling back to status update.`
+      );
+
+      const fallback = await supabase
+        .from("lockers")
+        .update({
+          status: isMaintenance ? "out_of_order" : "available",
+          maintenance_note: isMaintenance ? (note?.trim() || null) : null,
+        })
+        .eq("number", lockerNumber);
+
+      if (!fallback.error) {
+        error = null;
+      } else if (
+        fallback.error.message?.includes("maintenance_note") ||
+        fallback.error.code === "PGRST204"
+      ) {
+        // If maintenance_note is also missing from schema cache, update status only
+        const statusOnlyFallback = await supabase
+          .from("lockers")
+          .update({
+            status: isMaintenance ? "out_of_order" : "available",
+          })
+          .eq("number", lockerNumber);
+
+        error = statusOnlyFallback.error;
+      } else {
+        error = fallback.error;
+      }
+    }
+
+    if (error) {
+      console.error("[toggleLockerMaintenance Error]:", error);
+      if (
+        error.message?.includes("is_maintenance") ||
+        error.message?.includes("schema cache") ||
+        error.code === "PGRST204"
+      ) {
+        return fail(
+          `Unable to update locker maintenance status due to database schema cache: ${error.message}. Please reload the PostgREST schema cache.`
+        );
+      }
+      return fail(error);
+    }
 
     // 3. Audit log
     await supabase.from("action_logs").insert({

@@ -80,37 +80,35 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-19 — Fix Missing void_reason Column Error in Sales Void and Convert Reason to Dropdown**
+1. **2026-09-19 — Fix Schema Cache Error for Lockers is_maintenance Column**
+   (`ohm#5b7c2e9a`). Implementation plan presented and approved before code execution.
+   - **Schema & Migration (`supabase/migrations/20260919100000_lockers_maintenance.sql`)**: Appended `notify pgrst, 'reload schema';` to the migration to ensure PostgREST immediately invalidates its schema cache upon migration execution.
+   - **Action Resilience & Graceful Fallback (`app/(staff)/lockers/actions.ts`)**: Updated `toggleLockerMaintenance` with graceful schema cache fallback: if PostgREST returns a schema cache missing column error for `is_maintenance` (`PGRST204`), logs a diagnostic warning and cleanly falls back to updating `status` (`'out_of_order'` / `'available'`) and `maintenance_note` (or `status` only). If all attempts fail, returns a clean error directing schema cache reload rather than failing unhandled. Maintained complete audit logging in `action_logs` and path revalidations.
+   - `npm run build` clean. See [[lockers_state]] and `.ai/handoff.md`.
+
+2. **2026-09-19 — Fix Missing void_reason Column Error in Sales Void and Convert Reason to Dropdown**
    (`ohm#8d4f2b1a`). Implementation plan presented and approved before code execution.
    - **Schema & Migration (`supabase/migrations/20260919110000_add_sales_void_reason.sql`)**: Generated migration adding `void_reason text` to `public.sales` with `if not exists` guard.
    - **Action Resilience (`app/(staff)/sales/actions.ts`)**: Updated `voidSale` and `restoreSale` to attempt updating `void_reason`, with automated fallback omitting `void_reason` if the column is not yet present in the live Supabase schema cache. Guaranteed audit log insertion into `action_logs` (`sale_void` / `sale_restore`) recording acting staff and void/restore reason.
    - **Standardized Dropdown UI (`components/sales-browser.tsx`)**: Replaced free-text void reason input with a `<select>` dropdown featuring 6 standard reasons: `Double booking / Duplicate entry`, `Client cancelled / No-show`, `Incorrect service / Amount encoded`, `Incorrect payment method`, `Test transaction`, and `Other`. Conditionally renders an optional details text input when `Other` is selected. Maintained immediate sales remittance card recalculation and table line-through state updates.
    - `npm run build` clean. See [[sales_state]] and `.ai/handoff.md`.
 
-2. **2026-09-19 — Remove Assign to Client Section and Fix [object Object] Error in Locker Modal**
+3. **2026-09-19 — Remove Assign to Client Section and Fix [object Object] Error in Locker Modal**
    (`ohm#9a4b2c8e`). Implementation plan presented and approved before code execution.
    - **UI Cleanup (`components/locker-board.tsx`)**: Removed the "Assign to Client" card and redirect button ("Go to Bookings / Check-in →"). Streamlined the Free Locker modal strictly to header status dot (`Locker #X • Available`), error banner, "Mark Out of Order" section (note input + submit button), and Cancel button. Removed redundant "Options" button from free locker cards, making each card directly clickable with centered label and gold hover effects.
    - **Error Handling & Serialization (`app/(staff)/lockers/actions.ts`, `components/locker-board.tsx`)**: Fixed `[object Object]` error alert by normalizing `fail()` helper in `actions.ts` to extract `.message` from Supabase `PostgrestError` and other error objects, wrapping `toggleLockerMaintenance` in `try...catch`, and defensively formatting `actionError` rendering in both Free and Maintenance locker modals.
    - `npm run build` clean. See [[lockers_state]] and `.ai/handoff.md`.
 
-3. **2026-09-19 — Add Cancel Action Button Beside Reassign in Bookings Table**
+4. **2026-09-19 — Add Cancel Action Button Beside Reassign in Bookings Table**
    (`ohm#6c9d3e1a`). Implementation plan presented and approved before code execution.
    - **Bookings Action Cell UI (`components/booking-browser.tsx`)**: Added a `Cancel` action button beside `Reassign` for `Needs Reassignment` rows styled with `rounded border border-red-500/30 px-2 py-1 text-xs text-red-400 hover:bg-red-500/10`.
    - **Cancellation Confirmation Modal (`components/booking-browser.tsx`)**: Clicking Cancel opens a confirmation dialog showing client codename, service, room, date, and time, with an editable cancellation reason input (`"Client decided not to reschedule"`).
    - **Server Action (`app/(staff)/bookings/actions.ts`)**: Implemented and exported `cancelBooking(bookingId, staffId?, reason?)`. Sets booking `status: 'Cancelled'` (releasing room and slot from GiST exclusion constraints), logs to `action_logs` with staff attribution, and revalidates `/bookings`, `/dashboard`, and `/call-sheet`. Delegated `cancelReassignmentBooking` to `cancelBooking`.
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-19 — Disable Time Slot Selection Until Therapist Is Selected in Quick Walk-in and New Booking**
+5. **2026-09-19 — Disable Time Slot Selection Until Therapist Is Selected in Quick Walk-in and New Booking**
    (`ohm#7d2a5f1e`). Implementation plan presented and approved before code execution.
    - **Quick Walk-in (`components/quick-walkin-modal.tsx`)**: Disabled all Time Slot pill buttons and the "Use a custom time instead" checkbox when no therapist is selected (`disabled={!isTherapistSelected}`). Applied `opacity-40 cursor-not-allowed` styling. Added visual helper text `"Select a therapist first to see available slots"`. Reset `slotTime` and `useCustomTime` when therapist selection changes to empty.
    - **New Booking Modal (`components/booking-form-modal.tsx`)**: Mirrored the exact same behavior: gated Time Slot buttons and custom time controls on active therapist selection, styled disabled states with `opacity-40 cursor-not-allowed`, displayed helper text when no therapist is selected, and automatically cleared time slot and custom time when therapist is deselected.
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
-
-5. **2026-09-19 — Add Maintenance / Out of Order Status and Notes for Lockers**
-   (`ohm#4f7b9e2a`). Implementation plan presented and approved before code execution.
-   - **Schema & Migration (`supabase/migrations/20260919100000_lockers_maintenance.sql`, `lib/types/database.ts`)**: Added `status`, `is_maintenance`, and `maintenance_note` to `public.lockers`. Added `staff_update` RLS policy permitting all staff (`is_staff()`) to toggle maintenance. Updated `quick_walkin` RPC to reject out-of-order lockers.
-   - **Server Action (`app/(staff)/lockers/actions.ts`)**: Implemented `toggleLockerMaintenance(lockerNumber, isMaintenance, note?, staffId)`. Blocks marking active occupied lockers as out of order, updates locker status/note, audits into `action_logs`, and revalidates locker/booking paths. Added server guard in `app/(staff)/bookings/actions.ts`.
-   - **Locker Board UI (`app/(staff)/lockers/page.tsx`, `components/locker-board.tsx`)**: Distinct red dashed border and badge display for out-of-order lockers with maintenance note preview. Clicking a free locker shows options to Assign Guest or Mark Out of Order (with note input); clicking an out-of-order locker allows viewing note and clearing maintenance. Header metric shows working capacity and out-of-order count.
-   - **Check-in Selectors Exclusion (`components/quick-walkin-modal.tsx`, `components/log-visit-modal.tsx`, `components/booking-browser.tsx`)**: Excludes/disables out-of-order lockers with clear descriptive labels across Quick Walk-in, Log Visit, and Edit Booking modals with front-end and back-end validation.
-   - `npm run build` clean. See [[lockers_state]] and `.ai/handoff.md`.
 
