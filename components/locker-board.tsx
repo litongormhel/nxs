@@ -73,7 +73,7 @@ export function LockerBoard({
     note: string | null;
   } | null>(null);
   const [actionPending, setActionPending] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<any>(null);
 
   const occupiedCount = Object.keys(occ).length;
   const maintenanceCount = Object.keys(maintenanceMap).length;
@@ -107,8 +107,8 @@ export function LockerBoard({
       setFreeLockerNote("");
       showToast(`Locker ${num} marked out of order`);
       router.refresh();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err));
+    } catch (err: any) {
+      setActionError(err?.message || (typeof err === "string" ? err : String(err)));
     } finally {
       setActionPending(false);
     }
@@ -131,8 +131,8 @@ export function LockerBoard({
       setSelectedMaintenanceLocker(null);
       showToast(`Locker ${num} marked as available`);
       router.refresh();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err));
+    } catch (err: any) {
+      setActionError(err?.message || (typeof err === "string" ? err : String(err)));
     } finally {
       setActionPending(false);
     }
@@ -276,24 +276,14 @@ export function LockerBoard({
                 setFreeLockerNote("");
                 setActionError(null);
               }}
-              className="flex flex-col items-center justify-between rounded-lg border border-border bg-surface px-1.5 py-2.5 text-center cursor-pointer hover:border-gold/50 hover:bg-surface-accent/20 transition-all group"
+              className="flex flex-col items-center justify-center rounded-lg border border-border bg-surface px-1.5 py-2.5 text-center cursor-pointer hover:border-gold/50 hover:bg-surface-accent/20 transition-all group min-h-[72px]"
             >
-              <div className="text-[13px] font-bold text-foreground">{num}</div>
+              <div className="text-[13px] font-bold text-foreground group-hover:text-gold transition-colors">
+                {num}
+              </div>
               <div className="mt-1 text-[9.5px] text-muted opacity-60 group-hover:opacity-100 group-hover:text-gold transition-opacity">
                 Free
               </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedFreeLocker(num);
-                  setFreeLockerNote("");
-                  setActionError(null);
-                }}
-                className="mt-1.5 w-full rounded border border-border/70 py-1 text-[8.5px] font-medium text-muted hover:border-gold hover:text-gold transition-colors"
-              >
-                Options
-              </button>
             </div>
           );
         })}
@@ -304,11 +294,12 @@ export function LockerBoard({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 animate-fade-in backdrop-blur-xs">
           <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-border/60 pb-3">
-              <div>
+              <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-foreground">
                   Locker #{selectedFreeLocker}
                 </h3>
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-400">
+                <span className="text-muted text-xs">•</span>
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-400">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   Available
                 </span>
@@ -326,58 +317,40 @@ export function LockerBoard({
             </div>
 
             {actionError && (
-              <p className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-xs text-red-300 font-medium">
-                ⚠ {actionError}
-              </p>
+              <div className="text-sm text-red-400 bg-red-950/40 border border-red-500/30 p-2.5 rounded-lg">
+                ⚠️ {typeof actionError === "string" ? actionError : actionError.message || "Failed to update locker status"}
+              </div>
             )}
 
-            <div className="space-y-3">
-              {/* Option 1: Assign Guest */}
-              <div className="rounded-lg border border-border/70 bg-surface-2 p-3 space-y-2">
-                <div className="text-xs font-semibold text-foreground">Assign to Client</div>
-                <p className="text-[11px] text-muted">
-                  Check in a client or create a walk-in visit to assign this locker.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedFreeLocker(null);
-                    router.push("/bookings");
-                  }}
-                  className="w-full rounded-md border border-[#a97e2e] bg-surface-accent py-2 text-xs font-bold text-accent-gold hover:bg-[#c89b3c]/20 transition-all"
-                >
-                  Go to Bookings / Check-in →
-                </button>
-              </div>
-
-              {/* Option 2: Mark Out of Order */}
-              <div className="rounded-lg border border-red-950 bg-red-950/20 p-3 space-y-2.5">
+            {/* Mark Out of Order Section */}
+            <div className="rounded-lg border border-red-950 bg-red-950/20 p-3.5 space-y-3">
+              <div>
                 <div className="text-xs font-semibold text-red-300">Mark Out of Order</div>
-                <p className="text-[11px] text-muted">
+                <p className="text-[11px] text-muted mt-0.5">
                   Prevent this locker from being selected during check-in.
                 </p>
-                <div>
-                  <label className="text-[10.5px] font-medium text-muted block mb-1">
-                    Maintenance Note (optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Broken key, handle loose, lock jammed"
-                    value={freeLockerNote}
-                    onChange={(e) => setFreeLockerNote(e.target.value)}
-                    disabled={actionPending}
-                    className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted/60 focus:border-red-500/70 outline-none disabled:opacity-50"
-                  />
-                </div>
-                <button
-                  type="button"
-                  disabled={actionPending}
-                  onClick={() => handleMarkOutOfOrder(selectedFreeLocker, freeLockerNote)}
-                  className="w-full rounded-md border border-red-800/80 bg-red-950/50 py-2 text-xs font-bold text-red-300 hover:bg-red-900/60 disabled:opacity-50 transition-all"
-                >
-                  {actionPending ? "Updating…" : "Mark Out of Order"}
-                </button>
               </div>
+              <div>
+                <label className="text-[10.5px] font-medium text-muted block mb-1">
+                  Maintenance Note (optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Broken key, handle loose, lock jammed"
+                  value={freeLockerNote}
+                  onChange={(e) => setFreeLockerNote(e.target.value)}
+                  disabled={actionPending}
+                  className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted/60 focus:border-red-500/70 outline-none disabled:opacity-50"
+                />
+              </div>
+              <button
+                type="button"
+                disabled={actionPending}
+                onClick={() => handleMarkOutOfOrder(selectedFreeLocker, freeLockerNote)}
+                className="w-full rounded-md border border-red-800/80 bg-red-950/50 py-2 text-xs font-bold text-red-300 hover:bg-red-900/60 disabled:opacity-50 transition-all"
+              >
+                {actionPending ? "Updating…" : "Mark Out of Order"}
+              </button>
             </div>
 
             <div className="flex justify-end pt-1">
@@ -424,9 +397,9 @@ export function LockerBoard({
             </div>
 
             {actionError && (
-              <p className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-xs text-red-300 font-medium">
-                ⚠ {actionError}
-              </p>
+              <div className="text-sm text-red-400 bg-red-950/40 border border-red-500/30 p-2.5 rounded-lg">
+                ⚠️ {typeof actionError === "string" ? actionError : actionError.message || "Failed to update locker status"}
+              </div>
             )}
 
             <div className="rounded-lg border border-red-900/40 bg-red-950/20 p-3 space-y-1.5">

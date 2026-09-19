@@ -1,6 +1,6 @@
 # Lockers State
 
-Last updated: 2026-09-19 (`ohm#4f7b9e2a`)
+Last updated: 2026-09-19 (`ohm#9a4b2c8e`)
 
 ## Overview
 
@@ -68,9 +68,10 @@ Append/audit tracking of locker check-ins and check-outs.
   - **Out of Order**: Distinct dashed red border (`border-red-500/60`), dark red surface (`bg-red-950/20`), "Out of Order" badge, and truncated maintenance note. Clicking opens the Maintenance modal.
   - **Free**: Surface border and "Free" indicator. Clicking opens the Free Locker options modal.
 - **Free Locker Modal**:
-  - Displays locker number and "Available" badge.
-  - Option 1: "Assign to Client" -> navigates to `/bookings` to check in.
-  - Option 2: "Mark Out of Order" -> text input for optional note ("e.g. Broken key") and submit button calling `toggleLockerMaintenance`.
+  - Displays locker number and "Available" status dot (`Locker #X • Available`).
+  - Error banner rendering human-readable error messages if an operation fails.
+  - "Mark Out of Order" section: text input for optional note ("e.g. Broken key") and action button calling `toggleLockerMaintenance`.
+  - Cancel button to close.
 - **Maintenance Locker Modal**:
   - Displays locker number, "Out of Order" badge, and existing maintenance note.
   - Action button: "Mark as Available / Clear Maintenance" calling `toggleLockerMaintenance(num, false)`.

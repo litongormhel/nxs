@@ -5,6 +5,26 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Remove Assign to Client Section and Fix [object Object] Error in Locker Modal — complete**
+  (`ohm#9a4b2c8e`, 2026-09-19).
+  - Implementation plan presented and approved before code execution.
+  - **UI Cleanup (`components/locker-board.tsx`)**:
+    - Removed the "Assign to Client" section and redirect button ("Go to Bookings / Check-in →") from the Free Locker modal.
+    - Streamlined modal layout to strictly feature:
+      - Title & status dot: `Locker #X • Available`
+      - Error banner (if an error occurs)
+      - "Mark Out of Order" section (note input + action button)
+      - Cancel / Close button
+    - Removed the redundant "Options" button on free locker cards. The entire card is directly clickable with `cursor-pointer`, gold hover accent, and vertically centered text.
+  - **Fix `[object Object]` Error Display (`components/locker-board.tsx`)**:
+    - Updated error banner rendering in both Free Locker and Maintenance Locker modals:
+      `{actionError && <div className="text-sm text-red-400 bg-red-950/40 border border-red-500/30 p-2.5 rounded-lg">⚠️ {typeof actionError === "string" ? actionError : actionError.message || "Failed to update locker status"}</div>}`
+    - Normalized error extraction in `handleMarkOutOfOrder` and `handleClearMaintenance` catch blocks (`err?.message || (typeof err === "string" ? err : String(err))`).
+  - **Server Action Error Serialization (`app/(staff)/lockers/actions.ts`)**:
+    - Updated `fail(error: unknown)` to inspect object error structures (such as Supabase `PostgrestError` which does not inherit from standard `Error` and previously serialized via `String(error)` into `"[object Object]"`).
+    - Wrapped `toggleLockerMaintenance` in `try...catch` block to guarantee clean error results (`{ ok: false, error: string }`).
+  - `npm run build` clean (0 compilation / TypeScript errors). See [[lockers_state]] and `.ai/briefing.md`.
+
 - **Add Cancel Action Button Beside Reassign in Bookings Table — complete**
   (`ohm#6c9d3e1a`, 2026-09-19).
   - Implementation plan presented and approved before code execution.
