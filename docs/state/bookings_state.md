@@ -495,7 +495,20 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - When no service is selected, the therapist dropdown is disabled with placeholder `— select service first —`.
   - On service change (`onServiceChange`): if the currently selected therapist is not qualified for the newly selected service, `therapistId` is automatically reset to empty `""`, which in turn clears `slotTime = ""` and disables the time slot selection (`ohm#7d2a5f1e`).
   - Added reactive qualification guard ensuring any desynchronized selection resets immediately if unqualified.
-  - Server actions revalidated across `/therapists` and `/bookings`.
+**Correction, `ohm#7f3b1e9a` (2026-09-19)** — Past Time Grace Period (20 mins) and Booked Slots Gating in Quick Walk-in and New Booking Modals.
+
+- **Time Slot Utilities (`lib/bookings/slots.ts`)**:
+  - Added `getSlotStartMs(bookingSpaDay, slotTime)`: maps slot times to Manila epoch milliseconds (UTC ms) with operational window awareness (hours `< 8` such as 00:00, 00:30, 01:00 map to the calendar morning following the spa day anchor via `shiftSpaDay(bookingSpaDay, 1)`).
+  - Added `isSlotPastGracePeriod(slotTime, bookingDate, now, gracePeriodMinutes = 20)`: evaluates whether a slot has elapsed past its 20-minute grace window on the active operational day (`bookingDate === spaDayNow()`). Gated strictly on the current spa day — future dates (`bookingDate > spaDayNow()`) return `false` (never past-gated).
+- **Slot Gating & Styling (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`)**:
+  - Incorporated 30s interval ticker `currentTime` for live grace period evaluation while modal is open.
+  - Differentiated slot button visual states:
+    - **Past slots**: disabled and rendered in faded dark gray (`border-border/40 bg-background/50 text-foreground/30 opacity-25 cursor-not-allowed`) without line-through and without "Booked" label.
+    - **Booked slots**: disabled and rendered struck-through with red/muted outline (`border-dashed border-red-500/30 bg-red-950/10 text-red-400/60 line-through opacity-60 cursor-not-allowed`) displaying struck-through time and `<span className="text-[9px] no-underline font-sans text-red-400/80 leading-none mt-0.5">Booked</span>`.
+    - **No therapist selected**: `border-border bg-background text-foreground/40 opacity-40 cursor-not-allowed` with helper text `"Select a therapist first to see available slots"`.
+  - Preserved mobile touch target (`min-h-[44px] sm:min-h-[38px]`) with centered vertical flex alignment.
+  - Added `isPastSlot` and `isBookedSlot` validation guards to `canSubmit` and `handleSubmit`.
+  - Quick Walk-in modal date initialized with canonical `spaDayNow()`.
 
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 

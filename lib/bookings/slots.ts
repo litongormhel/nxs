@@ -1,5 +1,8 @@
+import { spaDayNow, shiftSpaDay } from "@/lib/analytics/spa-day";
+
 // Operating hours confirmed 2026-08-27 (Bookings phase, ohm#9k4p7w2z): open 4:30 PM,
 // hourly slot grid, last call 1:00 AM. The final slot (00:30-01:00) is shorter than an
+// hour so that 1:00 AM stays selectable as the last start time.
 // hour so that 1:00 AM stays selectable as the last start time.
 export const SLOT_START_TIMES: string[] = (() => {
   const slots: string[] = [];
@@ -47,3 +50,48 @@ export function slotsOverlap(
   const bEnd = bStart + durationB;
   return aStart < bEnd && bStart < aEnd;
 }
+
+const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+/**
+ * Returns UTC epoch milliseconds corresponding to the start of a slot
+ * on a given spa operational day (YYYY-MM-DD).
+ *
+ * Slots with hour < 8 (e.g. 00:00, 00:30, 01:00) represent the post-midnight
+ * extension of the shift and occur on the calendar date following the spa day.
+ */
+export function getSlotStartMs(bookingSpaDay: string, slotTime: string): number {
+  const [h, m] = slotTime.split(":").map(Number);
+  const calendarDate = h < 8 ? shiftSpaDay(bookingSpaDay, 1) : bookingSpaDay;
+  const [year, month, day] = calendarDate.split("-").map(Number);
+  return Date.UTC(year, month - 1, day, h, m, 0) - MANILA_OFFSET_MS;
+}
+
+/**
+ * Checks if a slot time has passed for a given booking date,
+ * respecting the current Spa Day operational window and a 20-minute grace period.
+ *
+ * - Future dates (bookingDate > spaDayNow()): never past (returns false).
+ * - Past dates (bookingDate < spaDayNow()): all past (returns true).
+ * - Current spa day (bookingDate === spaDayNow()): remains selectable up to 20 minutes
+ *   past its scheduled start (e.g., 5:30 PM slot stays open until 5:50 PM; at 5:51 PM, it is disabled).
+ */
+export function isSlotPastGracePeriod(
+  slotTime: string,
+  bookingDate: string,
+  now: Date = new Date(),
+  gracePeriodMinutes: number = 20
+): boolean {
+  if (!slotTime || !bookingDate) return false;
+  const currentSpa = spaDayNow();
+  if (bookingDate > currentSpa) {
+    return false;
+  }
+  if (bookingDate < currentSpa) {
+    return true;
+  }
+  const slotStartMs = getSlotStartMs(bookingDate, slotTime);
+  const cutoffMs = slotStartMs + gracePeriodMinutes * 60 * 1000;
+  return now.getTime() > cutoffMs;
+}
+

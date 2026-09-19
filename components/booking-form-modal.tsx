@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { createBooking } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
-import { slotsOverlap } from "@/lib/bookings/slots";
+import { slotsOverlap, isSlotPastGracePeriod } from "@/lib/bookings/slots";
+import { spaDayNow } from "@/lib/analytics/spa-day";
 import { SmsPreviewModal } from "@/components/sms-preview-modal";
 import { ClientCombobox } from "@/components/client-combobox";
 import type { Client, Service, Staff, Therapist } from "@/components/booking-browser";
@@ -70,8 +71,16 @@ export function BookingFormModal({
   const [walkinName, setWalkinName] = useState("");
   const [serviceId, setServiceId] = useState(services[0]?.id ?? "");
   const [therapistId, setTherapistId] = useState("");
-  const [date, setDate] = useState(defaultDate || todayIso());
+  const [date, setDate] = useState(defaultDate || spaDayNow());
   const [slotTime, setSlotTime] = useState<string>("");
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, []);
   const [useCustomTime, setUseCustomTime] = useState(false);
   const [customTime, setCustomTime] = useState(roundedNowTime());
   const [manualRoomNumber, setManualRoomNumber] = useState<number | null>(null);
@@ -166,13 +175,24 @@ export function BookingFormModal({
   const duration = selectedService?.duration_minutes ?? 0;
   const isMassageService = selectedService?.name !== "Wet Area";
   const isTherapistSelected = !!therapistId;
-  const isPastDate = date < todayIso();
+  const isPastDate = date < spaDayNow();
   const time = useCustomTime ? customTime : slotTime;
 
   const effectiveRooms = useMemo(
     () => (rooms && rooms.length > 0 ? rooms : Array.from({ length: 18 }, (_, i) => i + 1)),
     [rooms]
   );
+
+  // Past slots (with 20-minute grace period on today's operational window)
+  const pastSlots = useMemo(() => {
+    const set = new Set<string>();
+    for (const slot of timeSlots) {
+      if (isSlotPastGracePeriod(slot, date, currentTime, 20)) {
+        set.add(slot);
+      }
+    }
+    return set;
+  }, [timeSlots, date, currentTime]);
 
   // Taken slots in the slot grid (therapist busy or no rooms available)
   const takenSlots = useMemo(() => {
@@ -183,13 +203,13 @@ export function BookingFormModal({
         conflicts.some(
           (c) =>
             c.therapist_id === therapistId &&
-            slotsOverlap(slot, duration, c.start_time, c.duration_minutes ?? 0)
+            slotsOverlap(slot, duration, c.start_time, c.duration_minutes ?? duration ?? 60)
         );
 
       const takenRooms = new Set<number>();
       for (const row of conflicts) {
         if (row.room_number == null) continue;
-        if (slotsOverlap(slot, duration, row.start_time, row.duration_minutes ?? 0)) {
+        if (slotsOverlap(slot, duration, row.start_time, row.duration_minutes ?? duration ?? 60)) {
           takenRooms.add(row.room_number);
         }
       }
@@ -208,7 +228,7 @@ export function BookingFormModal({
     if (!time) return taken;
     for (const row of conflicts) {
       if (!row.therapist_id) continue;
-      if (slotsOverlap(time, duration, row.start_time, row.duration_minutes ?? 0)) {
+      if (slotsOverlap(time, duration, row.start_time, row.duration_minutes ?? duration ?? 60)) {
         taken.add(row.therapist_id);
       }
     }
@@ -221,7 +241,7 @@ export function BookingFormModal({
     const taken = new Set<number>();
     for (const row of conflicts) {
       if (row.room_number == null) continue;
-      if (slotsOverlap(time, duration, row.start_time, row.duration_minutes ?? 0)) {
+      if (slotsOverlap(time, duration, row.start_time, row.duration_minutes ?? duration ?? 60)) {
         taken.add(row.room_number);
       }
     }
@@ -244,16 +264,17 @@ export function BookingFormModal({
     for (const t of qualifiedTherapists) {
       const hasFreeSlot = timeSlots.some(
         (slot) =>
+          !pastSlots.has(slot) &&
           !conflicts.some(
             (c) =>
               c.therapist_id === t.id &&
-              slotsOverlap(slot, duration, c.start_time, c.duration_minutes ?? 0)
+              slotsOverlap(slot, duration, c.start_time, c.duration_minutes ?? duration ?? 60)
           )
       );
       if (!hasFreeSlot) fullyBooked.add(t.id);
     }
     return fullyBooked;
-  }, [qualifiedTherapists, timeSlots, conflicts, duration]);
+  }, [qualifiedTherapists, timeSlots, pastSlots, conflicts, duration]);
 
   // Effective room number: manual override if still free, otherwise first free room
   const roomNumber = useMemo(() => {
@@ -321,10 +342,18 @@ export function BookingFormModal({
     (!servicesLoaded || !!serviceTherapistMap.get(serviceId)?.has(therapistId));
   const selectedTherapist = therapists.find((t) => t.id === therapistId);
 
+  const isPastSlot = isMassageService && !useCustomTime && !!slotTime && pastSlots.has(slotTime);
+  const isBookedSlot = isMassageService && !useCustomTime && !!slotTime && takenSlots.has(slotTime);
+  const isPastCustomTime =
+    isMassageService && useCustomTime && !!customTime && isSlotPastGracePeriod(customTime, date, currentTime, 20);
+
   const canSubmit =
     !isPending &&
     !isPastDate &&
     !hasClientSlotConflict &&
+    !isPastSlot &&
+    !isBookedSlot &&
+    !isPastCustomTime &&
     (isWalkIn ? walkinName.trim().length > 0 : !!clientSelectValue) &&
     !!serviceId &&
     !!staffId &&
@@ -339,6 +368,18 @@ export function BookingFormModal({
     setError(null);
     if (isPastDate) {
       setError("Cannot book a date in the past.");
+      return;
+    }
+    if (isMassageService && !useCustomTime && slotTime && pastSlots.has(slotTime)) {
+      setError("The selected time slot has already passed. Please select an available slot.");
+      return;
+    }
+    if (isMassageService && !useCustomTime && slotTime && takenSlots.has(slotTime)) {
+      setError("The selected time slot is already booked for this therapist.");
+      return;
+    }
+    if (isMassageService && useCustomTime && customTime && isPastCustomTime) {
+      setError("The selected custom time has already passed.");
       return;
     }
     if (hasClientSlotConflict) {
@@ -555,29 +596,40 @@ export function BookingFormModal({
               )}
               <div className="mt-1.5 grid grid-cols-3 sm:grid-cols-4 gap-2" id="slotGrid">
                 {timeSlots.map((s) => {
-                  const taken = takenSlots.has(s);
+                  const isBooked = isTherapistSelected && takenSlots.has(s);
+                  const isPast = pastSlots.has(s);
                   const selected = slotTime === s && !useCustomTime;
+                  const disabled = !isTherapistSelected || isPast || isBooked || useCustomTime;
                   return (
                     <button
                       key={s}
                       type="button"
-                      disabled={!isTherapistSelected || taken || useCustomTime}
+                      disabled={disabled}
                       onClick={() => {
                         setSlotTime(s);
                         setManualRoomNumber(null);
                         setError(null);
                       }}
-                      className={`min-h-[44px] sm:min-h-0 rounded-md border px-2 py-2 font-mono text-xs transition-all ${
+                      className={`min-h-[44px] sm:min-h-[38px] rounded-md border px-2 py-1 font-mono text-xs transition-all flex flex-col items-center justify-center ${
                         !isTherapistSelected
-                          ? "border-border bg-background text-foreground/40 opacity-40 cursor-not-allowed"
-                          : taken
-                          ? "border-dashed border-border/70 text-red-400/50 line-through opacity-50 cursor-not-allowed bg-transparent"
+                          ? isPast
+                            ? "border-border/40 bg-background/50 text-foreground/30 opacity-25 cursor-not-allowed"
+                            : "border-border bg-background text-foreground/40 opacity-40 cursor-not-allowed"
+                          : isPast
+                          ? "border-border/40 bg-background/50 text-foreground/30 opacity-25 cursor-not-allowed"
+                          : isBooked
+                          ? "border-dashed border-red-500/30 bg-red-950/10 text-red-400/60 line-through opacity-60 cursor-not-allowed"
                           : selected
                           ? "border-gold bg-gradient-to-br from-[#c89b3c] to-[#a97e2e] text-black font-bold shadow-sm"
-                          : "border-border bg-background text-foreground hover:border-gold/50"
+                          : "border-border bg-background text-foreground hover:border-gold/50 cursor-pointer"
                       }`}
                     >
-                      {fmtTime(s)}
+                      <span className={isBooked ? "line-through" : undefined}>{fmtTime(s)}</span>
+                      {isBooked && (
+                        <span className="text-[9px] no-underline font-sans text-red-400/80 leading-none mt-0.5">
+                          Booked
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -588,7 +640,7 @@ export function BookingFormModal({
                 </p>
               ) : (
                 <p className="mt-1.5 text-[11px] text-muted">
-                  Struck-through slots have no free therapist or room.
+                  Struck-through slots are already booked. Past slots are disabled.
                 </p>
               )}
             </div>

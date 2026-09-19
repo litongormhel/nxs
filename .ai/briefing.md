@@ -80,35 +80,35 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-19 — Fix Therapist Services Offered Persistence and Filter Therapist by Service in Bookings**
+1. **2026-09-19 — Implement Past Time Grace Period and Booked Slots Gating in Booking Modals**
+   (`ohm#7f3b1e9a`). Implementation plan presented and approved before code execution.
+   - **Time Slot Utilities (`lib/bookings/slots.ts`)**: Added `getSlotStartMs` and `isSlotPastGracePeriod` helpers. Supports full midnight-crossing operational window awareness (mapping post-midnight slots 00:00, 00:30, 01:00 to the morning after the spa day anchor). Evaluates 20-minute grace period on the active spa day window (`spaDayNow()`), while leaving future dates completely open.
+   - **Past Time & Booked Slots Gating (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`)**: Incorporated 30s interval ticker `currentTime` for live grace period evaluation. Differentiated slot states: past slots render in faded dark gray (`border-border/40 bg-background/50 text-foreground/30 opacity-25 cursor-not-allowed`) without line-through; booked slots render struck-through with red/muted outline (`border-dashed border-red-500/30 bg-red-950/10 text-red-400/60 line-through opacity-60 cursor-not-allowed`) and marked with a `Booked` sub-label. Added submission guards against past and booked slots. Quick Walk-in date initialized via `spaDayNow()`.
+   - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
+
+2. **2026-09-19 — Fix Therapist Services Offered Persistence and Filter Therapist by Service in Bookings**
    (`ohm#4a8d2f1b`). Implementation plan presented and approved before code execution.
    - **Services Offered Persistence (`components/therapist-browser.tsx`, `app/(staff)/therapists/actions.ts`)**: Fixed state initialization in `therapistMeta` to use `initialServices[r.id] ?? []` when real DB therapist records are loaded, preventing unselected services from resetting to defaults on page refresh. Added `router.refresh()` and relaxed staff session gating in `handleToggleService`. Added `initialServices` prop sync in `useEffect`. Updated `toggleTherapistService` to use service role client mutation fallback, upsert on conflict, and revalidate both `/therapists` and `/bookings`.
    - **Service-Based Therapist Filtering in Booking Modals (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`)**: Fetched `therapist_services` alongside availability data. Derived `qualifiedTherapists` matching selected service; therapist dropdown renders only qualified therapists. Automatically resets therapist selection (and disables time slot selection) if the selected therapist does not offer the newly selected service. Therapist dropdown is disabled when no service is selected (`disabled={!serviceId}`).
    - `npm run build` clean (0 errors). See [[therapists_state]], [[bookings_state]], and `.ai/handoff.md`.
 
-2. **2026-09-19 — Set Default Manual Discount Percentage to 20%**
+3. **2026-09-19 — Set Default Manual Discount Percentage to 20%**
    (`ohm#3c8f1e2a`). Implementation plan presented and approved before code execution.
    - **Quick Walk-in Modal (`components/quick-walkin-modal.tsx`)**: Updated initial `discountValue` state from `25` to `20`. Updated `onManualDiscountToggle` and type switch dropdown `onChange` so that checking the manual discount box or switching type back to "pct" immediately resets/defaults `discountValue` to `20`. Amount calculations immediately reflect the 20% discount.
    - **Log Visit Modal (`components/log-visit-modal.tsx`)**: Confirmed initial `discountValue` is `20`. Updated `onManualDiscountToggle` and type switch dropdown `onChange` so toggling manual discount or selecting percentage resets/defaults `discountValue` to `20`. Amount calculations immediately recompute using 20%.
    - `components/booking-form-modal.tsx` confirmed untouched (no manual discount support).
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-19 — Fix Schema Cache Error for Lockers is_maintenance Column**
+4. **2026-09-19 — Fix Schema Cache Error for Lockers is_maintenance Column**
    (`ohm#5b7c2e9a`). Implementation plan presented and approved before code execution.
    - **Schema & Migration (`supabase/migrations/20260919100000_lockers_maintenance.sql`)**: Appended `notify pgrst, 'reload schema';` to the migration to ensure PostgREST immediately invalidates its schema cache upon migration execution.
    - **Action Resilience & Graceful Fallback (`app/(staff)/lockers/actions.ts`)**: Updated `toggleLockerMaintenance` with graceful schema cache fallback: if PostgREST returns a schema cache missing column error for `is_maintenance` (`PGRST204`), logs a diagnostic warning and cleanly falls back to updating `status` (`'out_of_order'` / `'available'`) and `maintenance_note` (or `status` only). If all attempts fail, returns a clean error directing schema cache reload rather than failing unhandled. Maintained complete audit logging in `action_logs` and path revalidations.
    - `npm run build` clean. See [[lockers_state]] and `.ai/handoff.md`.
 
-4. **2026-09-19 — Fix Missing void_reason Column Error in Sales Void and Convert Reason to Dropdown**
+5. **2026-09-19 — Fix Missing void_reason Column Error in Sales Void and Convert Reason to Dropdown**
    (`ohm#8d4f2b1a`). Implementation plan presented and approved before code execution.
    - **Schema & Migration (`supabase/migrations/20260919110000_add_sales_void_reason.sql`)**: Generated migration adding `void_reason text` to `public.sales` with `if not exists` guard.
    - **Action Resilience (`app/(staff)/sales/actions.ts`)**: Updated `voidSale` and `restoreSale` to attempt updating `void_reason`, with automated fallback omitting `void_reason` if the column is not yet present in the live Supabase schema cache. Guaranteed audit log insertion into `action_logs` (`sale_void` / `sale_restore`) recording acting staff and void/restore reason.
    - **Standardized Dropdown UI (`components/sales-browser.tsx`)**: Replaced free-text void reason input with a `<select>` dropdown featuring 6 standard reasons: `Double booking / Duplicate entry`, `Client cancelled / No-show`, `Incorrect service / Amount encoded`, `Incorrect payment method`, `Test transaction`, and `Other`. Conditionally renders an optional details text input when `Other` is selected. Maintained immediate sales remittance card recalculation and table line-through state updates.
    - `npm run build` clean. See [[sales_state]] and `.ai/handoff.md`.
-
-5. **2026-09-19 — Remove Assign to Client Section and Fix [object Object] Error in Locker Modal**
-   (`ohm#9a4b2c8e`). Implementation plan presented and approved before code execution.
-   - **UI Cleanup (`components/locker-board.tsx`)**: Removed the "Assign to Client" card and redirect button ("Go to Bookings / Check-in →"). Streamlined the Free Locker modal strictly to header status dot (`Locker #X • Available`), error banner, "Mark Out of Order" section (note input + submit button), and Cancel button. Removed redundant "Options" button from free locker cards, making each card directly clickable with centered label and gold hover effects.
-   - **Error Handling & Serialization (`app/(staff)/lockers/actions.ts`, `components/locker-board.tsx`)**: Fixed `[object Object]` error alert by normalizing `fail()` helper in `actions.ts` to extract `.message` from Supabase `PostgrestError` and other error objects, wrapping `toggleLockerMaintenance` in `try...catch`, and defensively formatting `actionError` rendering in both Free and Maintenance locker modals.
-   - `npm run build` clean. See [[lockers_state]] and `.ai/handoff.md`.
 

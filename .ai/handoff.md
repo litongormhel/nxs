@@ -5,6 +5,32 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Implement Past Time Grace Period and Booked Slots Gating in Booking Modals — complete**
+  (`ohm#7f3b1e9a`, 2026-09-19).
+  - Implementation plan presented and approved before code execution.
+  - **Time Slot Utility Helpers (`lib/bookings/slots.ts`)**:
+    - Added `getSlotStartMs(bookingSpaDay: string, slotTime: string): number`: translates an operational slot time (`HH:MM`) on `bookingSpaDay` (`YYYY-MM-DD`) into UTC epoch milliseconds for Asia/Manila (+08:00). Post-midnight slots with `hour < 8` (00:00, 00:30, 01:00) map to the calendar day following the spa day anchor (`shiftSpaDay(bookingSpaDay, 1)`), providing complete midnight-crossing operational window awareness.
+    - Added `isSlotPastGracePeriod(slotTime: string, bookingDate: string, now: Date = new Date(), gracePeriodMinutes: number = 20): boolean`:
+      - For future dates (`bookingDate > spaDayNow()`): returns `false`, ensuring past time gating never disables future dates.
+      - For past dates (`bookingDate < spaDayNow()`): returns `true`.
+      - For the active operational day (`bookingDate === spaDayNow()`): computes `slotStartMs` and cutoff `slotStartMs + 20 minutes`. Slots remain selectable up to 20 minutes past start (e.g. 5:30 PM slot open until 5:50 PM; at 5:51 PM, disabled).
+  - **Quick Walk-in Modal (`components/quick-walkin-modal.tsx`)**:
+    - Initialized `date` to `spaDayNow()` from `@/lib/analytics/spa-day`.
+    - Added reactive 30-second interval ticker `currentTime` (`useState(() => new Date())`) for live grace period evaluation while modal remains open.
+    - Added `pastSlots` memo set; updated `takenSlots` to compute therapist and room conflicts using fallback duration `c.duration_minutes ?? duration ?? 60`.
+    - Differentiated slot button visual states:
+      - Past slots: rendered in faded dark gray (`border-border/40 bg-background/50 text-foreground/30 opacity-25 cursor-not-allowed`) without line-through and without "Booked" label.
+      - Booked slots: rendered struck-through with red/muted outline (`border-dashed border-red-500/30 bg-red-950/10 text-red-400/60 line-through opacity-60 cursor-not-allowed`) displaying struck-through time and `<span className="text-[9px] no-underline font-sans text-red-400/80 leading-none mt-0.5">Booked</span>`.
+      - No therapist selected: `border-border bg-background text-foreground/40 opacity-40 cursor-not-allowed` (shows helper `"Select a therapist first to see available slots"`).
+    - Preserved `min-h-[44px]` touch target with centered vertical flex alignment (`min-h-[44px] sm:min-h-[38px]`).
+    - Added `isPastSlot` and `isBookedSlot` guards in `canSubmit` and `handleSubmit`.
+  - **New Booking Modal (`components/booking-form-modal.tsx`)**:
+    - Updated `date` fallback to `spaDayNow()`; updated `isPastDate` comparison to `date < spaDayNow()`.
+    - Added reactive 30-second interval ticker `currentTime` and `pastSlots` memo set. When viewing future dates (`date > spaDayNow()`), `pastSlots` is empty.
+    - Updated slot grid button rendering to mirror the same 4 visual states (No Therapist Selected, Past Slot, Booked Slot, Available/Selected Slot) with Booked indicator and faded dark gray past slot styling.
+    - Added `isPastSlot`, `isBookedSlot`, and `isPastCustomTime` guards to `canSubmit` and `handleSubmit`.
+  - `npm run build` clean (0 errors). See [[bookings_state]], `.ai/briefing.md`.
+
 - **Fix Therapist Services Offered Persistence and Filter Therapist by Service in Bookings — complete**
   (`ohm#4a8d2f1b`, 2026-09-19).
   - Implementation plan presented and approved before code execution.
