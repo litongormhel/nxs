@@ -486,12 +486,19 @@ Day-Off therapist (Leo) could be saved from New Booking.
 - **Immediate Calculation**: Amount computations in both modals immediately reflect the 20% discount upon checking the "Manual discount (e.g. Senior or PWD)" box.
 - `components/booking-form-modal.tsx` confirmed untouched (does not implement manual discount or pricing).
 
+**Correction, `ohm#4a8d2f1b` (2026-09-19)** — Filter Therapist by Service in Quick Walk-in and New Booking Modals.
+
+- **Service-Based Qualification Filter (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`)**:
+  - Both modals now query `therapist_services` in their availability `Promise.all` block on mount/date change.
+  - Computes `qualifiedTherapists` filtering active therapists strictly to those assigned to the currently selected `serviceId`.
+  - Therapist `<select>` dropdown renders only qualified therapists offering the selected service.
+  - When no service is selected, the therapist dropdown is disabled with placeholder `— select service first —`.
+  - On service change (`onServiceChange`): if the currently selected therapist is not qualified for the newly selected service, `therapistId` is automatically reset to empty `""`, which in turn clears `slotTime = ""` and disables the time slot selection (`ohm#7d2a5f1e`).
+  - Added reactive qualification guard ensuring any desynchronized selection resets immediately if unqualified.
+  - Server actions revalidated across `/therapists` and `/bookings`.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
-- Therapist options are not filtered by `therapist_services` (which
-  therapists are qualified for which service) — every non-archived
-  therapist is offered regardless of service. No existing code in this
-  repo does this filtering either.
 - The New Booking conflict-greying query re-fetches on every date change
   inside the modal (its own Supabase call), independent of the day list in
   `booking-browser.tsx` — two separate client-side queries by design, kept

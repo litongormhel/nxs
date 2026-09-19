@@ -109,6 +109,8 @@ export function QuickWalkinModal({
   const staffId = actor?.id ?? "";
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [unavailableTherapists, setUnavailableTherapists] = useState<Map<string, string>>(new Map());
+  const [serviceTherapistMap, setServiceTherapistMap] = useState<Map<string, Set<string>>>(new Map());
+  const [servicesLoaded, setServicesLoaded] = useState(false);
   const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
   const [maintenanceLockers, setMaintenanceLockers] = useState<Map<number, string | null>>(new Map());
   const [clientBookings, setClientBookings] = useState<
@@ -197,7 +199,8 @@ export function QuickWalkinModal({
         .select("therapist_id, start_date, end_date")
         .lte("start_date", date)
         .gte("end_date", date),
-    ]).then(([dayOff, absence, leave]) => {
+      supabase.from("therapist_services").select("therapist_id, service_id"),
+    ]).then(([dayOff, absence, leave, servicesOffered]) => {
       const map = new Map<string, string>();
       for (const row of dayOff.data ?? []) {
         if (row.weekday === weekday) map.set(row.therapist_id, "Day Off");
@@ -209,6 +212,16 @@ export function QuickWalkinModal({
         map.set(row.therapist_id, "On Leave");
       }
       setUnavailableTherapists(map);
+
+      const stMap = new Map<string, Set<string>>();
+      for (const row of servicesOffered.data ?? []) {
+        if (!stMap.has(row.service_id)) {
+          stMap.set(row.service_id, new Set());
+        }
+        stMap.get(row.service_id)!.add(row.therapist_id);
+      }
+      setServiceTherapistMap(stMap);
+      setServicesLoaded(true);
     });
   }, [date]);
 
@@ -267,11 +280,20 @@ export function QuickWalkinModal({
     return taken;
   }, [conflicts, therapistId, duration, effectiveRooms, timeSlots]);
 
+  // Filter therapists by qualification for the currently selected service
+  const qualifiedTherapists = useMemo(() => {
+    if (!serviceId) return [];
+    if (!servicesLoaded) return therapists;
+    const offeringSet = serviceTherapistMap.get(serviceId);
+    if (!offeringSet) return [];
+    return therapists.filter((t) => offeringSet.has(t.id));
+  }, [serviceId, therapists, serviceTherapistMap, servicesLoaded]);
+
   // Therapists with zero free slots anywhere in the day's slot grid
   const fullyBookedTherapists = useMemo(() => {
     const fullyBooked = new Set<string>();
     if (timeSlots.length === 0) return fullyBooked;
-    for (const t of therapists) {
+    for (const t of qualifiedTherapists) {
       const hasFreeSlot = timeSlots.some(
         (slot) =>
           !conflicts.some(
@@ -283,7 +305,7 @@ export function QuickWalkinModal({
       if (!hasFreeSlot) fullyBooked.add(t.id);
     }
     return fullyBooked;
-  }, [therapists, timeSlots, conflicts, duration]);
+  }, [qualifiedTherapists, timeSlots, conflicts, duration]);
 
   const freeRooms = useMemo(() => {
     if (!time) return [];
@@ -358,13 +380,29 @@ export function QuickWalkinModal({
   // Reset dependent selections when service changes (mirrors mockup's onWalkinServiceChange)
   function onServiceChange(nextServiceId: string) {
     setServiceId(nextServiceId);
-    setTherapistId("");
-    setSlotTime("");
-    setUseCustomTime(false);
-    setRoomNumber("");
+    const offeringSet = serviceTherapistMap.get(nextServiceId);
+    const isStillQualified = !!therapistId && !!offeringSet?.has(therapistId);
+    if (!isStillQualified) {
+      setTherapistId("");
+      setSlotTime("");
+      setUseCustomTime(false);
+      setRoomNumber("");
+    }
     setPromoId("none");
     setManualDiscountOn(false);
   }
+
+  // Ensure therapist selection resets if newly loaded qualifications do not include current therapist
+  useEffect(() => {
+    if (!servicesLoaded || !therapistId || !serviceId) return;
+    const offeringSet = serviceTherapistMap.get(serviceId);
+    if (!offeringSet || !offeringSet.has(therapistId)) {
+      setTherapistId("");
+      setSlotTime("");
+      setUseCustomTime(false);
+      setRoomNumber("");
+    }
+  }, [servicesLoaded, serviceId, therapistId, serviceTherapistMap]);
 
   const amount = useMemo(() => {
     const base = selectedService?.price ?? 0;
@@ -450,7 +488,8 @@ export function QuickWalkinModal({
         !!roomNumber &&
         freeRooms.includes(Number(roomNumber)) &&
         !takenTherapists.has(therapistId) &&
-        !unavailableTherapists.has(therapistId)));
+        !unavailableTherapists.has(therapistId) &&
+        (!servicesLoaded || !!serviceTherapistMap.get(serviceId)?.has(therapistId))));
 
   function handleSubmit() {
     setError(null);
@@ -688,6 +727,7 @@ export function QuickWalkinModal({
                 <select
                   id="wk-therapist"
                   value={therapistId}
+                  disabled={!serviceId}
                   onChange={(e) => {
                     const nextId = e.target.value;
                     setTherapistId(nextId);
@@ -697,10 +737,14 @@ export function QuickWalkinModal({
                       setUseCustomTime(false);
                     }
                   }}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  className={`mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ${
+                    !serviceId ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
                 >
-                  <option value="">— select —</option>
-                  {therapists.map((t) => {
+                  <option value="">
+                    {!serviceId ? "— select service first —" : "— select —"}
+                  </option>
+                  {qualifiedTherapists.map((t) => {
                     const unavailableReason = unavailableTherapists.get(t.id);
                     const fullyBooked = fullyBookedTherapists.has(t.id);
                     const conflictNow = takenTherapists.has(t.id);

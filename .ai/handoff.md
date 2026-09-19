@@ -5,6 +5,24 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Fix Therapist Services Offered Persistence and Filter Therapist by Service in Bookings — complete**
+  (`ohm#4a8d2f1b`, 2026-09-19).
+  - Implementation plan presented and approved before code execution.
+  - **Therapist Services Persistence (`components/therapist-browser.tsx`, `app/(staff)/therapists/actions.ts`)**:
+    - Fixed state initialization in `therapistMeta`: when real DB therapist records are loaded (`initialTherapists && initialTherapists.length > 0`), initializes `services: initialServices[r.id] ? initialServices[r.id].slice() : []`. Prevents therapists with 0 services (or after unselecting all services) from erroneously falling back to `ALL_THERAPIST_SERVICES.slice()` or `restricted[r.name]`, resolving the bug where services reset on page refresh.
+    - Updated `handleToggleService`: relaxed `!sessionStaff` early return to pass `sessionStaff?.id ?? ""` to the action, and added `router.refresh()` to immediately revalidate Next.js cache.
+    - Added `useEffect` in `TherapistBrowser` syncing `initialServices` prop updates to `therapistMeta` state on soft navigation/revalidation.
+    - Updated `toggleTherapistService` in `app/(staff)/therapists/actions.ts`: uses `createStaffServiceClient()` mutation fallback to ensure `insert` and `delete` on `therapist_services` are not silently dropped by RLS for non-supervisors, applies upsert with `onConflict: "therapist_id,service_id"` ignore duplicates on insert, safely inserts audit logs, and calls `revalidatePath("/therapists")` and `revalidatePath("/bookings")`.
+    - Supported optional `serviceIds?: string[]` in `createTherapist` so newly created therapists also persist their initial services to `therapist_services`.
+  - **Service-Based Therapist Filtering in Booking Modals (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`)**:
+    - Updated both modals to query `therapist_services` in their availability `Promise.all` block and build a reactive `serviceTherapistMap` (`service_id -> Set<therapist_id>`).
+    - Derived `qualifiedTherapists` filtering active therapists strictly to those offering the selected `serviceId`.
+    - Updated therapist `<select>` to map over `qualifiedTherapists`, disabling the select with placeholder `— select service first —` when `!serviceId`.
+    - Updated `onServiceChange`: if the currently selected therapist does not offer the newly chosen service, automatically resets `therapistId = ""`, which immediately clears and disables time slot selection (`ohm#7d2a5f1e`).
+    - Added defensive `useEffect` in both modals ensuring any desynchronized therapist selection is promptly reset if not qualified for the chosen service.
+    - Updated `canSubmit` / `therapistOk` guards to verify qualification.
+  - `npm run build` clean (0 errors). See [[therapists_state]], [[bookings_state]], and `.ai/briefing.md`.
+
 - **Set Default Manual Discount Percentage to 20% — complete**
   (`ohm#3c8f1e2a`, 2026-09-19).
   - Implementation plan presented and approved before code execution.

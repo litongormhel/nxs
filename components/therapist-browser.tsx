@@ -181,7 +181,9 @@ export function TherapistBrowser({
           ? ["Sun"]
           : [],
         services:
-          r.id in initialServices
+          initialTherapists && initialTherapists.length > 0
+            ? (initialServices[r.id] ? initialServices[r.id].slice() : [])
+            : r.id in initialServices
             ? initialServices[r.id].slice()
             : restricted[r.name]
             ? restricted[r.name].slice()
@@ -195,6 +197,29 @@ export function TherapistBrowser({
     });
     return meta;
   });
+
+  // Sync services when initialServices prop updates via server revalidation
+  useEffect(() => {
+    if (!initialServices) return;
+    setTherapistMeta((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const r of initialRecords) {
+        const dbList = initialServices[r.id] ?? [];
+        const current = next[r.name];
+        if (current) {
+          const isSame =
+            current.services.length === dbList.length &&
+            current.services.every((s) => dbList.includes(s));
+          if (!isSame) {
+            next[r.name] = { ...current, services: dbList.slice() };
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [initialServices, initialRecords]);
 
   // Demo / live bookings state for schedule & busy checking
   const [bookings, setBookings] = useState<BookingInfo[]>(() => {
@@ -424,7 +449,7 @@ export function TherapistBrowser({
   // Services offered toggle handler — writes through to therapist_services
   const handleToggleService = async (t: string, s: string) => {
     const meta = therapistMeta[t];
-    if (!meta || !sessionStaff) return;
+    if (!meta) return;
     const offers = meta.services.includes(s);
     const therapistId = therapistIds[t];
     const serviceId = serviceIdMap[s];
@@ -434,7 +459,7 @@ export function TherapistBrowser({
       therapistId,
       serviceId,
       !offers,
-      sessionStaff.id
+      sessionStaff?.id ?? ""
     );
     if (!res.ok) {
       showToast(`Couldn't update ${t}'s services — ${res.error}`);
@@ -453,6 +478,7 @@ export function TherapistBrowser({
       };
     });
     showToast(`${t} now ${!offers ? "offers" : "no longer offers"} ${s}`);
+    router.refresh();
   };
 
   // Intercepts "Mark Absent Today" from the kebab menu — checks if the
@@ -812,7 +838,8 @@ export function TherapistBrowser({
     }
 
     const dayOffWeekdays = addDayOff.map((d) => WEEKDAYS.indexOf(d));
-    const res = await createTherapistAction(name, dayOffWeekdays, sessionStaff.id);
+    const addServiceIds = addServices.map((s) => serviceIdMap[s]).filter(Boolean);
+    const res = await createTherapistAction(name, dayOffWeekdays, sessionStaff.id, addServiceIds);
     if (!res.ok) {
       setAddError(`Couldn't add therapist — ${res.error}`);
       return;

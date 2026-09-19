@@ -80,6 +80,8 @@ export function BookingFormModal({
   const staffId = actor?.id ?? "";
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [unavailableTherapists, setUnavailableTherapists] = useState<Map<string, string>>(new Map());
+  const [serviceTherapistMap, setServiceTherapistMap] = useState<Map<string, Set<string>>>(new Map());
+  const [servicesLoaded, setServicesLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [smsBooking, setSmsBooking] = useState<{
     codename: string;
@@ -128,7 +130,8 @@ export function BookingFormModal({
         .select("therapist_id, start_date, end_date")
         .lte("start_date", date)
         .gte("end_date", date),
-    ]).then(([dayOff, absence, leave]) => {
+      supabase.from("therapist_services").select("therapist_id, service_id"),
+    ]).then(([dayOff, absence, leave, servicesOffered]) => {
       const map = new Map<string, string>();
       for (const row of dayOff.data ?? []) {
         if (row.weekday === weekday) map.set(row.therapist_id, "Day Off");
@@ -140,6 +143,16 @@ export function BookingFormModal({
         map.set(row.therapist_id, "On Leave");
       }
       setUnavailableTherapists(map);
+
+      const stMap = new Map<string, Set<string>>();
+      for (const row of servicesOffered.data ?? []) {
+        if (!stMap.has(row.service_id)) {
+          stMap.set(row.service_id, new Set());
+        }
+        stMap.get(row.service_id)!.add(row.therapist_id);
+      }
+      setServiceTherapistMap(stMap);
+      setServicesLoaded(true);
     });
   }, [date]);
 
@@ -215,11 +228,20 @@ export function BookingFormModal({
     return effectiveRooms.filter((r) => !taken.has(r));
   }, [conflicts, time, duration, effectiveRooms]);
 
+  // Filter therapists by qualification for the currently selected service
+  const qualifiedTherapists = useMemo(() => {
+    if (!serviceId) return [];
+    if (!servicesLoaded) return therapists;
+    const offeringSet = serviceTherapistMap.get(serviceId);
+    if (!offeringSet) return [];
+    return therapists.filter((t) => offeringSet.has(t.id));
+  }, [serviceId, therapists, serviceTherapistMap, servicesLoaded]);
+
   // Therapists with zero free slots anywhere in the day's slot grid
   const fullyBookedTherapists = useMemo(() => {
     const fullyBooked = new Set<string>();
     if (timeSlots.length === 0) return fullyBooked;
-    for (const t of therapists) {
+    for (const t of qualifiedTherapists) {
       const hasFreeSlot = timeSlots.some(
         (slot) =>
           !conflicts.some(
@@ -231,7 +253,7 @@ export function BookingFormModal({
       if (!hasFreeSlot) fullyBooked.add(t.id);
     }
     return fullyBooked;
-  }, [therapists, timeSlots, conflicts, duration]);
+  }, [qualifiedTherapists, timeSlots, conflicts, duration]);
 
   // Effective room number: manual override if still free, otherwise first free room
   const roomNumber = useMemo(() => {
@@ -244,7 +266,25 @@ export function BookingFormModal({
 
   function onServiceChange(nextServiceId: string) {
     setServiceId(nextServiceId);
+    const offeringSet = serviceTherapistMap.get(nextServiceId);
+    const isStillQualified = !!therapistId && !!offeringSet?.has(therapistId);
+    if (!isStillQualified) {
+      setTherapistId("");
+      setSlotTime("");
+      setUseCustomTime(false);
+    }
   }
+
+  // Ensure therapist selection resets if newly loaded qualifications do not include current therapist
+  useEffect(() => {
+    if (!servicesLoaded || !therapistId || !serviceId) return;
+    const offeringSet = serviceTherapistMap.get(serviceId);
+    if (!offeringSet || !offeringSet.has(therapistId)) {
+      setTherapistId("");
+      setSlotTime("");
+      setUseCustomTime(false);
+    }
+  }, [servicesLoaded, serviceId, therapistId, serviceTherapistMap]);
 
   function onCustomTimeToggle(checked: boolean) {
     setUseCustomTime(checked);
@@ -275,7 +315,10 @@ export function BookingFormModal({
   }, [time, isWalkIn, clientSelectValue, walkinName, clientBookings]);
 
   const therapistOk =
-    !!therapistId && !conflictingTherapists.has(therapistId) && !unavailableTherapists.has(therapistId);
+    !!therapistId &&
+    !conflictingTherapists.has(therapistId) &&
+    !unavailableTherapists.has(therapistId) &&
+    (!servicesLoaded || !!serviceTherapistMap.get(serviceId)?.has(therapistId));
   const selectedTherapist = therapists.find((t) => t.id === therapistId);
 
   const canSubmit =
@@ -435,6 +478,7 @@ export function BookingFormModal({
                 <select
                   id="bTherapist"
                   value={therapistId}
+                  disabled={!serviceId}
                   onChange={(e) => {
                     const nextId = e.target.value;
                     setTherapistId(nextId);
@@ -443,10 +487,14 @@ export function BookingFormModal({
                       setUseCustomTime(false);
                     }
                   }}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+                  className={`mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none ${
+                    !serviceId ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
                 >
-                  <option value="">— select —</option>
-                  {therapists.map((t) => {
+                  <option value="">
+                    {!serviceId ? "— select service first —" : "— select —"}
+                  </option>
+                  {qualifiedTherapists.map((t) => {
                     const unavailableReason = unavailableTherapists.get(t.id);
                     const fullyBooked = fullyBookedTherapists.has(t.id);
                     const conflictNow = conflictingTherapists.has(t.id);

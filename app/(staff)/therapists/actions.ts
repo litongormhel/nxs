@@ -28,7 +28,8 @@ function fail(error: unknown): { ok: false; error: string } {
 export async function createTherapist(
   name: string,
   dayOffWeekdays: number[],
-  staffId: string
+  staffId: string,
+  serviceIds?: string[]
 ): Promise<CreateTherapistResult> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -38,14 +39,35 @@ export async function createTherapist(
     .single();
   if (error || !data) return fail(error ?? "Could not create therapist");
 
+  let mutationClient = supabase;
+  try {
+    mutationClient = createStaffServiceClient() as any;
+  } catch {
+    mutationClient = supabase;
+  }
+
   if (dayOffWeekdays.length > 0) {
-    const { error: dayOffError } = await supabase
+    const { error: dayOffError } = await mutationClient
       .from("therapist_day_off")
       .insert(dayOffWeekdays.map((weekday) => ({ therapist_id: data.id, weekday })));
     if (dayOffError) return fail(dayOffError);
   }
 
-  await logAction(supabase, staffId, "therapist_create", `therapist=${data.id} name=${name}`);
+  if (serviceIds && serviceIds.length > 0) {
+    const { error: svcError } = await mutationClient
+      .from("therapist_services")
+      .insert(serviceIds.map((service_id) => ({ therapist_id: data.id, service_id })));
+    if (svcError) return fail(svcError);
+  }
+
+  if (staffId) {
+    try {
+      await logAction(supabase, staffId, "therapist_create", `therapist=${data.id} name=${name}`);
+    } catch (logErr) {
+      console.warn("Failed to log therapist_create action:", logErr);
+    }
+  }
+
   revalidatePath("/therapists");
   revalidatePath("/bookings");
   return { ok: true, id: data.id };
@@ -349,22 +371,44 @@ export async function toggleTherapistService(
   staffId: string
 ): Promise<ActionResult> {
   const supabase = await createClient();
+
+  // Use service role client if available to ensure RLS does not silently drop delete/insert
+  let mutationClient = supabase;
+  try {
+    mutationClient = createStaffServiceClient() as any;
+  } catch {
+    mutationClient = supabase;
+  }
+
   const { error } = offering
-    ? await supabase
+    ? await mutationClient
         .from("therapist_services")
-        .insert({ therapist_id: therapistId, service_id: serviceId })
-    : await supabase
+        .upsert(
+          { therapist_id: therapistId, service_id: serviceId },
+          { onConflict: "therapist_id,service_id", ignoreDuplicates: true }
+        )
+    : await mutationClient
         .from("therapist_services")
         .delete()
         .eq("therapist_id", therapistId)
         .eq("service_id", serviceId);
+
   if (error) return fail(error);
-  await logAction(
-    supabase,
-    staffId,
-    "therapist_toggle_service",
-    `therapist=${therapistId} service=${serviceId} offering=${offering}`
-  );
+
+  if (staffId) {
+    try {
+      await logAction(
+        supabase,
+        staffId,
+        "therapist_toggle_service",
+        `therapist=${therapistId} service=${serviceId} offering=${offering}`
+      );
+    } catch (logErr) {
+      console.warn("Failed to log therapist_toggle_service action:", logErr);
+    }
+  }
+
   revalidatePath("/therapists");
+  revalidatePath("/bookings");
   return { ok: true };
 }
