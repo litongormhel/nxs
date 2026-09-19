@@ -15,6 +15,8 @@ import {
   toggleTherapistService as toggleTherapistServiceAction,
 } from "@/app/(staff)/therapists/actions";
 import { spaDayNow } from "@/lib/analytics/spa-day";
+import { TherapistCard, WEEKEND_SLOTS } from "@/components/therapist-card";
+import { isSlotPastGracePeriod } from "@/lib/bookings/slots";
 
 const DEFAULT_THERAPISTS = [
   "Ron",
@@ -36,16 +38,6 @@ const ALL_THERAPIST_SERVICES = [
 ];
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-const WEEKEND_SLOTS = [
-  "16:00",
-  "17:30",
-  "19:00",
-  "20:30",
-  "22:00",
-  "23:30",
-  "01:00",
-];
 
 export type TherapistMetaRecord = {
   dayOff: string[];
@@ -305,6 +297,19 @@ export function TherapistBrowser({
   const [viewTime, setViewTime] = useState<string>("20:30");
   const [filter, setFilter] = useState<string>("all");
   const [showArchived, setShowArchived] = useState<boolean>(false);
+
+  // Live ticker for slot grace period evaluation (synced every 30 seconds)
+  const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleBookSlot = (therapistName: string, slot: string) => {
+    router.push(
+      `/bookings?therapist=${encodeURIComponent(therapistName)}&time=${encodeURIComponent(slot)}&date=${encodeURIComponent(viewDate)}`
+    );
+  };
 
   // Kebab active menu
   const [openKebab, setOpenKebab] = useState<string | null>(null);
@@ -894,7 +899,8 @@ export function TherapistBrowser({
         meta.archived;
       const booked = counts[idx];
       const isTop = booked === maxCount && booked > 0 && !isOff;
-      const busyNow = isTherapistBusy(t, viewDate, viewTime, 90);
+      const isTimePast = isSlotPastGracePeriod(viewTime, viewDate, currentTime, 20);
+      const busyNow = isTherapistBusy(t, viewDate, viewTime, 90) || isTimePast;
       const slotStatus = meta.archived
         ? "off"
         : isOff
@@ -903,7 +909,9 @@ export function TherapistBrowser({
         ? "booked"
         : "available";
       const openSlots = WEEKEND_SLOTS.filter(
-        (s) => !isTherapistBusy(t, viewDate, s, 90)
+        (s) =>
+          !isSlotPastGracePeriod(s, viewDate, currentTime, 20) &&
+          !isTherapistBusy(t, viewDate, s, 90)
       );
       return { t, meta, isOff, onLeave, booked, isTop, slotStatus, openSlots };
     })
@@ -1012,290 +1020,44 @@ export function TherapistBrowser({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {cardRows.map((r) => {
-            const { t, meta, isOff, onLeave, booked, isTop, slotStatus, openSlots } = r;
-            const isAbsentToday = meta.absentDates.includes(viewDate);
-            const statusLabel = meta.archived
-              ? "Archived"
-              : onLeave
-              ? `On Leave until ${fmtDate(meta.leave?.end || "")}`
-              : isAbsentToday
-              ? "Absent"
-              : slotStatus === "off"
-              ? "Day Off"
-              : slotStatus === "booked"
-              ? `Booked at ${fmtTime(viewTime)}`
-              : `Available at ${fmtTime(viewTime)}`;
-
+            const { t, meta, isTop } = r;
+            const therapistId = therapistIds[t];
             return (
-              <div
+              <TherapistCard
                 key={t}
-                className={`relative rounded-2xl border border-border bg-surface p-4 transition-all ${
-                  meta.archived ? "opacity-60" : ""
-                }`}
-              >
-                {/* Most Requested Badge */}
-                {isTop && (
-                  <span className="absolute top-3.5 right-11 text-[7.5px] font-extrabold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#c89b3c]/15 text-accent-gold border border-[#a97e2e]">
-                    ✦ Most Requested
-                  </span>
-                )}
-
-                {/* Top Section */}
-                <div className="flex items-start justify-between">
-                  <div
-                    onClick={() => setScheduleModalTherapist(t)}
-                    className="flex items-center gap-3 cursor-pointer group"
-                    title={`View ${t}'s schedule`}
-                  >
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#f3d48b] to-[#8b5a2b] flex items-center justify-center font-serif font-bold text-base text-black shrink-0">
-                      {t.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="font-serif font-semibold text-sm text-foreground flex items-center gap-1.5 group-hover:text-gold transition-colors">
-                        {t}
-                        {meta.archived && (
-                          <span className="text-[8px] font-extrabold tracking-wider uppercase px-1.5 py-0.5 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/30">
-                            Archived
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[10px] text-muted mt-0.5">
-                        {fmtDate(viewDate)} ({wdToday})
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Kebab Action Menu */}
-                  <div
-                    data-kebab-root
-                    className="relative"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      onClick={() =>
-                        setOpenKebab(openKebab === t ? null : t)
-                      }
-                      className="p-1 rounded-md text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
-                      title="More actions"
-                    >
-                      <svg
-                        width="18"
-                        height="18"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <circle cx="12" cy="5" r="1.3" fill="currentColor" stroke="none" />
-                        <circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" />
-                        <circle cx="12" cy="19" r="1.3" fill="currentColor" stroke="none" />
-                      </svg>
-                    </button>
-                    {openKebab === t && (
-                      <div className="absolute right-0 top-7 z-30 min-w-[170px] rounded-xl border border-border bg-surface-2 py-1 shadow-2xl overflow-hidden animate-fade-in">
-                        {!meta.archived ? (
-                          <>
-                            {isAbsentToday || onLeave ? (
-                              <div
-                                onClick={() => {
-                                  setOpenKebab(null);
-                                  handleMarkPresent(t);
-                                }}
-                                className="px-3.5 py-2 text-xs font-semibold text-emerald-400 hover:bg-surface cursor-pointer border-b border-border flex items-center gap-1.5"
-                              >
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
-                                  <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                                Mark Present Today
-                              </div>
-                            ) : (
-                              <div
-                                onClick={() => {
-                                  setOpenKebab(null);
-                                  handleRequestMarkAbsent(t);
-                                }}
-                                className="px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-surface cursor-pointer border-b border-border"
-                              >
-                                Mark Absent Today
-                              </div>
-                            )}
-                            {!isAbsentToday && !onLeave && (
-                              <div
-                                onClick={() => {
-                                  setOpenKebab(null);
-                                  setLeaveTherapist(t);
-                                  setLeaveStart(todayISO());
-                                  setLeaveEnd("");
-                                  setLeaveReason("");
-                                }}
-                                className="px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-surface cursor-pointer border-b border-border"
-                              >
-                                Mark On Leave
-                              </div>
-                            )}
-                            <div
-                              onClick={() => {
-                                setOpenKebab(null);
-                                setArchiveTherapist(t);
-                                setArchiveReason("");
-                                setArchiveError(null);
-                              }}
-                              className="px-3.5 py-2 text-xs font-semibold text-rose-400 hover:bg-surface cursor-pointer border-b border-border"
-                            >
-                              Archive
-                            </div>
-                            <div
-                              onClick={() => {
-                                setOpenKebab(null);
-                                setEditTherapist(t);
-                                setEditName(t);
-                                setEditError(null);
-                              }}
-                              className="px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-surface cursor-pointer"
-                            >
-                              Edit
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div
-                              onClick={() => {
-                                setOpenKebab(null);
-                                handleUnarchive(t);
-                              }}
-                              className="px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-surface cursor-pointer border-b border-border"
-                            >
-                              Unarchive
-                            </div>
-                            <div
-                              onClick={() => {
-                                setOpenKebab(null);
-                                setEditTherapist(t);
-                                setEditName(t);
-                                setEditError(null);
-                              }}
-                              className="px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-surface cursor-pointer"
-                            >
-                              Edit
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Status Line */}
-                <div
-                  className={`mt-3 text-[10px] font-bold flex items-center gap-1.5 ${
-                    slotStatus === "available"
-                      ? "text-accent-green"
-                      : slotStatus === "booked"
-                      ? "text-accent-amber"
-                      : "text-accent-red"
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      slotStatus === "available"
-                        ? "bg-[#8a9a76] shadow-[0_0_5px_#8a9a76]"
-                        : slotStatus === "booked"
-                        ? "bg-[#d9a441]"
-                        : "bg-[#d18b8b]"
-                    }`}
-                  />
-                  {statusLabel}
-                </div>
-
-                {/* Slots Summary / Notes */}
-                <div className="text-[10.5px] text-muted mt-1.5">
-                  {isOff && !meta.archived ? (
-                    ""
-                  ) : meta.archived ? (
-                    `Reason: ${meta.archivedReason || "—"}`
-                  ) : (
-                    <>
-                      <b className="text-accent-gold">{booked} / {WEEKEND_SLOTS.length}</b>{" "}
-                      slots booked today
-                    </>
-                  )}
-                </div>
-
-                {onLeave && meta.leave?.reason && (
-                  <div className="mt-2 text-[10px] font-bold text-accent-amber bg-[#d9a441]/10 border border-[#6b4f1f] rounded-lg px-2.5 py-1.5">
-                    Reason: {meta.leave.reason}
-                  </div>
-                )}
-
-                {/* Available Slot Section */}
-                <div className="text-[9px] font-bold tracking-wider uppercase text-muted mt-3 mb-1.5">
-                  Available Slot
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {openSlots.length === 0 ? (
-                    <span className="px-2.5 py-1 rounded-full text-[9.5px] font-bold bg-[#F5E4E1] text-[#8A3A2E]">
-                      Fully booked
-                    </span>
-                  ) : (
-                    openSlots.slice(0, 3).map((s) => (
-                      <span
-                        key={s}
-                        className="px-2.5 py-1 rounded-full text-[9.5px] font-bold bg-[#E9F1E1] text-[#3D5A29]"
-                      >
-                        {fmtTime(s)}
-                      </span>
-                    ))
-                  )}
-                </div>
-
-                {/* Weekly Day(s) Off Section */}
-                <div className="text-[9px] font-bold tracking-wider uppercase text-muted mt-3 mb-1.5">
-                  Weekly Day(s) Off
-                </div>
-                <div className="flex gap-1">
-                  {WEEKDAYS.map((d) => {
-                    const isDayOff = meta.dayOff.includes(d);
-                    return (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => handleToggleDayOff(t, d)}
-                        className={`flex-1 py-1 rounded-md border text-[9.5px] font-bold transition-all text-center ${
-                          isDayOff
-                            ? "bg-gradient-to-br from-[#5e3c3c] to-[#7a4646] text-white border-[#5e3c3c]"
-                            : "bg-surface-2 text-muted border-border hover:border-gold/40"
-                        }`}
-                      >
-                        {d}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Services Offered Section */}
-                <div className="text-[9px] font-bold tracking-wider uppercase text-muted mt-3 mb-1.5">
-                  Services Offered
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {ALL_THERAPIST_SERVICES.map((s) => {
-                    const isOffered = meta.services.includes(s);
-                    return (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => handleToggleService(t, s)}
-                        className={`py-1 px-2 rounded-md border text-[9.5px] font-bold transition-all text-center ${
-                          isOffered
-                            ? "bg-gradient-to-br from-[#3d5a29] to-[#5a7a3c] text-white border-[#3d5a29]"
-                            : "bg-surface-2 text-muted border-border hover:border-gold/40"
-                        }`}
-                      >
-                        {s}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                therapist={t}
+                therapistId={therapistId}
+                meta={meta}
+                viewDate={viewDate}
+                currentTime={currentTime}
+                bookings={bookings}
+                isTop={isTop}
+                isMenuOpen={openKebab === t}
+                onToggleMenu={() => setOpenKebab(openKebab === t ? null : t)}
+                onToggleDayOff={(d) => handleToggleDayOff(t, d)}
+                onToggleService={(s) => handleToggleService(t, s)}
+                onRequestMarkAbsent={() => handleRequestMarkAbsent(t)}
+                onMarkPresent={() => handleMarkPresent(t)}
+                onRequestLeave={() => {
+                  setLeaveTherapist(t);
+                  setLeaveStart(todayISO());
+                  setLeaveEnd("");
+                  setLeaveReason("");
+                }}
+                onRequestArchive={() => {
+                  setArchiveTherapist(t);
+                  setArchiveReason("");
+                  setArchiveError(null);
+                }}
+                onUnarchive={() => handleUnarchive(t)}
+                onRequestEdit={() => {
+                  setEditTherapist(t);
+                  setEditName(t);
+                  setEditError(null);
+                }}
+                onViewSchedule={() => setScheduleModalTherapist(t)}
+                onBookSlot={(slot) => handleBookSlot(t, slot)}
+              />
             );
           })}
         </div>
