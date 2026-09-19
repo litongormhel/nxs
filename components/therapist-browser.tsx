@@ -17,6 +17,7 @@ import {
 import { spaDayNow } from "@/lib/analytics/spa-day";
 import { TherapistCard, WEEKEND_SLOTS } from "@/components/therapist-card";
 import { isSlotPastGracePeriod } from "@/lib/bookings/slots";
+import { QuickWalkinModal } from "@/components/quick-walkin-modal";
 
 const DEFAULT_THERAPISTS = [
   "Ron",
@@ -305,10 +306,23 @@ export function TherapistBrowser({
     return () => clearInterval(timer);
   }, []);
 
+  // Per-therapist selected slot state (defaults dynamically per card to earliest available slot)
+  const [selectedSlotByTherapist, setSelectedSlotByTherapist] = useState<Record<string, string>>({});
+
+  // Quick Walk-in modal state
+  const [walkinModalData, setWalkinModalData] = useState<{
+    therapistId: string;
+    slotTime: string;
+    date: string;
+  } | null>(null);
+
   const handleBookSlot = (therapistName: string, slot: string) => {
-    router.push(
-      `/bookings?therapist=${encodeURIComponent(therapistName)}&time=${encodeURIComponent(slot)}&date=${encodeURIComponent(viewDate)}`
-    );
+    const id = therapistIds[therapistName] || therapistName;
+    setWalkinModalData({
+      therapistId: id,
+      slotTime: slot,
+      date: viewDate,
+    });
   };
 
   // Kebab active menu
@@ -1032,6 +1046,10 @@ export function TherapistBrowser({
                 currentTime={currentTime}
                 bookings={bookings}
                 isTop={isTop}
+                selectedSlot={selectedSlotByTherapist[t]}
+                onSelectSlot={(slot) =>
+                  setSelectedSlotByTherapist((prev) => ({ ...prev, [t]: slot }))
+                }
                 isMenuOpen={openKebab === t}
                 onToggleMenu={() => setOpenKebab(openKebab === t ? null : t)}
                 onToggleDayOff={(d) => handleToggleDayOff(t, d)}
@@ -1545,6 +1563,21 @@ export function TherapistBrowser({
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL: Quick Walk-in */}
+      {walkinModalData && (
+        <QuickWalkinModal
+          initialTherapistId={walkinModalData.therapistId}
+          initialSlotTime={walkinModalData.slotTime}
+          initialDate={walkinModalData.date}
+          onClose={() => setWalkinModalData(null)}
+          onCreated={() => {
+            setWalkinModalData(null);
+            showToast("Walk-in booking created");
+            router.refresh();
+          }}
+        />
       )}
 
       {/* Toast Notification */}

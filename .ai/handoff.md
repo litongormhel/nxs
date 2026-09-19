@@ -5,6 +5,27 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Enable Interactive Slot Selection on Therapist Cards to Launch Pre-filled Quick Walk-in Modal — complete**
+  (`ohm#2d9a4b8f`, 2026-09-19).
+  - Implementation plan presented and approved before code execution.
+  - **Interactive Per-Card Slot Selection (`components/therapist-card.tsx`, `components/therapist-browser.tsx`)**:
+    - Added `selectedSlotByTherapist: Record<string, string>` state to `TherapistBrowser` tracking the chosen slot per therapist.
+    - Extended `TherapistCardProps` with `selectedSlot?: string` and `onSelectSlot?: (slot: string) => void`.
+    - In `TherapistCard`, derived `activeSlot = selectedSlot && classifiedSlots.find(s => s.slot === selectedSlot && s.isFree) ? selectedSlot : nextSlot`.
+    - Made available slot pills interactive: clicking an unselected available slot pill invokes `onSelectSlot?.(slot)` and updates `selectedSlotByTherapist[t]`.
+    - The selected slot pill renders in active highlighted style (`bg-[#f2ede4] text-[#1a1512] font-semibold`).
+    - Past, booked, and unavailable slots remain non-clickable (`<span>`, line-through / opacity styling).
+    - Updated card bottom action button: dynamically displays `Book {fmtTime(activeSlot)}` (e.g. `Book 10:00 PM`), and clicking it calls `onBookSlot(activeSlot)` to open the Quick Walk-in modal.
+  - **Pre-filled Quick Walk-in Modal Integration (`components/quick-walkin-modal.tsx`, `components/therapist-browser.tsx`)**:
+    - Extended `QuickWalkinModal` props interface with `initialTherapistId?: string`, `initialSlotTime?: string`, and `initialDate?: string`.
+    - Made catalog props optional (`clients?`, `services?`, `therapists?`, `rooms?`, `staff?`, `promos?`, `addons?`, `lockers?`, `timeSlots?`) with self-loading fallback queries via `createClient()` so the modal can be mounted in `TherapistBrowser` without prop duplication.
+    - Added state `walkinModalData: { therapistId: string; slotTime: string; date: string } | null` in `TherapistBrowser`.
+    - Clicking card's `Book [Time]` button opens `QuickWalkinModal` pre-populated with `therapistId`, `slotTime`, and `viewDate`.
+    - In `QuickWalkinModal`, updated therapist service qualification logic: if the pre-selected therapist does not offer `serviceId`, automatically selects the first massage service they *do* offer, preventing `therapistId` and `slotTime` from getting cleared.
+    - In `QuickWalkinModal`, added automatic room derivation: when a time slot is present, if `roomNumber` is empty or no longer free, automatically sets `roomNumber` to `freeRooms[0]`.
+    - On walk-in creation: closes modal, shows toast `"Walk-in booking created"`, and triggers `router.refresh()` to reload therapist roster bookings.
+  - `npm run build` clean (0 errors). See [[therapists_state]], `.ai/briefing.md`.
+
 - **Implement Past Time Grace Period and Booked Slots Gating in Booking Modals — complete**
   (`ohm#7f3b1e9a`, 2026-09-19).
   - Implementation plan presented and approved before code execution.

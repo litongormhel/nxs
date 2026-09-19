@@ -6,6 +6,7 @@ import { quickWalkin } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
 import { slotsOverlap, isSlotPastGracePeriod } from "@/lib/bookings/slots";
 import { spaDayNow } from "@/lib/analytics/spa-day";
+import { WEEKEND_SLOTS } from "@/components/therapist-card";
 import type {
   Addon,
   Client,
@@ -51,34 +52,42 @@ function fmtTime(t: string): string {
   return `${hr}:${m} ${+h < 12 ? "AM" : "PM"}`;
 }
 
-export function QuickWalkinModal({
-  clients,
-  services,
-  therapists,
-  rooms,
-  staff,
-  promos,
-  addons,
-  lockers,
-  timeSlots,
-  initialClientId = null,
-  onClose,
-  onCreated,
-}: {
-  clients: Client[];
-  services: Service[];
-  therapists: Therapist[];
-  rooms: number[];
-  staff: Staff[];
-  promos: Promo[];
-  addons: Addon[];
-  lockers: number[];
-  timeSlots: string[];
+export interface QuickWalkinModalProps {
+  clients?: Client[];
+  services?: Service[];
+  therapists?: Therapist[];
+  rooms?: number[];
+  staff?: Staff[];
+  promos?: Promo[];
+  addons?: Addon[];
+  lockers?: number[];
+  timeSlots?: string[];
   initialClientId?: string | null;
+  initialTherapistId?: string;
+  initialSlotTime?: string;
+  initialDate?: string;
   onClose: () => void;
   onCreated: () => void;
-}) {
-  const date = spaDayNow();
+}
+
+export function QuickWalkinModal({
+  clients: propClients,
+  services: propServices,
+  therapists: propTherapists,
+  rooms: propRooms,
+  staff: propStaff,
+  promos: propPromos,
+  addons: propAddons,
+  lockers: propLockers,
+  timeSlots: propTimeSlots,
+  initialClientId = null,
+  initialTherapistId,
+  initialSlotTime,
+  initialDate,
+  onClose,
+  onCreated,
+}: QuickWalkinModalProps) {
+  const date = initialDate || spaDayNow();
 
   const [currentTime, setCurrentTime] = useState(() => new Date());
 
@@ -89,6 +98,162 @@ export function QuickWalkinModal({
     return () => clearInterval(timer);
   }, []);
 
+  const [clients, setClients] = useState<Client[]>(() => propClients ?? []);
+  const [services, setServices] = useState<Service[]>(() => propServices ?? []);
+  const [therapists, setTherapists] = useState<Therapist[]>(() => propTherapists ?? []);
+  const [rooms, setRooms] = useState<number[]>(() => propRooms ?? []);
+  const [staff, setStaff] = useState<Staff[]>(() => propStaff ?? []);
+  const [promos, setPromos] = useState<Promo[]>(() => propPromos ?? []);
+  const [addons, setAddons] = useState<Addon[]>(() => propAddons ?? []);
+  const [lockers, setLockers] = useState<number[]>(() => propLockers ?? []);
+  const [timeSlots, setTimeSlots] = useState<string[]>(() => propTimeSlots ?? WEEKEND_SLOTS);
+
+  useEffect(() => { if (propClients) setClients(propClients); }, [propClients]);
+  useEffect(() => { if (propServices) setServices(propServices); }, [propServices]);
+  useEffect(() => { if (propTherapists) setTherapists(propTherapists); }, [propTherapists]);
+  useEffect(() => { if (propRooms) setRooms(propRooms); }, [propRooms]);
+  useEffect(() => { if (propStaff) setStaff(propStaff); }, [propStaff]);
+  useEffect(() => { if (propPromos) setPromos(propPromos); }, [propPromos]);
+  useEffect(() => { if (propAddons) setAddons(propAddons); }, [propAddons]);
+  useEffect(() => { if (propLockers) setLockers(propLockers); }, [propLockers]);
+  useEffect(() => { if (propTimeSlots) setTimeSlots(propTimeSlots); }, [propTimeSlots]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    if (!propClients) {
+      supabase
+        .from("clients")
+        .select("id, codename, username, member_code")
+        .order("codename")
+        .then(({ data }) => {
+          if (data) {
+            setClients(
+              data.map((c) => ({
+                id: c.id,
+                codename: c.codename,
+                username: c.username,
+                member_code: c.member_code ?? undefined,
+                has_portal_account: false,
+              }))
+            );
+          }
+        });
+    }
+    if (!propServices) {
+      supabase
+        .from("services")
+        .select("id, name, duration_minutes, price, points_earned")
+        .eq("active", true)
+        .then(({ data }) => {
+          if (data) {
+            setServices(
+              data.map((s) => ({
+                id: s.id,
+                name: s.name,
+                duration_minutes: s.duration_minutes,
+                price: s.price,
+                points_earned: s.points_earned ?? 0,
+              }))
+            );
+          }
+        });
+    }
+    if (!propTherapists) {
+      supabase
+        .from("therapists")
+        .select("id, name")
+        .eq("archived", false)
+        .order("name")
+        .then(({ data }) => {
+          if (data) setTherapists(data);
+        });
+    }
+    if (!propRooms) {
+      supabase
+        .from("rooms")
+        .select("number")
+        .eq("active", true)
+        .order("number")
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            setRooms(data.map((r) => r.number));
+          } else {
+            setRooms(Array.from({ length: 18 }, (_, i) => i + 1));
+          }
+        });
+    }
+    if (!propStaff) {
+      supabase
+        .from("staff")
+        .select("id, name, position")
+        .eq("active", true)
+        .order("name")
+        .then(({ data }) => {
+          if (data) {
+            setStaff(
+              data.map((st) => ({
+                id: st.id,
+                name: st.name,
+                position: st.position ?? "",
+              }))
+            );
+          }
+        });
+    }
+    if (!propPromos) {
+      supabase
+        .from("promos")
+        .select("id, label, discount")
+        .eq("active", true)
+        .then(({ data }) => {
+          if (data) setPromos(data);
+        });
+    }
+    if (!propAddons) {
+      supabase
+        .from("addons")
+        .select("id, name, price")
+        .eq("active", true)
+        .then(({ data }) => {
+          if (data) setAddons(data);
+        });
+    }
+    if (!propLockers) {
+      supabase
+        .from("lockers")
+        .select("number")
+        .eq("active", true)
+        .order("number")
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            setLockers(data.map((l) => l.number));
+          } else {
+            setLockers(Array.from({ length: 18 }, (_, i) => i + 1));
+          }
+        });
+    }
+    if (!propTimeSlots) {
+      supabase
+        .from("weekend_slots")
+        .select("slot_time")
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            setTimeSlots(data.map((s: any) => s.slot_time.slice(0, 5)));
+          }
+        });
+    }
+  }, [
+    propClients,
+    propServices,
+    propTherapists,
+    propRooms,
+    propStaff,
+    propPromos,
+    propAddons,
+    propLockers,
+    propTimeSlots,
+  ]);
+
   const [clientQuery, setClientQuery] = useState("");
   const [clientId, setClientId] = useState<string | null>(initialClientId);
   // Set when opened via a Member QR scan — the client field is locked to a
@@ -96,12 +261,32 @@ export function QuickWalkinModal({
   // scan can't be silently overridden by an accidental keystroke.
   const [clientLocked, setClientLocked] = useState(!!initialClientId);
   const [guestName, setGuestName] = useState("");
-  const [serviceId, setServiceId] = useState(services[0]?.id ?? "");
-  const [therapistId, setTherapistId] = useState<string>("");
+  const [serviceId, setServiceId] = useState(propServices?.[0]?.id ?? "");
+  const [therapistId, setTherapistId] = useState<string>(initialTherapistId ?? "");
   const [useCustomTime, setUseCustomTime] = useState(false);
-  const [slotTime, setSlotTime] = useState<string>("");
+  const [slotTime, setSlotTime] = useState<string>(initialSlotTime ?? "");
   const [customTime, setCustomTime] = useState(roundedNowTime());
   const [roomNumber, setRoomNumber] = useState<number | "">("");
+
+  // Resolve therapist id if name was passed or therapists loaded after initial mount
+  useEffect(() => {
+    if (!initialTherapistId) return;
+    if (therapists.length > 0) {
+      const match = therapists.find(
+        (t) => t.id === initialTherapistId || t.name.toLowerCase() === initialTherapistId.toLowerCase()
+      );
+      if (match && therapistId !== match.id) {
+        setTherapistId(match.id);
+      }
+    }
+  }, [initialTherapistId, therapists, therapistId]);
+
+  // Set default service once services load if none selected
+  useEffect(() => {
+    if (!serviceId && services.length > 0) {
+      setServiceId(services[0].id);
+    }
+  }, [services, serviceId]);
   const [lockerNumber, setLockerNumber] = useState<number | "">("");
   const [promoId, setPromoId] = useState<string>("none");
   const [manualDiscountOn, setManualDiscountOn] = useState(false);
@@ -341,6 +526,18 @@ export function QuickWalkinModal({
     return effectiveRooms.filter((r) => !taken.has(r));
   }, [conflicts, time, duration, effectiveRooms]);
 
+  // Auto-select the first available room when time slot is set and room is unselected or no longer available
+  useEffect(() => {
+    if (!isMassageService || !time) return;
+    if (freeRooms.length > 0) {
+      if (roomNumber === "" || !freeRooms.includes(Number(roomNumber))) {
+        setRoomNumber(freeRooms[0]);
+      }
+    } else if (roomNumber !== "") {
+      setRoomNumber("");
+    }
+  }, [isMassageService, time, freeRooms, roomNumber]);
+
 
   const filteredClients = useMemo(() => {
     if (!clientQuery.trim()) return [];
@@ -414,17 +611,27 @@ export function QuickWalkinModal({
     setManualDiscountOn(false);
   }
 
-  // Ensure therapist selection resets if newly loaded qualifications do not include current therapist
+  // Ensure therapist selection matches service qualification; if not, switch service to one the therapist offers
   useEffect(() => {
-    if (!servicesLoaded || !therapistId || !serviceId) return;
-    const offeringSet = serviceTherapistMap.get(serviceId);
+    if (!servicesLoaded || !therapistId) return;
+    const offeringSet = serviceId ? serviceTherapistMap.get(serviceId) : null;
     if (!offeringSet || !offeringSet.has(therapistId)) {
-      setTherapistId("");
-      setSlotTime("");
-      setUseCustomTime(false);
-      setRoomNumber("");
+      // Find a massage service that this therapist offers
+      const qualifiedService =
+        services.find((s) => s.name !== "Wet Area" && serviceTherapistMap.get(s.id)?.has(therapistId)) ||
+        services.find((s) => serviceTherapistMap.get(s.id)?.has(therapistId));
+
+      if (qualifiedService) {
+        setServiceId(qualifiedService.id);
+      } else if (serviceId) {
+        // Therapist truly offers no services in catalog
+        setTherapistId("");
+        setSlotTime("");
+        setUseCustomTime(false);
+        setRoomNumber("");
+      }
     }
-  }, [servicesLoaded, serviceId, therapistId, serviceTherapistMap]);
+  }, [servicesLoaded, serviceId, therapistId, serviceTherapistMap, services]);
 
   const amount = useMemo(() => {
     const base = selectedService?.price ?? 0;

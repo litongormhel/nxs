@@ -53,6 +53,8 @@ export interface TherapistCardProps {
   currentTime: Date;
   bookings: BookingInfo[];
   isTop?: boolean;
+  selectedSlot?: string;
+  onSelectSlot?: (slot: string) => void;
   onToggleDayOff: (day: string) => void;
   onToggleService: (service: string) => void;
   onRequestMarkAbsent: () => void;
@@ -75,6 +77,8 @@ export function TherapistCard({
   currentTime,
   bookings,
   isTop = false,
+  selectedSlot,
+  onSelectSlot,
   isMenuOpen,
   onToggleMenu,
   onToggleDayOff,
@@ -162,6 +166,12 @@ export function TherapistCard({
     ? classifiedSlots.find((s) => s.isFree)
     : undefined;
   const nextSlot = nextSlotObj?.slot;
+
+  // Active selected slot: explicitly selected slot if still available, or earliest available slot
+  const activeSlot =
+    selectedSlot && classifiedSlots.find((s) => s.slot === selectedSlot && s.isFree)
+      ? selectedSlot
+      : nextSlot;
 
   // Status Line and Dot derivation
   let statusDotClass = "bg-[#8a8378]"; // Default unavailable gray
@@ -426,7 +436,7 @@ export function TherapistCard({
             }`}
           >
             {classifiedSlots.map(({ slot, isPast, isBooked, isFree }) => {
-              const isNext = isAvailable && slot === nextSlot;
+              const isSelected = isAvailable && slot === activeSlot;
 
               if (!isAvailable) {
                 return (
@@ -439,14 +449,14 @@ export function TherapistCard({
                 );
               }
 
-              if (isNext) {
+              if (isSelected) {
                 return (
                   <button
                     key={slot}
                     type="button"
-                    onClick={() => onBookSlot(slot)}
+                    onClick={() => onSelectSlot?.(slot)}
                     className="text-center text-xs py-1.5 rounded-lg font-semibold bg-[#f2ede4] text-[#1a1512] border-none shadow-sm cursor-pointer hover:brightness-105 transition-all"
-                    title={`Next bookable slot: ${fmtTime(slot)}`}
+                    title={`Selected slot: ${fmtTime(slot)}`}
                   >
                     {fmtTime(slot)}
                   </button>
@@ -482,9 +492,9 @@ export function TherapistCard({
                 <button
                   key={slot}
                   type="button"
-                  onClick={() => onBookSlot(slot)}
+                  onClick={() => onSelectSlot?.(slot)}
                   className="text-center text-xs py-1.5 rounded-lg border border-white/15 text-[#d8d2c4] hover:border-gold hover:text-gold transition-colors cursor-pointer"
-                  title={`Book ${fmtTime(slot)}`}
+                  title={`Select ${fmtTime(slot)}`}
                 >
                   {fmtTime(slot)}
                 </button>
@@ -551,13 +561,13 @@ export function TherapistCard({
       {/* Book CTA Button (only rendered when therapist is available) */}
       {isAvailable && (
         <div className="pt-1">
-          {nextSlot ? (
+          {activeSlot ? (
             <button
               type="button"
-              onClick={() => onBookSlot(nextSlot)}
+              onClick={() => onBookSlot(activeSlot)}
               className="w-full bg-gold text-black font-semibold text-xs py-2.5 rounded-lg hover:brightness-105 transition-all shadow-sm cursor-pointer"
             >
-              Book {fmtTime(nextSlot)}
+              Book {fmtTime(activeSlot)}
             </button>
           ) : (
             <button
