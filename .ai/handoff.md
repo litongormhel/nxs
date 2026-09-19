@@ -5,6 +5,23 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
+- **Disable Time Slot Selection Until Therapist Is Selected in Quick Walk-in and New Booking — complete**
+  (`ohm#7d2a5f1e`, 2026-09-19).
+  - Implementation plan presented and approved before code execution.
+  - **Quick Walk-in Modal (`components/quick-walkin-modal.tsx`)**:
+    - Derived `isTherapistSelected = !!therapistId`.
+    - Gated all Time Slot pill buttons with `disabled={!isTherapistSelected || taken || useCustomTime}` and styled with `opacity-40 cursor-not-allowed border-border bg-background text-foreground/40` when no therapist is selected.
+    - Added helper text `"Select a therapist first to see available slots"` directly beneath the Time Slot pills when no therapist is selected.
+    - Gated the "Use a custom time instead" checkbox with `disabled={!isTherapistSelected}`, applied `opacity-40 cursor-not-allowed` to the label, and prevented custom time inputs from rendering unless a therapist is chosen.
+    - In therapist `<select id="wk-therapist">` `onChange`, if the selection is reset or cleared to empty (`!nextId`), automatically resets `setSlotTime("")` and `setUseCustomTime(false)`.
+  - **New Booking Modal (`components/booking-form-modal.tsx`)**:
+    - Mirrored identical behavior: derived `isTherapistSelected = !!therapistId`.
+    - Gated all Time Slot buttons with `disabled={!isTherapistSelected || taken || useCustomTime}` and styled with `opacity-40 cursor-not-allowed`.
+    - Rendered helper text `"Select a therapist first to see available slots"` when no therapist is selected, preserving the struck-through unavailable slots hint once a therapist is selected.
+    - Gated "Use a custom time instead" checkbox with `disabled={!isTherapistSelected}` and `opacity-40 cursor-not-allowed`.
+    - In therapist `<select id="bTherapist">` `onChange`, if reset to empty (`!nextId`), automatically resets `setSlotTime("")` and `setUseCustomTime(false)`.
+  - `npm run build` clean (0 compilation / TypeScript errors). See [[bookings_state]] and `.ai/briefing.md`.
+
 - **Add Maintenance / Out of Order Status and Notes for Lockers — complete**
   (`ohm#4f7b9e2a`, 2026-09-19).
   - Implementation plan presented and approved before code execution.

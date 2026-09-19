@@ -80,7 +80,13 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-19 — Add Maintenance / Out of Order Status and Notes for Lockers**
+1. **2026-09-19 — Disable Time Slot Selection Until Therapist Is Selected in Quick Walk-in and New Booking**
+   (`ohm#7d2a5f1e`). Implementation plan presented and approved before code execution.
+   - **Quick Walk-in (`components/quick-walkin-modal.tsx`)**: Disabled all Time Slot pill buttons and the "Use a custom time instead" checkbox when no therapist is selected (`disabled={!isTherapistSelected}`). Applied `opacity-40 cursor-not-allowed` styling. Added visual helper text `"Select a therapist first to see available slots"`. Reset `slotTime` and `useCustomTime` when therapist selection changes to empty.
+   - **New Booking Modal (`components/booking-form-modal.tsx`)**: Mirrored the exact same behavior: gated Time Slot buttons and custom time controls on active therapist selection, styled disabled states with `opacity-40 cursor-not-allowed`, displayed helper text when no therapist is selected, and automatically cleared time slot and custom time when therapist is deselected.
+   - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
+
+2. **2026-09-19 — Add Maintenance / Out of Order Status and Notes for Lockers**
    (`ohm#4f7b9e2a`). Implementation plan presented and approved before code execution.
    - **Schema & Migration (`supabase/migrations/20260919100000_lockers_maintenance.sql`, `lib/types/database.ts`)**: Added `status`, `is_maintenance`, and `maintenance_note` to `public.lockers`. Added `staff_update` RLS policy permitting all staff (`is_staff()`) to toggle maintenance. Updated `quick_walkin` RPC to reject out-of-order lockers.
    - **Server Action (`app/(staff)/lockers/actions.ts`)**: Implemented `toggleLockerMaintenance(lockerNumber, isMaintenance, note?, staffId)`. Blocks marking active occupied lockers as out of order, updates locker status/note, audits into `action_logs`, and revalidates locker/booking paths. Added server guard in `app/(staff)/bookings/actions.ts`.
@@ -88,7 +94,7 @@ Full invariant list: [[nxs-architecture-locks]].
    - **Check-in Selectors Exclusion (`components/quick-walkin-modal.tsx`, `components/log-visit-modal.tsx`, `components/booking-browser.tsx`)**: Excludes/disables out-of-order lockers with clear descriptive labels across Quick Walk-in, Log Visit, and Edit Booking modals with front-end and back-end validation.
    - `npm run build` clean. See [[lockers_state]] and `.ai/handoff.md`.
 
-2. **2026-09-19 — Remove Dashboard, Set Bookings as Default Landing, and Reorder Sidebar Navigation**
+3. **2026-09-19 — Remove Dashboard, Set Bookings as Default Landing, and Reorder Sidebar Navigation**
    (`ohm#8b3f1a9c`). Implementation plan presented and approved before code execution.
    - **Removed Dashboard Route (`app/(staff)/dashboard/`)**: Obsolete standalone dashboard page and error boundary removed. Added permanent redirect from `/dashboard` to `/bookings` in `next.config.ts`.
    - **Default Landing Route (`app/(staff)/page.tsx`, `proxy.ts`, `app/(auth)/login/`)**: Configured `/bookings` as the default landing route for root `/`, post-login redirection, and authenticated navigation.
@@ -96,7 +102,7 @@ Full invariant list: [[nxs-architecture-locks]].
    - **Relocated Needs Reassignment Alert (`app/(staff)/bookings/page.tsx`)**: Mounted `<ReassignmentPanel />` directly above the bookings table/browser with live therapist/absence/leave checks and keyed remount reactivity on `<BookingBrowser />`.
    - `npm run build` clean. See [[dashboard_state]], [[bookings_state]], and `.ai/handoff.md`.
 
-3. **2026-09-18 — Allow Therapist Selection with Time Slot Picker in Reassign Modal**
+4. **2026-09-18 — Allow Therapist Selection with Time Slot Picker in Reassign Modal**
    (`ohm#alignreassignmentslotsandselection`).
    - **Dropdown Selection Rules (`components/reassignment-panel.tsx`)**: In the "New Therapist" dropdown, disable ONLY therapists who are Day Off, Absent, On Leave, or Fully Booked. Label disabled options accordingly (`[Name] — Day Off`, `[Name] — Absent`, `[Name] — On Leave`, `[Name] — Fully Booked`). Working therapists with at least 1 free slot remain selectable even if booked at the original session time.
    - **Interactive Time Slot Picker (`components/reassignment-panel.tsx`)**: Added clickable time slot pills below the therapist selector pre-selecting the original booking time. Occupied slots for the selected therapist appear disabled, struck-through, red, and marked "Booked"; available slots appear with emerald/green accent styling and "Free" indicator.
@@ -104,7 +110,7 @@ Full invariant list: [[nxs-architecture-locks]].
    - **Server Action Update (`app/(staff)/bookings/actions.ts`)**: Updated `changeBookingTherapist` to accept an optional `newStartTime?: string`. Updates both `therapist_id` and (if changed) `start_time`, resets `Needs Reassignment` status back to `Booked`, and revalidates paths `/dashboard` and `/bookings`.
    - `npm run build` clean. See [[dashboard_state]], [[bookings_state]], and `.ai/handoff.md`.
 
-4. **2026-09-17 — Replace Client Select Dropdown in New Booking Modal with Searchable Combobox**
+5. **2026-09-17 — Replace Client Select Dropdown in New Booking Modal with Searchable Combobox**
    (`ohm#newbookingclientcombobox`).
    - **Active Members Filter (`components/client-combobox.tsx`)**: Excludes archived clients (`is_archived !== true && archived_at == null`) and filters records where `is_active !== false`.
    - **Searchable Combobox / Typeahead (`components/client-combobox.tsx`, `components/booking-form-modal.tsx`)**: Replaced native `<select>` dropdown with searchable combobox typeahead component. Defaults to `No Account` (`"— Walk-in / No account —"`).
@@ -112,11 +118,4 @@ Full invariant list: [[nxs-architecture-locks]].
    - **Styling Consistency**: Matches modal dark theme (`bg-background`, `border-border`, gold accents on focus/selection, `text-sm`, `shadow-xl shadow-black/60`).
    - **Data Source Query (`app/(staff)/bookings/page.tsx`)**: Updated Supabase client query to include `member_code` for member code search matching.
    - `npm run build` clean. See [[bookings_state]] and `.ai/handoff.md`.
-
-5. **2026-09-17 — Enforce Proportional Points Calculation & Display Earned Points in Confirm Check-in**
-   (`ohm#proportionalpointscheckin`).
-   - **Dynamic Proportional Calculation (`components/log-visit-modal.tsx`)**: Fetches `app_settings` on mount (defaulting to `"proportional"` if unset). Dynamically recomputes `pointsDelta` reactively using `computeLoyaltyPoints(mode, servicePaidAmount, price, basePoints, pesoPerPoint)` whenever service, promo, manual discount, or total amount changes.
-   - **Points Earned Row in Confirm Check-in (`components/log-visit-modal.tsx`)**: Added `Points Earned: +X pts` (styled with gold accent text `text-accent-gold`) inside the `Confirm Check-in` receipt card for Member clients (`clientId`), while omitting points display for walk-ins without an account.
-   - **Backend Action Alignment (`app/(staff)/bookings/actions.ts` & `lib/loyalty.ts`)**: Updated `resolveEarnedPoints` to default to `"proportional"` mode when `loyalty_formula_mode` is null in `app_settings`, and guarded `computeLoyaltyPoints` against zero-price division and negative results.
-   - `npm run build` clean. See [[points_ledger_state]] and `.ai/handoff.md`.
 

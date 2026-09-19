@@ -458,6 +458,14 @@ Day-Off therapist (Leo) could be saved from New Booking.
 - **Dynamic Reassignment Key & Reactivity**: Derived `reassignmentKey` from the flagged bookings list and passed `key={reassignmentKey}` to `<BookingBrowser />`. Completing a reassignment or cancellation triggers `router.refresh()`, mutating `reassignmentKey` and automatically re-fetching fresh booking rows in the bookings table below.
 - **Default Landing Route**: Bookings (`/bookings`) is now the default landing route across `/`, `proxy.ts`, and staff login flows. Standalone `/dashboard` route was completely deleted, with a permanent redirect configured in `next.config.ts`.
 
+**Correction, `ohm#7d2a5f1e` (2026-09-19)** — Disable Time Slot Selection Until Therapist Is Selected in Quick Walk-in and New Booking.
+
+- **Time Slot & Custom Time Gating (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`)**:
+  - Gated Time Slot pill buttons and the "Use a custom time instead" checkbox toggle on active therapist selection (`disabled={!isTherapistSelected || taken || useCustomTime}`).
+  - When no therapist is selected, buttons render with `opacity-40 cursor-not-allowed border-border bg-background text-foreground/40` and custom time toggle with `opacity-40 cursor-not-allowed`.
+  - Added visual feedback below Time Slot section: helper text `"Select a therapist first to see available slots"` is displayed when `!isTherapistSelected`.
+  - In both modals, resetting or clearing the therapist selection (`!nextId`) automatically resets `slotTime` to empty and `useCustomTime` to `false`, immediately returning the Time Slot section to the disabled state.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - Therapist options are not filtered by `therapist_services` (which

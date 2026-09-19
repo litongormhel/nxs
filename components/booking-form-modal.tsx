@@ -152,6 +152,7 @@ export function BookingFormModal({
   const selectedService = services.find((s) => s.id === serviceId);
   const duration = selectedService?.duration_minutes ?? 0;
   const isMassageService = selectedService?.name !== "Wet Area";
+  const isTherapistSelected = !!therapistId;
   const isPastDate = date < todayIso();
   const time = useCustomTime ? customTime : slotTime;
 
@@ -434,7 +435,14 @@ export function BookingFormModal({
                 <select
                   id="bTherapist"
                   value={therapistId}
-                  onChange={(e) => setTherapistId(e.target.value)}
+                  onChange={(e) => {
+                    const nextId = e.target.value;
+                    setTherapistId(nextId);
+                    if (!nextId) {
+                      setSlotTime("");
+                      setUseCustomTime(false);
+                    }
+                  }}
                   className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
                 >
                   <option value="">— select —</option>
@@ -505,14 +513,16 @@ export function BookingFormModal({
                     <button
                       key={s}
                       type="button"
-                      disabled={taken || useCustomTime}
+                      disabled={!isTherapistSelected || taken || useCustomTime}
                       onClick={() => {
                         setSlotTime(s);
                         setManualRoomNumber(null);
                         setError(null);
                       }}
                       className={`min-h-[44px] sm:min-h-0 rounded-md border px-2 py-2 font-mono text-xs transition-all ${
-                        taken
+                        !isTherapistSelected
+                          ? "border-border bg-background text-foreground/40 opacity-40 cursor-not-allowed"
+                          : taken
                           ? "border-dashed border-border/70 text-red-400/50 line-through opacity-50 cursor-not-allowed bg-transparent"
                           : selected
                           ? "border-gold bg-gradient-to-br from-[#c89b3c] to-[#a97e2e] text-black font-bold shadow-sm"
@@ -524,26 +534,37 @@ export function BookingFormModal({
                   );
                 })}
               </div>
-              <p className="mt-1.5 text-[11px] text-muted">
-                Struck-through slots have no free therapist or room.
-              </p>
+              {!isTherapistSelected ? (
+                <p className="mt-1.5 text-xs text-muted">
+                  Select a therapist first to see available slots
+                </p>
+              ) : (
+                <p className="mt-1.5 text-[11px] text-muted">
+                  Struck-through slots have no free therapist or room.
+                </p>
+              )}
             </div>
           )}
 
           {/* Custom Time Toggle */}
           {isMassageService && (
             <div id="bCustomTimeField">
-              <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+              <label
+                className={`flex items-center gap-2 text-sm text-foreground ${
+                  !isTherapistSelected ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
+                }`}
+              >
                 <input
                   type="checkbox"
                   id="bCustomTimeToggle"
                   checked={useCustomTime}
+                  disabled={!isTherapistSelected}
                   onChange={(e) => onCustomTimeToggle(e.target.checked)}
-                  className="accent-gold"
+                  className={`accent-gold ${!isTherapistSelected ? "cursor-not-allowed" : ""}`}
                 />
                 Use a custom time instead
               </label>
-              {useCustomTime && (
+              {useCustomTime && isTherapistSelected && (
                 <div id="customTimeSub" className="mt-2 space-y-1.5">
                   <input
                     type="time"

@@ -219,6 +219,7 @@ export function QuickWalkinModal({
   const selectedService = services.find((s) => s.id === serviceId);
   const duration = selectedService?.duration_minutes ?? 0;
   const isMassageService = selectedService?.name !== "Wet Area";
+  const isTherapistSelected = !!therapistId;
   const time = useCustomTime ? customTime : slotTime;
 
   const takenTherapists = useMemo(() => {
@@ -683,8 +684,13 @@ export function QuickWalkinModal({
                   id="wk-therapist"
                   value={therapistId}
                   onChange={(e) => {
-                    setTherapistId(e.target.value);
+                    const nextId = e.target.value;
+                    setTherapistId(nextId);
                     setRoomNumber("");
+                    if (!nextId) {
+                      setSlotTime("");
+                      setUseCustomTime(false);
+                    }
                   }}
                   className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
                 >
@@ -734,13 +740,15 @@ export function QuickWalkinModal({
                       <button
                         key={s}
                         type="button"
-                        disabled={taken || useCustomTime}
+                        disabled={!isTherapistSelected || taken || useCustomTime}
                         onClick={() => {
                           setSlotTime(s);
                           setRoomNumber("");
                         }}
                         className={`min-h-[44px] sm:min-h-0 rounded-md border px-2 py-1.5 text-xs transition-all ${
-                          taken
+                          !isTherapistSelected
+                            ? "border-border bg-background text-foreground/40 opacity-40 cursor-not-allowed"
+                            : taken
                             ? "border-dashed border-border/70 text-red-400/50 line-through opacity-50 cursor-not-allowed bg-transparent"
                             : selected
                             ? "border-gold bg-gradient-to-br from-[#c89b3c] to-[#a97e2e] text-black font-bold shadow-sm"
@@ -752,22 +760,33 @@ export function QuickWalkinModal({
                     );
                   })}
                 </div>
+                {!isTherapistSelected && (
+                  <p className="mt-1.5 text-xs text-muted">
+                    Select a therapist first to see available slots
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="flex items-center gap-2 text-sm text-foreground">
+                <label
+                  className={`flex items-center gap-2 text-sm text-foreground ${
+                    !isTherapistSelected ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
+                  }`}
+                >
                   <input
                     type="checkbox"
                     checked={useCustomTime}
+                    disabled={!isTherapistSelected}
                     onChange={(e) => {
                       setUseCustomTime(e.target.checked);
                       if (e.target.checked) setSlotTime("");
                       setRoomNumber("");
                     }}
+                    className={!isTherapistSelected ? "cursor-not-allowed" : ""}
                   />
                   Use a custom time instead
                 </label>
-                {useCustomTime && (
+                {useCustomTime && isTherapistSelected && (
                   <input
                     type="time"
                     step={1800}
