@@ -52,6 +52,52 @@ function fmtTime(t: string): string {
   return `${hr}:${m} ${+h < 12 ? "AM" : "PM"}`;
 }
 
+export function showBookingToast({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  if (typeof document === "undefined") return;
+
+  const existing = document.getElementById("nxs-booking-toast");
+  if (existing) {
+    existing.remove();
+  }
+
+  const container = document.createElement("div");
+  container.id = "nxs-booking-toast";
+  container.className =
+    "fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-1 rounded-xl border border-gold bg-surface-2 px-5 py-3 shadow-2xl transition-all duration-300 pointer-events-auto max-w-lg text-center animate-fade-in cursor-pointer";
+
+  const titleEl = document.createElement("div");
+  titleEl.className = "text-xs font-semibold font-mono text-accent-gold uppercase tracking-wider";
+  titleEl.textContent = title;
+
+  const descEl = document.createElement("div");
+  descEl.className = "text-xs font-sans text-foreground/90 font-medium";
+  descEl.textContent = description;
+
+  container.appendChild(titleEl);
+  container.appendChild(descEl);
+
+  document.body.appendChild(container);
+
+  const timeoutId = setTimeout(() => {
+    container.style.opacity = "0";
+    container.style.transform = "translate(-50%, 10px)";
+    setTimeout(() => {
+      container.remove();
+    }, 300);
+  }, 4000);
+
+  container.onclick = () => {
+    clearTimeout(timeoutId);
+    container.remove();
+  };
+}
+
 export interface QuickWalkinModalProps {
   clients?: Client[];
   services?: Service[];
@@ -328,6 +374,10 @@ export function QuickWalkinModal({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [pointsWarning, setPointsWarning] = useState<string | null>(null);
+  const [pendingSuccessToast, setPendingSuccessToast] = useState<{
+    title: string;
+    description: string;
+  } | null>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
@@ -815,13 +865,40 @@ export function QuickWalkinModal({
         return;
       }
 
+      const resolvedClientName = clientId
+        ? clients.find((c) => c.id === clientId)?.codename ?? "Client"
+        : guestName.trim() || "Guest";
+      const resolvedServiceName = services.find((s) => s.id === serviceId)?.name ?? "Service";
+      const resolvedTherapistName =
+        isMassageService && therapistId
+          ? therapists.find((t) => t.id === therapistId)?.name ?? null
+          : null;
+      const lockerText = typeof lockerNumber === "number" ? `Locker #${lockerNumber}` : null;
+      const roomText = isMassageService && roomNumber ? `Room ${roomNumber}` : null;
+
+      const toastSubtitle = [
+        resolvedClientName,
+        `${resolvedServiceName}${resolvedTherapistName ? ` (${resolvedTherapistName})` : ""}`,
+        lockerText,
+        roomText,
+      ]
+        .filter(Boolean)
+        .join(" • ");
+
+      const successToastData = {
+        title: "Walk-in logged successfully!",
+        description: toastSubtitle,
+      };
+
       if (clientId && result.pointsAwarded === null) {
+        setPendingSuccessToast(successToastData);
         setPointsWarning(
           "Walk-in logged, pero WALANG POINTS na-award — hindi pa naka-configure ang loyalty formula sa Settings."
         );
         return;
       }
 
+      showBookingToast(successToastData);
       onCreated();
     });
   }
@@ -836,6 +913,10 @@ export function QuickWalkinModal({
             type="button"
             onClick={() => {
               setPointsWarning(null);
+              if (pendingSuccessToast) {
+                showBookingToast(pendingSuccessToast);
+                setPendingSuccessToast(null);
+              }
               onCreated();
             }}
             className="w-full rounded-md border border-gold bg-gold px-4 py-2.5 text-sm font-semibold text-black hover:brightness-105"

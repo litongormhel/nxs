@@ -46,6 +46,52 @@ function fmtTime(t: string): string {
   return `${hr}:${m} ${+h < 12 ? "AM" : "PM"}`;
 }
 
+export function showBookingToast({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  if (typeof document === "undefined") return;
+
+  const existing = document.getElementById("nxs-booking-toast");
+  if (existing) {
+    existing.remove();
+  }
+
+  const container = document.createElement("div");
+  container.id = "nxs-booking-toast";
+  container.className =
+    "fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-1 rounded-xl border border-gold bg-surface-2 px-5 py-3 shadow-2xl transition-all duration-300 pointer-events-auto max-w-lg text-center animate-fade-in cursor-pointer";
+
+  const titleEl = document.createElement("div");
+  titleEl.className = "text-xs font-semibold font-mono text-accent-gold uppercase tracking-wider";
+  titleEl.textContent = title;
+
+  const descEl = document.createElement("div");
+  descEl.className = "text-xs font-sans text-foreground/90 font-medium";
+  descEl.textContent = description;
+
+  container.appendChild(titleEl);
+  container.appendChild(descEl);
+
+  document.body.appendChild(container);
+
+  const timeoutId = setTimeout(() => {
+    container.style.opacity = "0";
+    container.style.transform = "translate(-50%, 10px)";
+    setTimeout(() => {
+      container.remove();
+    }, 300);
+  }, 4000);
+
+  container.onclick = () => {
+    clearTimeout(timeoutId);
+    container.remove();
+  };
+}
+
 export function BookingFormModal({
   clients,
   services,
@@ -115,6 +161,10 @@ export function BookingFormModal({
     serviceName: string;
     date: string;
     startTime: string;
+  } | null>(null);
+  const [pendingSuccessToast, setPendingSuccessToast] = useState<{
+    title: string;
+    description: string;
   } | null>(null);
   const [isPending, startTransition] = useTransition();
   const errorRef = useRef<HTMLParagraphElement>(null);
@@ -458,7 +508,29 @@ export function BookingFormModal({
         return;
       }
 
+      const resolvedClientName = isWalkIn
+        ? walkinName.trim() || "Guest"
+        : selectedClient?.codename ?? "Client";
+      const formattedSlot = time ? fmtTime(time) : "";
+      const dateSlotText = [date, formattedSlot].filter(Boolean).join(", ");
+      const resolvedServiceName = selectedService?.name ?? "Service";
+      const resolvedTherapistName =
+        isMassageService && therapistId
+          ? therapists.find((t) => t.id === therapistId)?.name ?? null
+          : null;
+      const serviceTherapistText = `${resolvedServiceName}${resolvedTherapistName ? ` (${resolvedTherapistName})` : ""}`;
+
+      const toastSubtitle = [resolvedClientName, dateSlotText, serviceTherapistText]
+        .filter(Boolean)
+        .join(" • ");
+
+      const successToastData = {
+        title: "Booking created successfully!",
+        description: toastSubtitle,
+      };
+
       if (!isWalkIn && selectedClient && selectedService) {
+        setPendingSuccessToast(successToastData);
         setSmsBooking({
           codename: selectedClient.codename,
           price: selectedService.price,
@@ -469,6 +541,7 @@ export function BookingFormModal({
         return;
       }
 
+      showBookingToast(successToastData);
       onCreated();
     });
   }
@@ -479,6 +552,10 @@ export function BookingFormModal({
         booking={smsBooking}
         onClose={() => {
           setSmsBooking(null);
+          if (pendingSuccessToast) {
+            showBookingToast(pendingSuccessToast);
+            setPendingSuccessToast(null);
+          }
           onCreated();
         }}
       />

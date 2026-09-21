@@ -532,6 +532,21 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Added defense-in-depth alias normalization in `QuickWalkinModal` query processing mapping legacy `Scrub` ID to `Scrub + Massage` ID.
   - Verified bidirectional filtering in `QuickWalkinModal`: launching or selecting a therapist offering scrub immediately includes `Scrub + Massage · 90min` in `availableServices`; selecting `Scrub + Massage` filters qualified therapists strictly to those offering the service.
 
+**Correction, `ohm#8b2f4c1e` (2026-09-21)** — Add Context-Rich Success Toast Notifications for Bookings Creation.
+
+- **Floating Success Toast Dispatcher (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`)**:
+  - Implemented `showBookingToast({ title, description })` mounted directly to `document.body` at `z-[100]` with semantic design tokens (`border-gold`, `bg-surface-2`, `text-accent-gold`, `text-foreground`, `shadow-2xl`, `animate-fade-in`).
+  - Solves modal unmount lifecycle teardown: because parent views unmount modals on `onCreated()`, attaching toasts to `document.body` ensures notifications display for the full 4 seconds (with smooth CSS exit transition and click-to-dismiss).
+- **Quick Walk-in Modal Feedback (`components/quick-walkin-modal.tsx`)**:
+  - Triggers success toast upon walk-in completion and modal close (both immediate and post-points-warning dismissal).
+  - Toast content: Title: `"Walk-in logged successfully!"`, Subtitle: `Client Name • Service Name (Therapist Name) • Locker #[Num] • Room [Num]` (with null-safe handling for Wet Area).
+- **New Booking Modal Feedback (`components/booking-form-modal.tsx`)**:
+  - Triggers success toast upon advance booking completion and modal close (both direct walk-in and post-SMS preview dismissal).
+  - Toast content: Title: `"Booking created successfully!"`, Subtitle: `Client Name • [Date], [Slot Time] • Service Name (Therapist Name)`.
+- **Safety & Resilience**:
+  - Preserved inline error state, warnings, and `errorRef` scrolling.
+  - Retained single server revalidation path via `onCreated()` (`router.refresh()`), preventing duplicate network calls.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - The New Booking conflict-greying query re-fetches on every date change

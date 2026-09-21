@@ -4,10 +4,30 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#1b4e9f7a` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#8b2f4c1e` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Add Context-Rich Success Toast Notifications for Bookings Creation — complete**
+  (`ohm#8b2f4c1e`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Quick Walk-in Modal Feedback (`components/quick-walkin-modal.tsx`)**:
+    - Triggered a floating success toast notification upon successful walk-in creation and modal closure (both immediate completion and post-points-warning dismissal).
+    - Formats context-rich message:
+      - Title: `"Walk-in logged successfully!"`
+      - Subtitle: `Client Name • Service Name (Therapist Name) • Locker #[Num] • Room [Num]` (with null-safe handling for Wet Area without room/therapist).
+  - **New Booking Modal Feedback (`components/booking-form-modal.tsx`)**:
+    - Triggered a floating success toast notification upon successful advance booking save and modal closure (both direct walk-in completions and post-SMS preview dismissal).
+    - Formats scheduling context:
+      - Title: `"Booking created successfully!"`
+      - Subtitle: `Client Name • [Date], [Slot Time] • Service Name (Therapist Name)`.
+  - **DOM-Mounted Toast Dispatcher (`showBookingToast`)**:
+    - Replaced the risk of premature unmounting by mounting the toast container directly to `document.body` at `z-[100]`.
+    - Styled with semantic NXS theme tokens (`border-gold`, `bg-surface-2`, `text-accent-gold`, `text-foreground`, `shadow-2xl`, `animate-fade-in`), auto-fading after 4000ms with smooth CSS transition and click-to-dismiss.
+    - Preserved existing inline error handling (`setError(result.error)`) and server revalidation (`onCreated` -> `router.refresh()`).
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors, Turbopack build succeeded in 6.1s).
+  - **Next steps / References**: See [[bookings_state]] and `.ai/briefing.md`.
 
 - **Audit and Fix Service Name vs ID Mismatch in Therapist Booking Flow — complete**
   (`ohm#1b4e9f7a`, 2026-09-21).
