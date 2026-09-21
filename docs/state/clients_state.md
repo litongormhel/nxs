@@ -2,6 +2,18 @@
 
 ## Implemented
 
+- **Member Portal Dashboard for Points Summary & Past Visits (`ohm#6b8a2c4e`, 2026-09-21)**:
+  - Mounted dedicated member dashboard route at `app/portal/page.tsx`, authenticated via HMAC session token (`getPortalAccountId()` in `lib/portal/session.ts`).
+  - Implemented high-performance data querying with parallelized `Promise.all` via `createServiceClient()`:
+    - Primary key index lookup on `clients.id` to retrieve member profile, username, member code, and live `points_balance` in O(1) time without full-table aggregations.
+    - Indexed lookup on `bookings` filtered by `client_id` and `status = 'Completed'`, sorted descending by date/time and capped at 10 visits, with foreign key joins to `services` and `therapists`.
+    - Server-side QR data URL generation via `qrcode` using `client_portal_accounts.qr_token`.
+  - Built responsive `MemberDashboard` component (`components/client-portal/member-dashboard.tsx`):
+    - Profile & Points Summary card with member greeting, `@username`, Member Code (`#M-...`), live Points Balance display, and "Log out" button (via `logoutPortalAction` in `app/portal/actions.ts`).
+    - "Member QR" trigger opening modal with large QR code and counter check-in instructions.
+    - Responsive past visits section rendering formatted date, 12-hour time, service name, therapist name, duration, and status badge, with empty state handling (*"No past visits recorded yet"*).
+  - Styled with NXS dark theme semantic tokens (`bg-surface`, `bg-surface-2`, `border-border`, `text-gold`, `text-foreground`, `text-muted`).
+
 - **Exclude Upcoming and Unchecked-in Advance Bookings from Walk-in Guests Profile Tab (`ohm#9f3e1b7c`, 2026-09-21)**:
   - Audited `rawWalkIns` query processing in `app/(staff)/clients/page.tsx` with respect to Philippine operating time (`Asia/Manila`, UTC+8).
   - Excluded future scheduled booking dates (`booking_date > todayManila`) and unlogged/un-checked-in advance bookings from the **Walk-In Without Account** tab.

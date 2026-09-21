@@ -81,37 +81,38 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-21 — Exclude Upcoming and Unchecked-in Advance Bookings from Walk-in Guests Profile Tab**
+1. **2026-09-21 — Implement Member Portal Dashboard for Points Summary and Past Visit History**
+   (`ohm#6b8a2c4e`). Implementation plan presented and approved before code execution.
+   - **Member Portal Route & Authentication (`app/portal/page.tsx`, `app/portal/actions.ts`)**: Implemented dedicated dashboard at `/portal` for authenticated members. Session validated via HMAC token (`getPortalAccountId()`); unauthenticated requests redirect cleanly to `/portal/login`. Created `logoutPortalAction` to securely clear session and redirect.
+   - **High-Performance Query Execution (`app/portal/page.tsx`)**: Parallelized queries with `Promise.all` via `createServiceClient()`. Looked up live points balance and member code directly from `clients` using primary key index (O(1), zero table scans or ledger aggregations). Queried verified past visits from `bookings` filtered by `client_id` and `status = 'Completed'`, sorted descending by date/time and capped at 10 records with indexed joins to `services` and `therapists`. Pre-generated QR data URL with `qrcode`.
+   - **Responsive Member Dashboard UI (`components/client-portal/member-dashboard.tsx`)**: Built mobile-first member interface with NXS dark theme tokens (`bg-surface`, `bg-surface-2`, `text-gold`, `border-border`). Displays greeting with codename and `@username`, `#M-...` badge, prominent live Points Balance card, "Member QR" modal trigger, full QR code modal with front-desk instructions, and responsive past visits table/card list with empty state handling.
+   - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
+
+2. **2026-09-21 — Exclude Upcoming and Unchecked-in Advance Bookings from Walk-in Guests Profile Tab**
    (`ohm#9f3e1b7c`). Implementation plan presented and approved before code execution.
    - **Audit & Status Filter (`app/(staff)/clients/page.tsx`)**: Filtered `rawWalkIns` in Manila time (`Asia/Manila`, UTC+8). Excluded scheduled future bookings (`booking_date > todayManila`) and un-checked-in advance bookings. A walk-in booking is strictly included only if status is `completed`, `in_service`, or has a direct `locker_occupancy` or `sales` record linked by `booking_id`. Excluded un-checked-in bookings with status `Booked`, `Needs Reassignment`, `Cancelled`, `No-show`, `confirmed`, or `pending`.
    - **Verified History Counts & Grouping (`components/client-browser.tsx`)**: Added defensive status/locker/payment checks to `groupedWalkIns`. Ensured `TOTAL VISITS` count (`visitCount`) and `LAST VISIT DATE` (`lastVisitDate`) strictly reflect actual past/completed visits.
    - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
 
-2. **2026-09-21 — Fix Walk-In Guest History Click Action, Locker Resolution, and Zero Amount Formatting**
+3. **2026-09-21 — Fix Walk-In Guest History Click Action, Locker Resolution, and Zero Amount Formatting**
    (`ohm#4c9e2b1a`). Implementation plan presented and approved before code execution.
    - **Interactive History Drawer (`components/client-browser.tsx`)**: Mounted slide-over drawer triggered by "View Past Stays →" button or table row click for walk-in guests (`activeWalkInGroup`). Renders detailed visit cards showing Visit #, Date, 12-hour Time, Service, Therapist, Massage Time, Room (`Room [Num]` or `None (Wet Area)`), Locker (`Locker [Num]` or `None`), explicit Amount Paid & Payment Method, Status, and Booking ID. Fully styled with theme tokens (`bg-surface`, `bg-surface-2`, `border-border`, gold accents).
    - **Cascading Locker & Amount Resolution (`app/(staff)/clients/page.tsx`, `components/client-browser.tsx`)**: Audited queries and added parallel fetching for historical `locker_occupancy` and `sales`. Resolved locker numbers via cascading fallback (direct join by `booking_id` -> historical occupancy by `booking_id` -> historical occupancy by `guest_label` and date -> latest historical locker for guest), eliminating "—" for past walk-ins like "L", "jave", and "VINCE".
    - **Zero Amount Formatting (`components/client-browser.tsx`, `app/(staff)/clients/page.tsx`)**: Replaced truthy checks with strict null/undefined checks (`amount != null`), explicitly formatting zero amounts as `₱0` (with payment method if available) across both table rows and history drawers.
    - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
 
-3. **2026-09-21 — Prevent Auto-Dismissal of SMS Preview Modal in New Booking Flow**
+4. **2026-09-21 — Prevent Auto-Dismissal of SMS Preview Modal in New Booking Flow**
    (`ohm#2a5d8f3c`). Implementation plan presented and approved before code execution.
    - **Modal Persistence & Backdrop Protection (`components/sms-preview-modal.tsx`)**: Isolated mouse and click events (`stopPropagation`) on the modal backdrop scrim and card container, preventing accidental dismissals from window switching, background clicks, or document-level event listeners. Modal requires explicit staff action ("Done") to close.
    - **Visual Copy Feedback & Uninterrupted Preview (`components/sms-preview-modal.tsx`)**: Upgraded "Copy" button to robust async clipboard copy with `execCommand` fallback. Clicking "Copy" shows clear `"✓ Copied!"` visual feedback (emerald accent styling with 3-second auto-reset) while keeping the modal firmly open so staff can review or send the text without premature interruption.
    - **Lifecycle & Deferred Revalidation (`components/booking-form-modal.tsx`)**: Introduced explicit `showSmsPreview` modal state. Saving advance bookings for registered clients opens the SMS Preview dialog while deferring parent `onCreated()` revalidation and success toast dispatch until staff clicks "Done", ensuring zero premature unmounting.
    - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-21 — Fix Client Selection and Portal Account Warning Handling in Quick Walkin Modal**
+5. **2026-09-21 — Fix Client Selection and Portal Account Warning Handling in Quick Walkin Modal**
    (`ohm#7d2e4f1a`). Implementation plan presented and approved before code execution.
    - **Non-blocking Portal Account Advisory (`components/quick-walkin-modal.tsx`)**: Added amber advisory notice when selecting a registered client without an online portal account: *"Client has no online portal account — walk-in booking can be confirmed normally, but loyalty points cannot be earned or redeemed for this visit."* Added subtle `No Portal Account` badge in client search typeahead suggestion list. Updated fallback query (`!propClients`) to fetch `client_portal_accounts` via `Promise.all` so `has_portal_account` evaluates accurately. Form remains completely operable.
    - **Graceful Server Action Handling (`app/(staff)/bookings/actions.ts`)**: In `quickWalkin`: checks `client_portal_accounts` for `input.clientId`. When no portal account exists, sets `pointsAwarded: null` and returns `pointsReason: "no_portal_account"`, omitting points from `quick_walkin` RPC (`p_points_earned: null`). Completely eliminates DB trigger `trg_require_portal_account_for_earn_redeem` violation, allowing the walk-in booking, sale, and locker occupancy to be created cleanly with the selected `client_id`. In `QuickWalkinModal`, skips unconfigured formula dialog when `pointsReason === "no_portal_account"`, immediately displaying the context-rich success toast and closing modal.
    - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
-
-5. **2026-09-21 — Make Date Picker Calendar Indicator Visible and White on Dark Backgrounds**
-   (`ohm#3f7a1b9e`). Implementation plan presented and approved before code execution.
-   - **Calendar Picker Indicator Styling (`app/globals.css`)**: Styled `input[type="date"]::-webkit-calendar-picker-indicator` with `filter: invert(1)` and pointer cursor for crisp, white visibility against dark surfaces (`bg-surface`, `bg-surface-2`). Added smooth hover opacity transition (`opacity: 0.85` to `1.0`). Scoped `filter: invert(0)` under `body.light` to preserve standard dark indicator contrast on light backgrounds.
-   - **Therapist Browser Interaction Parity (`components/therapist-browser.tsx`)**: Added `cursor-pointer` to the toolbar date filter input (`viewDate`) and Mark On Leave modal inputs (`leaveStart`, `leaveEnd`). Wired safe click handler calling `e.currentTarget.showPicker?.()` in a `try/catch` block so clicking anywhere on the input or icon smoothly triggers the native date picker popover. Preserved layout, padding, font styling, and focus borders.
-   - `npm run build` clean (0 errors). See [[therapists_state]] and `.ai/handoff.md`.
 
 
 

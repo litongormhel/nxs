@@ -4,10 +4,32 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#9f3e1b7c` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#6b8a2c4e` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Implement Member Portal Dashboard for Points Summary and Past Visit History — complete**
+  (`ohm#6b8a2c4e`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Member Portal Route & Session Guard (`app/portal/page.tsx`, `app/portal/actions.ts`)**:
+    - Dedicated client member dashboard mounted at `/portal`.
+    - Protected by HMAC-signed session verification (`getPortalAccountId()` in `lib/portal/session.ts`); unauthenticated requests are redirected cleanly to `/portal/login`.
+    - Added `logoutPortalAction` server action to clear the portal session cookie and redirect to login.
+  - **High-Performance Query Execution (`app/portal/page.tsx`)**:
+    - Leveraged `createServiceClient()` in server-only context for secure data access.
+    - Executed parallel fetching with `Promise.all`:
+      1. Member Profile & Points: Looked up directly from `clients` using primary key index (`id = client_id`), retrieving `codename`, `member_code`, and `points_balance` in O(1) time with zero full table scans or ledger aggregations.
+      2. Past Visits: Queried `bookings` filtered by `client_id = account.client_id` and `status = 'Completed'`, sorted descending by `booking_date` and `start_time` with hard `limit(10)`. Joins `services (name, duration_minutes)` and `therapists (name)` through pre-existing foreign keys.
+      3. QR Code Generation: Generated data URL for member's `qr_token` on the server using `qrcode` with dark theme styling.
+  - **Responsive Member Dashboard UI (`components/client-portal/member-dashboard.tsx`)**:
+    - Header / Profile card displaying welcome greeting with member codename, `@username`, Member Code (`#M-...`), prominent live **Points Balance** (`text-gold`, `bg-surface-2`), "Member QR" trigger, and "Log out" button.
+    - Interactive Member QR modal displaying the high-contrast QR code, member codename, member code, front-desk scanning instructions, and link to `/portal/qr` full-screen view.
+    - Responsive past visits section: clean desktop/tablet table and mobile card layout displaying formatted Date, 12-hour Time, Service Name, Therapist Name (with "None (Wet Area)" fallback), Duration, and "Completed" status badge.
+    - Empty state handling when no completed visits exist: *"No past visits recorded yet. Your completed visits will appear here after counter check-out."*
+    - Styled with semantic NXS dark theme tokens (`bg-surface`, `bg-surface-2`, `border-border`, `text-gold`, `text-foreground`, `text-muted`).
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors, 26 routes generated).
+  - **Next steps / References**: See [[clients_state]], `.ai/briefing.md`, and `walkthrough.md`.
 
 - **Exclude Upcoming and Unchecked-in Advance Bookings from Walk-in Guests Profile Tab — complete**
   (`ohm#9f3e1b7c`, 2026-09-21).
