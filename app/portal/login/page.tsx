@@ -28,7 +28,7 @@ export default function PortalLoginPage() {
         return;
       }
 
-      router.push("/portal/confirmation");
+      router.push("/portal");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {

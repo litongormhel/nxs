@@ -4,10 +4,22 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#6b8a2c4e` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#5d8f1e2c` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Update Portal Login Redirect and Confirmation Flow to Member Dashboard — complete**
+  (`ohm#5d8f1e2c`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Login Redirection Handler (`app/portal/login/page.tsx`)**:
+    - Updated `handleSubmit` to route to `/portal` via `router.push("/portal")` upon receiving a successful authentication response from `/portal/api/login`.
+    - Eliminates the detour to `/portal/confirmation` for returning or logging-in members, landing them directly on their Points & Past Visits dashboard.
+  - **Registration Confirmation Bridge (`app/portal/confirmation/page.tsx`)**:
+    - Added prominent primary action button "Go to Dashboard →" (`<Link href="/portal">`) styled with standard NXS gold design tokens (`bg-gold text-background hover:bg-gold-hover`).
+    - Retained the secondary "View my Member QR →" link (`/portal/qr`) below the primary button.
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors, 26 routes generated).
+  - **Next steps / References**: See [[clients_state]], `.ai/briefing.md`, and `walkthrough.md`.
 
 - **Implement Member Portal Dashboard for Points Summary and Past Visit History — complete**
   (`ohm#6b8a2c4e`, 2026-09-21).

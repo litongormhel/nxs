@@ -36,9 +36,20 @@ export default async function PortalConfirmationPage() {
         <p className="text-xs text-muted mb-1">Your member username</p>
         <p className="text-foreground font-medium">{account.username}</p>
       </div>
-      <Link href="/portal/qr" className="block mt-4 text-sm text-gold hover:underline">
-        View my Member QR &rarr;
-      </Link>
+      <div className="mt-6 flex flex-col gap-3">
+        <Link
+          href="/portal"
+          className="block w-full rounded-md bg-gold hover:bg-gold-hover text-background font-medium py-2.5 text-sm transition-colors text-center"
+        >
+          Go to Dashboard &rarr;
+        </Link>
+        <Link
+          href="/portal/qr"
+          className="block text-sm text-muted hover:text-gold transition-colors text-center"
+        >
+          View my Member QR &rarr;
+        </Link>
+      </div>
     </div>
   );
 }

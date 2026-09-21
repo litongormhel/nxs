@@ -2,6 +2,10 @@
 
 ## Implemented
 
+- **Update Portal Login Redirect and Confirmation Flow to Member Dashboard (`ohm#5d8f1e2c`, 2026-09-21)**:
+  - Updated portal login success handler in `app/portal/login/page.tsx` from `router.push("/portal/confirmation")` to `router.push("/portal")`, routing logging-in members directly to their Points & Past Visits dashboard.
+  - Enhanced the registration confirmation screen (`app/portal/confirmation/page.tsx`) by adding a prominent primary CTA button ("Go to Dashboard →") leading to `/portal`, while retaining the secondary "View my Member QR →" link.
+
 - **Member Portal Dashboard for Points Summary & Past Visits (`ohm#6b8a2c4e`, 2026-09-21)**:
   - Mounted dedicated member dashboard route at `app/portal/page.tsx`, authenticated via HMAC session token (`getPortalAccountId()` in `lib/portal/session.ts`).
   - Implemented high-performance data querying with parallelized `Promise.all` via `createServiceClient()`:
