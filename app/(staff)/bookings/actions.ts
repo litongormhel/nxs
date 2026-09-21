@@ -295,6 +295,37 @@ export async function quickWalkin(
     }
   }
 
+  // Audit active occupancy on the requested locker
+  let isReusingActiveLocker = false;
+  let activeOccId: string | null = null;
+
+  const { data: activeOccOnLocker } = await supabase
+    .from("locker_occupancy")
+    .select("id, client_id, guest_label")
+    .eq("locker_number", input.lockerNumber)
+    .is("checked_out_at", null)
+    .maybeSingle();
+
+  if (activeOccOnLocker) {
+    const isSameClient =
+      (input.clientId && activeOccOnLocker.client_id === input.clientId) ||
+      (!input.clientId &&
+        input.guestLabel &&
+        activeOccOnLocker.guest_label &&
+        activeOccOnLocker.guest_label.trim().toLowerCase() === input.guestLabel.trim().toLowerCase());
+
+    if (isSameClient) {
+      isReusingActiveLocker = true;
+      activeOccId = activeOccOnLocker.id;
+    } else {
+      return {
+        ok: false,
+        field: "locker",
+        error: "That locker was just taken — pick another.",
+      };
+    }
+  }
+
   const isSplit = input.isSplitPayment || input.paymentMethod === "Split (Cash + GCash)";
   const method1 = input.splitMethod1 ?? "Cash";
   const amount1 = isSplit ? (input.splitCashAmount ?? input.splitAmount1 ?? 0) : input.amount;
@@ -303,6 +334,165 @@ export async function quickWalkin(
 
   const primaryMethod = isSplit ? method1 : input.paymentMethod;
   const primaryAmount = isSplit ? amount1 : input.amount;
+
+  if (isReusingActiveLocker && activeOccId) {
+    // Locker is already occupied by this same client — reuse the active occupancy row
+    // and do NOT attempt a duplicate insert into locker_occupancy.
+    const bookingId = crypto.randomUUID();
+    const { error: bookingErr } = await supabase.from("bookings").insert({
+      id: bookingId,
+      client_id: input.clientId,
+      guest_label: input.guestLabel,
+      service_id: input.serviceId,
+      therapist_id: input.therapistId,
+      room_number: input.roomNumber,
+      promo_id: input.promoId,
+      booking_date: input.bookingDate,
+      start_time: input.startTime,
+      status: "Completed",
+      created_by: input.staffId,
+    });
+
+    if (bookingErr) {
+      const unavailable = therapistUnavailableError(bookingErr.message);
+      if (unavailable) {
+        return { ok: false, field: "therapist", error: unavailable };
+      }
+      if (bookingErr.code === EXCLUSION_VIOLATION) {
+        if (bookingErr.message.includes("no_double_book_room")) {
+          return {
+            ok: false,
+            field: "room",
+            error: "That room is already booked for the selected time.",
+          };
+        }
+        if (bookingErr.message.includes("no_double_book_therapist")) {
+          return {
+            ok: false,
+            field: "therapist",
+            error: "That therapist is already booked for the selected time.",
+          };
+        }
+        return { ok: false, error: "This booking conflicts with an existing one." };
+      }
+      return { ok: false, error: bookingErr.message };
+    }
+
+    const saleId = crypto.randomUUID();
+    const { error: saleErr } = await supabase.from("sales").insert({
+      id: saleId,
+      client_id: input.clientId,
+      guest_label: input.guestLabel,
+      booking_id: bookingId,
+      service_id: input.serviceId,
+      therapist_id: input.therapistId,
+      amount: primaryAmount,
+      payment_method: primaryMethod,
+      payment_ref: isSplit ? (method1 !== "Cash" ? input.paymentRef : null) : (input.paymentMethod !== "Cash" ? input.paymentRef : null),
+      promo_id: input.promoId,
+      manual_discount_type: input.manualDiscountType,
+      manual_discount_value: input.manualDiscountValue,
+      processed_by: input.staffId,
+    });
+
+    if (saleErr) {
+      return { ok: false, error: saleErr.message };
+    }
+
+    if (input.addonIds && input.addonIds.length > 0) {
+      const { data: addonsData } = await supabase
+        .from("addons")
+        .select("id, price")
+        .in("id", input.addonIds);
+      if (addonsData && addonsData.length > 0) {
+        const { error: addonsErr } = await supabase.from("sale_addons").insert(
+          addonsData.map((a) => ({
+            sale_id: saleId,
+            addon_id: a.id,
+            price_at_sale: a.price,
+          }))
+        );
+        if (addonsErr) {
+          return { ok: false, error: addonsErr.message };
+        }
+      }
+    }
+
+    if (input.clientId && pointsAwarded != null) {
+      const { data: svc } = await supabase
+        .from("services")
+        .select("name")
+        .eq("id", input.serviceId)
+        .single();
+      const { error: ptsErr } = await supabase.from("point_transactions").insert({
+        client_id: input.clientId,
+        booking_id: bookingId,
+        sale_id: saleId,
+        points_delta: pointsAwarded,
+        entry_type: "EARN",
+        source: "STAFF_MANUAL",
+        processed_by: input.staffId,
+        notes: `Visit: ${svc?.name ?? "Service"}`,
+      });
+      if (ptsErr) {
+        console.warn("[quickWalkin] points insert warning:", ptsErr);
+      }
+    }
+
+    // Safely link the new booking to the existing active locker assignment
+    const { error: occErr } = await supabase
+      .from("locker_occupancy")
+      .update({
+        room_number: input.roomNumber,
+        service_id: input.serviceId,
+        checked_in_by: input.staffId,
+        booking_id: bookingId,
+      })
+      .eq("id", activeOccId);
+
+    if (occErr) {
+      return { ok: false, error: occErr.message };
+    }
+
+    if (isSplit && amount2 > 0) {
+      const { error: splitErr } = await supabase.from("sales").insert({
+        client_id: input.clientId,
+        guest_label: input.guestLabel,
+        booking_id: bookingId,
+        service_id: input.serviceId,
+        therapist_id: input.therapistId,
+        amount: amount2,
+        payment_method: method2,
+        payment_ref: input.paymentRef,
+        promo_id: input.promoId,
+        manual_discount_type: input.manualDiscountType,
+        manual_discount_value: input.manualDiscountValue,
+        processed_by: input.staffId,
+      });
+      if (splitErr) {
+        return { ok: false, error: splitErr.message };
+      }
+    }
+
+    const { data: svc } = await supabase
+      .from("services")
+      .select("name")
+      .eq("id", input.serviceId)
+      .single();
+
+    await supabase.from("action_logs").insert({
+      staff_id: input.staffId,
+      action: "quick_walkin",
+      detail: `client=${input.clientId} guest=${input.guestLabel} service=${svc?.name ?? "Service"} amount=${primaryAmount} sale_id=${saleId} booking_id=${bookingId} points_awarded=${pointsAwarded ?? (input.clientId ? "NONE:formula_not_configured" : "n/a")}`,
+    });
+
+    revalidatePath("/bookings");
+    revalidatePath("/dashboard");
+    revalidatePath("/sales");
+    revalidatePath("/lockers");
+
+    return { ok: true, bookingId, pointsAwarded, pointsReason };
+  }
 
   const { data, error } = await supabase.rpc("quick_walkin", {
     p_client_id: input.clientId,
@@ -386,6 +576,7 @@ export async function quickWalkin(
   revalidatePath("/bookings");
   revalidatePath("/dashboard");
   revalidatePath("/sales");
+  revalidatePath("/lockers");
 
   return { ok: true, bookingId, pointsAwarded, pointsReason };
 }

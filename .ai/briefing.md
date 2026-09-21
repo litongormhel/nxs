@@ -81,36 +81,36 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-21 — Refine Member Portal UI and Align Verified Past Visit Queries**
+1. **2026-09-21 — Allow Active Locker Reuse for Successive Bookings of Same Client**
+   (`ohm#5e9a1b3d`). Implementation plan presented and approved before code execution.
+   - **Active Locker Reuse Audit & Resolution (`app/(staff)/bookings/actions.ts`)**: Updated `quickWalkin` to audit target locker occupancy before booking. When `locker_occupancy` has an active occupant for `input.lockerNumber` belonging to the same client (`client_id === input.clientId` or matching `guest_label`), safely treats this as active locker reuse.
+   - **Duplicate Occupancy Avoidance**: Reuses and updates the existing active `locker_occupancy` row with the new `booking_id`, `service_id`, `room_number`, and `checked_in_by` instead of attempting a duplicate insert, preventing `one_active_occupant_per_locker` (code `23505`) conflicts. If occupied by a different client, strictly returns `"That locker was just taken — pick another."`.
+   - **Database Migration (`supabase/migrations/20260921120000_quick_walkin_active_locker_reuse.sql`)**: Updated `quick_walkin` PL/pgSQL function to support locker reuse on matching `p_locker_number` and client identity.
+   - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
+
+2. **2026-09-21 — Refine Member Portal UI and Align Verified Past Visit Queries**
    (`ohm#8c1e4f9b`). Implementation plan presented and approved before code execution.
    - **UI Cleanup (`components/client-portal/member-dashboard.tsx`)**: Removed the `#M-XXXXXX` member code badge from the greeting/profile card while cleanly retaining `@username`. Removed the `DURATION` column header and duration text cells from both desktop table and mobile card views.
    - **Verified Past Visit Query Alignment (`app/portal/page.tsx`)**: Upgraded visit history query with relational joins to `point_transactions` and `sales`. Bookings are verified if status is `completed`, or if associated with active `EARN` ledger entries or non-voided sales. Strictly excludes genuinely cancelled/no-show bookings (such as unverified Sep 21 bookings). Verified that member `ohmpayatt` retrieves all 3 legitimate past visits from Sep 18 in chronological descending order, and the counter pill accurately displays `3 visits`.
    - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
 
-2. **2026-09-21 — Update Portal Login Redirect and Confirmation Flow to Member Dashboard**
+3. **2026-09-21 — Update Portal Login Redirect and Confirmation Flow to Member Dashboard**
    (`ohm#5d8f1e2c`). Implementation plan presented and approved before code execution.
    - **Login Redirect Update (`app/portal/login/page.tsx`)**: Updated successful login redirection handler from `/portal/confirmation` directly to `/portal` (Member Dashboard), enabling returning and logging-in members to immediately access their live points balance and past visit records.
    - **Registration Confirmation Bridge (`app/portal/confirmation/page.tsx`)**: Added a prominent primary CTA button ("Go to Dashboard →") leading to `/portal` styled with standard gold tokens (`bg-gold text-background hover:bg-gold-hover`), while retaining the "View my Member QR →" link.
    - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
 
-3. **2026-09-21 — Implement Member Portal Dashboard for Points Summary and Past Visit History**
+4. **2026-09-21 — Implement Member Portal Dashboard for Points Summary and Past Visit History**
    (`ohm#6b8a2c4e`). Implementation plan presented and approved before code execution.
    - **Member Portal Route & Authentication (`app/portal/page.tsx`, `app/portal/actions.ts`)**: Implemented dedicated dashboard at `/portal` for authenticated members. Session validated via HMAC token (`getPortalAccountId()`); unauthenticated requests redirect cleanly to `/portal/login`. Created `logoutPortalAction` to securely clear session and redirect.
    - **High-Performance Query Execution (`app/portal/page.tsx`)**: Parallelized queries with `Promise.all` via `createServiceClient()`. Looked up live points balance and member code directly from `clients` using primary key index (O(1), zero table scans or ledger aggregations). Queried verified past visits from `bookings` filtered by `client_id` and `status = 'Completed'`, sorted descending by date/time and capped at 10 records with indexed joins to `services` and `therapists`. Pre-generated QR data URL with `qrcode`.
    - **Responsive Member Dashboard UI (`components/client-portal/member-dashboard.tsx`)**: Built mobile-first member interface with NXS dark theme tokens (`bg-surface`, `bg-surface-2`, `text-gold`, `border-border`). Displays greeting with codename and `@username`, `#M-...` badge, prominent live Points Balance card, "Member QR" modal trigger, full QR code modal with front-desk instructions, and responsive past visits table/card list with empty state handling.
    - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
 
-4. **2026-09-21 — Exclude Upcoming and Unchecked-in Advance Bookings from Walk-in Guests Profile Tab**
+5. **2026-09-21 — Exclude Upcoming and Unchecked-in Advance Bookings from Walk-in Guests Profile Tab**
    (`ohm#9f3e1b7c`). Implementation plan presented and approved before code execution.
    - **Audit & Status Filter (`app/(staff)/clients/page.tsx`)**: Filtered `rawWalkIns` in Manila time (`Asia/Manila`, UTC+8). Excluded scheduled future bookings (`booking_date > todayManila`) and un-checked-in advance bookings. A walk-in booking is strictly included only if status is `completed`, `in_service`, or has a direct `locker_occupancy` or `sales` record linked by `booking_id`. Excluded un-checked-in bookings with status `Booked`, `Needs Reassignment`, `Cancelled`, `No-show`, `confirmed`, or `pending`.
    - **Verified History Counts & Grouping (`components/client-browser.tsx`)**: Added defensive status/locker/payment checks to `groupedWalkIns`. Ensured `TOTAL VISITS` count (`visitCount`) and `LAST VISIT DATE` (`lastVisitDate`) strictly reflect actual past/completed visits.
-   - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
-
-5. **2026-09-21 — Fix Walk-In Guest History Click Action, Locker Resolution, and Zero Amount Formatting**
-   (`ohm#4c9e2b1a`). Implementation plan presented and approved before code execution.
-   - **Interactive History Drawer (`components/client-browser.tsx`)**: Mounted slide-over drawer triggered by "View Past Stays →" button or table row click for walk-in guests (`activeWalkInGroup`). Renders detailed visit cards showing Visit #, Date, 12-hour Time, Service, Therapist, Massage Time, Room (`Room [Num]` or `None (Wet Area)`), Locker (`Locker [Num]` or `None`), explicit Amount Paid & Payment Method, Status, and Booking ID. Fully styled with theme tokens (`bg-surface`, `bg-surface-2`, `border-border`, gold accents).
-   - **Cascading Locker & Amount Resolution (`app/(staff)/clients/page.tsx`, `components/client-browser.tsx`)**: Audited queries and added parallel fetching for historical `locker_occupancy` and `sales`. Resolved locker numbers via cascading fallback (direct join by `booking_id` -> historical occupancy by `booking_id` -> historical occupancy by `guest_label` and date -> latest historical locker for guest), eliminating "—" for past walk-ins like "L", "jave", and "VINCE".
-   - **Zero Amount Formatting (`components/client-browser.tsx`, `app/(staff)/clients/page.tsx`)**: Replaced truthy checks with strict null/undefined checks (`amount != null`), explicitly formatting zero amounts as `₱0` (with payment method if available) across both table rows and history drawers.
    - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
 
 

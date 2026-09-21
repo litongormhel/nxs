@@ -4,10 +4,26 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#8c1e4f9b` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#5e9a1b3d` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Allow Active Locker Reuse for Successive Bookings of Same Client — complete**
+  (`ohm#5e9a1b3d`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Locker Occupancy Audit & Validation (`app/(staff)/bookings/actions.ts`)**:
+    - In `quickWalkin`, added audit querying `locker_occupancy` for an active occupant (`checked_out_at IS NULL`) on `input.lockerNumber`.
+    - Validates client identity: if the active occupancy belongs to the same client (`input.clientId && activeOccOnLocker.client_id === input.clientId`) or matching guest name (`!input.clientId && lower(activeOccOnLocker.guest_label) === lower(input.guestLabel)`), treats this as valid active locker reuse (`isReusingActiveLocker = true`, retaining `activeOccId`).
+    - If the locker is actively occupied by a different client/guest, strictly rejects with `{ ok: false, field: "locker", error: "That locker was just taken — pick another." }`.
+  - **Safe Execution & Duplicate Insertion Prevention (`app/(staff)/bookings/actions.ts`)**:
+    - When `isReusingActiveLocker` is true, performs clean atomic sequence: creates `bookings` (status `'Completed'` with double-booking GiST exclusion constraints intact), creates `sales` (and split sale if applicable), creates `sale_addons`, creates `point_transactions`, and updates the existing `locker_occupancy` row (`room_number`, `service_id`, `checked_in_by`, `booking_id`) without performing a duplicate insert.
+    - Prevents `one_active_occupant_per_locker` (code `23505`) conflicts when already-checked-in clients book successive sessions.
+    - Emits audit log to `action_logs` and revalidates paths (`/bookings`, `/dashboard`, `/sales`, `/lockers`).
+  - **Database Migration (`supabase/migrations/20260921120000_quick_walkin_active_locker_reuse.sql`)**:
+    - Updated `quick_walkin` PL/pgSQL function to inspect `locker_occupancy` on `p_locker_number` for matching client identity and update the existing row rather than attempting a duplicate insert.
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors, 26 routes generated). Live scenario test verified that matching client ID on active locker evaluates to true and non-matching evaluates to false without conflict errors.
+  - **Next steps / References**: See [[bookings_state]], [[lockers_state]], `.ai/briefing.md`, and `walkthrough.md`.
 
 - **Refine Member Portal UI and Align Verified Past Visit Queries — complete**
   (`ohm#8c1e4f9b`, 2026-09-21).

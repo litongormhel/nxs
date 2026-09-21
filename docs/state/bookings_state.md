@@ -582,6 +582,20 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Defers calling `onCreated()` and dispatching `showBookingToast` until staff clicks "Done" in the SMS Preview modal, completely preventing premature parent unmounting (`BookingBrowser` unmounting `BookingFormModal`) or premature toast fade while reviewing text.
 - `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
 
+**Correction, `ohm#5e9a1b3d` (2026-09-21)** — Allow Active Locker Reuse for Successive Bookings of Same Client in Quick Walk-in.
+
+- **Active Locker Reuse Audit (`app/(staff)/bookings/actions.ts`)**:
+  - Audited `quickWalkin` to inspect `locker_occupancy` for an active occupant (`checked_out_at IS NULL`) on `input.lockerNumber`.
+  - When the target locker is occupied by the same client (`client_id === input.clientId` or matching `guest_label`), safely treats this as active locker reuse.
+  - If occupied by a different client/guest, strictly returns `{ ok: false, field: "locker", error: "That locker was just taken — pick another." }`.
+- **Safe Execution & Duplicate Insertion Prevention (`app/(staff)/bookings/actions.ts`)**:
+  - In the locker reuse branch, creates `bookings` (status `'Completed'` with double-booking GiST exclusion constraints intact), `sales`, optional `sale_addons`, optional `point_transactions`, and updates the existing `locker_occupancy` row (`room_number`, `service_id`, `checked_in_by`, `booking_id`) without performing a duplicate insert.
+  - Completely prevents `one_active_occupant_per_locker` (Postgres error `23505`) conflicts when already-checked-in clients book successive massage sessions.
+  - Emits audit log to `action_logs` (`quick_walkin`) and revalidates paths (`/bookings`, `/dashboard`, `/sales`, `/lockers`).
+- **Database Migration (`supabase/migrations/20260921120000_quick_walkin_active_locker_reuse.sql`)**:
+  - Updated `quick_walkin` PL/pgSQL function to support locker reuse on matching `p_locker_number` and client identity, updating existing occupancy rather than attempting an unconditional duplicate insert.
+- `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - The New Booking conflict-greying query re-fetches on every date change
