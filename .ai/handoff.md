@@ -4,10 +4,19 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#8b4d1c9e` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#4f8c2e1b` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Align ROOM Column Styling with Locker # in Bookings Table — complete**
+  (`ohm#4f8c2e1b`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **ROOM pill removed (`components/booking-browser.tsx`, lines 480–488)**: `renderRoomPill()` previously wrapped the room display in `<span className="rounded-full border border-border bg-background px-2 py-0.5 text-[8.5px] font-extrabold text-accent-gold">`. All badge/pill classes stripped. Now renders `<span className="text-muted">Room {row.room_number}</span>` or `<span className="text-muted">—</span>` — matching exactly the plain typography of the LOCKER # column (`text-muted`, no container, no border, no background).
+  - **Null/empty safety unchanged**: `row.room_number ? ... : "—"` guard preserved verbatim.
+  - **Scope**: `renderRoomPill()` is called from exactly one `<td>` (line 717), shared across all three tabs — Upcoming, Check-in, Check-out. Single-point fix covers all views simultaneously.
+  - **No regressions**: no data fetching, server actions, tab logic, Edit modal, cancel dialog, SMS interpolation, or DB constraints were touched.
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors, 26 routes generated).
 
 - **Add Subtitle, Date Stepper Chevrons, and Inline Filter Bar to Bookings Tab — complete**
   (`ohm#8b4d1c9e`, 2026-09-21).

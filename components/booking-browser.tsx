@@ -479,9 +479,7 @@ export function BookingBrowser({
 
   function renderRoomPill(row: BookingRow) {
     return row.room_number ? (
-      <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[8.5px] font-extrabold text-accent-gold">
-        Room {row.room_number}
-      </span>
+      <span className="text-muted">Room {row.room_number}</span>
     ) : (
       <span className="text-muted">—</span>
     );
