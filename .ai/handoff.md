@@ -4,10 +4,31 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#5c8e1a4f` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#8e1a4f2c` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Prevent Owner and Current Staff from Archiving Themselves — complete**
+  (`ohm#8e1a4f2c`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Server Action Validation (`app/(staff)/staff/actions.ts`)**:
+    - In `archiveStaff(staffId, reason, actorStaffId)`:
+      - Authenticated session verification: retrieves active `user` via `supabase.auth.getUser()`.
+      - Identifies caller's staff record `callerStaff` from `staff` where `user_id = user.id`.
+      - Selects target staff record with `position`.
+      - Guard 1 (Self-Archival): Rejects when `target.id === callerStaff.id` or `target.user_id === user.id` with error `"You cannot archive your own account."`.
+      - Guard 2 (Last Owner): When `target.position === 'Owner'`, counts remaining active owners (`position = 'Owner'` and `active = true` and `id != target.id`). Rejects when count is 0 with error `"Cannot archive the only active Owner."`.
+  - **Staff Directory UI (`components/staff-browser.tsx`)**:
+    - Uses `currentStaff` and `sessionStaff` from `useStaffSim()` context.
+    - Evaluates whether a card represents the current logged-in user (`s.id === currentStaffMember?.id`).
+    - In the kebab dropdown (`⋮`), renders the "Archive" button disabled with `title="You cannot archive your own account"` and muted styling (`text-accent-red/40 cursor-not-allowed`).
+    - Preserves "Reset password" and "Edit details" as active and clickable for the current user.
+    - Defense-in-depth: prevents opening archive modal or executing archive mutation if target matches caller.
+  - **State Documentation**:
+    - Updated `docs/state/staff_state.md` with Guard 1 and Guard 2 server rules and UI tooltip behavior.
+  - **Verification**:
+    - `npm run build` clean (0 errors, 26 routes generated).
 
 - **Redesign Member Profile Drawer with Streamlined Header and 2-Column Stats — complete**
   (`ohm#5c8e1a4f`, 2026-09-21).

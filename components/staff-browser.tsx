@@ -46,7 +46,8 @@ export function StaffBrowser({
   initialArchived: ArchivedStaff[];
 }) {
   const router = useRouter();
-  const { currentRole, sessionStaff } = useStaffSim();
+  const { currentRole, sessionStaff, currentStaff } = useStaffSim();
+  const currentStaffMember = currentStaff ?? sessionStaff;
 
   const [staffList, setStaffList] = useState<Staff[]>(initialStaff);
   const [archivedList, setArchivedList] = useState<ArchivedStaff[]>(initialArchived);
@@ -192,6 +193,7 @@ export function StaffBrowser({
   };
 
   const openArchiveModal = (s: Staff) => {
+    if (s.id === currentStaffMember?.id) return;
     setOpenKebabId(null);
     setArchiveTarget(s);
     setArchiveReason("");
@@ -200,6 +202,10 @@ export function StaffBrowser({
 
   const confirmArchive = async () => {
     if (!archiveTarget) return;
+    if (archiveTarget.id === currentStaffMember?.id) {
+      setArchiveError("You cannot archive your own account.");
+      return;
+    }
     const res = await archiveStaff(archiveTarget.id, archiveReason.trim() || null, sessionStaff?.id ?? "");
     if (!res.ok) {
       setArchiveError(res.error);
@@ -305,13 +311,24 @@ export function StaffBrowser({
                   >
                     Edit details
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => openArchiveModal(s)}
-                    className="block w-full px-3 py-2 text-left text-[11px] text-accent-red hover:bg-white/5"
-                  >
-                    Archive
-                  </button>
+                  {s.id === currentStaffMember?.id ? (
+                    <button
+                      type="button"
+                      disabled
+                      title="You cannot archive your own account"
+                      className="block w-full px-3 py-2 text-left text-[11px] text-accent-red/40 cursor-not-allowed"
+                    >
+                      Archive
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => openArchiveModal(s)}
+                      className="block w-full px-3 py-2 text-left text-[11px] text-accent-red hover:bg-white/5"
+                    >
+                      Archive
+                    </button>
+                  )}
                 </div>
               )}
             </div>

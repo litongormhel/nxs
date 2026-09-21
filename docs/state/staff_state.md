@@ -222,6 +222,9 @@ Owner-gated, each re-checking Owner status server-side via `requireOwner()`
   `"none"` to re-enable) when the staff row has a linked `user_id`.
   Historical joins (sales, bookings, action_logs, `commission_rates
   .created_by`, etc.) are untouched — no cascade, no FK changes.
+  **Safeguards (`ohm#8e1a4f2c`, 2026-09-21)**:
+  - Guard 1 (Self-Archival): Server verifies caller's staff identity and rejects self-archival (`target.id === callerStaff.id || target.user_id === user.id`) with `"You cannot archive your own account."`
+  - Guard 2 (Last Owner): Server checks remaining active staff with `position === 'Owner'`. If none exist, rejects with `"Cannot archive the only active Owner."`
 - `resetStaffPassword` — Admin API password update + re-arms
   `must_change_password`.
 - `updateStaffDetails` — name/comment only (no position change UI).
@@ -236,8 +239,9 @@ above.
 
 **UI (`components/staff-browser.tsx`)**: kebab menu per active staff card
 (Reset password — only shown for login-capable staff with a `username` set
-— / Edit details / Archive), a collapsed "Archived staff (N)" section with
-Restore, an Archive-confirm modal (signed-out warning for login-capable
+— / Edit details / Archive — disabled with tooltip `"You cannot archive your own account"`
+when inspecting one's own card, per `ohm#8e1a4f2c`), a collapsed "Archived staff (N)"
+section with Restore, an Archive-confirm modal (signed-out warning for login-capable
 positions, optional reason), and an enhanced Add Staff modal
 (Username/Password/Generate/"require password change on first login",
 shown only for Receptionist/Supervisor).

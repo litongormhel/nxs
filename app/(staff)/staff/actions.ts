@@ -141,13 +141,44 @@ export async function archiveStaff(
   const ownerErr = await requireOwner(supabase);
   if (ownerErr) return ownerErr;
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { data: callerStaff, error: callerErr } = await supabase
+    .from("staff")
+    .select("id, position")
+    .eq("user_id", user.id)
+    .single();
+  if (callerErr || !callerStaff) {
+    return fail(callerErr ?? new Error("Caller staff record not found."));
+  }
+
   const { data: target, error: fetchErr } = await supabase
     .from("staff")
-    .select("id, name, user_id, active")
+    .select("id, name, user_id, active, position")
     .eq("id", staffId)
     .single();
   if (fetchErr) return fail(fetchErr);
   if (!target.active) return { ok: false, error: "Already archived." };
+
+  if (target.id === callerStaff.id || (target.user_id && target.user_id === user.id)) {
+    return { ok: false, error: "You cannot archive your own account." };
+  }
+
+  if (target.position === "Owner") {
+    const { count, error: countErr } = await supabase
+      .from("staff")
+      .select("id", { count: "exact", head: true })
+      .eq("position", "Owner")
+      .eq("active", true)
+      .neq("id", target.id);
+    if (countErr) return fail(countErr);
+    if (!count || count === 0) {
+      return { ok: false, error: "Cannot archive the only active Owner." };
+    }
+  }
 
   const { error } = await supabase
     .from("staff")
