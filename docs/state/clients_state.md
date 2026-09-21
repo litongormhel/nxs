@@ -2,6 +2,11 @@
 
 ## Implemented
 
+- **Owner-Only Feature Toggle for Past Walk-in Visit Claims (`ohm#3d8a1c9e`, 2026-09-21)**:
+  - **Server-Side Validation (`app/(staff)/clients/actions.ts`)**: In `requestWalkinClaim`, checks `app_settings.allow_walkin_claims`. If disabled (`false`), rejects claim creation immediately with `"Past walk-in claims are currently disabled."`. Existing pending claims processing (`approveWalkinClaim`, `approveAllWalkinClaims`, `rejectWalkinClaim`) remains untouched and fully actionable by Supervisors/Owners.
+  - **Member Profile Drawer UI (`components/client-browser.tsx`, `app/(staff)/clients/page.tsx`)**: Queries `allow_walkin_claims` and passes `allowWalkinClaims` prop to `<ClientBrowser />`. When disabled (`false`), disables the "Claim Past Walk-in Visit" button in the Member Profile Drawer with clear tooltip `"Walk-in claiming is currently disabled by Owner"`. Guards `handleSubmitClaim` client-side.
+  - `npm run build` verified clean (0 errors).
+
 - **Refine Layout of Pending Claims Table Columns (`ohm#6d1f3e8a`, 2026-09-21)**:
   - **Pending Claims Table UI (`components/client-browser.tsx`)**:
     - **Target Member Column**: Removed the `#M-...` member code badge pill from the table cell, retaining clean display of member codename and username (`@{username}`).

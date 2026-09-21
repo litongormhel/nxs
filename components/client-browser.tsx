@@ -146,6 +146,7 @@ export function ClientBrowser({
   walkInVisits = [],
   pendingClaims = [],
   loyaltySettings = { mode: "proportional", pesoPerPoint: null },
+  allowWalkinClaims = true,
   memberTransactions = [],
   memberBookings = [],
   services = [],
@@ -160,6 +161,7 @@ export function ClientBrowser({
   walkInVisits?: WalkInVisit[];
   pendingClaims?: PendingClaim[];
   loyaltySettings?: { mode: string; pesoPerPoint: number | null };
+  allowWalkinClaims?: boolean;
   memberTransactions?: any[];
   memberBookings?: any[];
   services?: Service[];
@@ -580,6 +582,13 @@ export function ClientBrowser({
 
   async function handleSubmitClaim() {
     if (!selectedCandidate || !selectedMemberForProfile) return;
+    if (!allowWalkinClaims) {
+      setClaimFeedback({
+        ok: false,
+        message: "Past walk-in claims are currently disabled.",
+      });
+      return;
+    }
     setIsSubmittingClaim(true);
     setClaimFeedback(null);
 
@@ -1361,18 +1370,29 @@ export function ClientBrowser({
               >
                 <span>+</span> Log Visit for Member
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedCandidate(null);
-                  setClaimSearch("");
-                  setClaimFeedback(null);
-                  setShowClaimModal(true);
-                }}
-                className="w-full flex items-center justify-center gap-1.5 rounded-md border border-gold/40 bg-gold/5 px-4 py-2 text-xs font-semibold text-gold hover:bg-gold/15 transition-colors cursor-pointer"
-              >
-                <span>🏷</span> Claim Past Walk-in Visit
-              </button>
+              {allowWalkinClaims ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCandidate(null);
+                    setClaimSearch("");
+                    setClaimFeedback(null);
+                    setShowClaimModal(true);
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-md border border-gold/40 bg-gold/5 px-4 py-2 text-xs font-semibold text-gold hover:bg-gold/15 transition-colors cursor-pointer"
+                >
+                  <span>🏷</span> Claim Past Walk-in Visit
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  title="Walk-in claiming is currently disabled by Owner"
+                  className="w-full flex items-center justify-center gap-1.5 rounded-md border border-border bg-surface-2 px-4 py-2 text-xs font-semibold text-muted opacity-50 cursor-not-allowed"
+                >
+                  <span>🏷</span> Claim Past Walk-in Visit (Disabled by Owner)
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setSelectedMemberForProfile(null)}

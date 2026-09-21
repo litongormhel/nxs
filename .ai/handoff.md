@@ -4,10 +4,32 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#6d1f3e8a` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#3d8a1c9e` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Add Owner-Only Feature Toggle to Enable/Disable Past Walk-in Visit Claims — complete**
+  (`ohm#3d8a1c9e`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Database Migration & Schema (`supabase/migrations/20260921170000_add_walkin_claim_toggle.sql`)**:
+    - Adds `allow_walkin_claims boolean not null default true` column to `public.app_settings`.
+    - Dispatches `NOTIFY pgrst, 'reload schema'` to refresh the PostgREST schema cache.
+  - **Server Actions & Settings (`app/(staff)/settings/actions.ts`, `app/(staff)/settings/page.tsx`)**:
+    - Added `updateWalkinClaimsSetting(enabled, staffId)` action strictly gated by `requireOwner(supabase)`. Updates `allow_walkin_claims` in `app_settings` (with service client fallback), writes audit log `settings_update_walkin_claims_toggle` to `action_logs`, and revalidates `/settings` and `/clients`.
+    - Updated `app_settings` query in `app/(staff)/settings/page.tsx` to fetch `allow_walkin_claims` with fallback (`?? true`), passing `initialAllowWalkinClaims` to `<SettingsBrowser />`.
+  - **Settings UI (`components/settings-browser.tsx`)**:
+    - Under Promos & Security tab, added "Allow Walk-in Visit Claims" toggle card with title and descriptive text.
+    - Interaction strictly gated to Owner role (`isOwner`). When viewed by non-owners, displays in an informative disabled state explaining it is an Owner-only setting.
+    - Wired switch to `handleToggleWalkinClaims` calling `updateWalkinClaimsSetting` with live state update and toast feedback.
+  - **Client Drawer & Action Enforcement (`app/(staff)/clients/actions.ts`, `app/(staff)/clients/page.tsx`, `components/client-browser.tsx`)**:
+    - In `app/(staff)/clients/page.tsx`, selected `allow_walkin_claims` from `app_settings` and passed `allowWalkinClaims` prop to `<ClientBrowser />`.
+    - In `components/client-browser.tsx`, when `allowWalkinClaims` is `false`, disables the "Claim Past Walk-in Visit" button in the Member Profile Drawer with clear tooltip and label: `"Claim Past Walk-in Visit (Disabled by Owner)"`.
+    - In `components/client-browser.tsx` (`handleSubmitClaim`), guards against submission if `!allowWalkinClaims`.
+    - In `app/(staff)/clients/actions.ts` (`requestWalkinClaim`), queries `app_settings.allow_walkin_claims` and rejects new claim submissions with error `"Past walk-in claims are currently disabled."` when false.
+    - Preserved `approveWalkinClaim`, `approveAllWalkinClaims`, and `rejectWalkinClaim` unchanged, allowing existing pending claims to be reviewed and approved even when new claims are disabled.
+  - **Verification**:
+    - `npm run build` clean (0 errors, 26 routes generated).
 
 - **Refine Layout of Pending Claims Table Columns — complete**
   (`ohm#6d1f3e8a`, 2026-09-21).

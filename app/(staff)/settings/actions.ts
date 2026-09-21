@@ -289,6 +289,58 @@ export async function updateLoyaltyFormula(
   return { ok: true };
 }
 
+// ---------- Walk-in Claims Setting (Owner Only) ----------
+
+export async function updateWalkinClaimsSetting(
+  enabled: boolean,
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const ownerCheck = await requireOwner(supabase);
+  if (ownerCheck) return ownerCheck;
+
+  try {
+    let clientToUse: any = supabase;
+    let { error } = await (clientToUse as any)
+      .from("app_settings")
+      .update({ allow_walkin_claims: enabled })
+      .eq("id", true);
+
+    if (error && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const serviceClient = createServiceClient();
+        const { error: serviceError } = await (serviceClient as any)
+          .from("app_settings")
+          .update({ allow_walkin_claims: enabled })
+          .eq("id", true);
+        if (!serviceError) {
+          error = null;
+          clientToUse = serviceClient;
+        } else {
+          error = serviceError;
+        }
+      } catch {
+        // Fall back to original error
+      }
+    }
+
+    if (error) return fail(error);
+
+    await logAction(
+      clientToUse,
+      staffId,
+      "settings_update_walkin_claims_toggle",
+      `allow_walkin_claims=${enabled}`
+    );
+
+    revalidatePath("/settings");
+    revalidatePath("/clients");
+    return { ok: true };
+  } catch (err: unknown) {
+    return fail(err);
+  }
+}
+
 // ---------- SMS Confirmation Template ----------
 
 export async function updateSmsTemplate(

@@ -135,9 +135,9 @@ export default async function ClientsPage() {
       .select("id, booking_id, guest_label, amount, payment_method, created_at")
       .not("guest_label", "is", null)
       .order("created_at", { ascending: false }),
-    supabase
+    (supabase as any)
       .from("app_settings")
-      .select("loyalty_formula_mode, peso_per_point")
+      .select("loyalty_formula_mode, peso_per_point, allow_walkin_claims")
       .eq("id", true)
       .maybeSingle(),
     (supabase as any)
@@ -465,6 +465,7 @@ export default async function ClientsPage() {
             mode: appSettings?.loyalty_formula_mode ?? "proportional",
             pesoPerPoint: appSettings?.peso_per_point ?? null,
           }}
+          allowWalkinClaims={appSettings?.allow_walkin_claims ?? true}
           memberTransactions={(rawMemberTransactions ?? []) as any[]}
           memberBookings={(rawMemberBookings ?? []) as any[]}
           services={services ?? []}

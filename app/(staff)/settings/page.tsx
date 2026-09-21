@@ -38,19 +38,27 @@ export default async function SettingsPage() {
       .from("rooms")
       .select("*", { count: "exact", head: true })
       .eq("active", true),
-    supabase
+    (supabase as any)
       .from("app_settings")
-      .select("loyalty_formula_mode, peso_per_point, void_auth_code_hash, sms_confirmation_template")
+      .select("loyalty_formula_mode, peso_per_point, void_auth_code_hash, sms_confirmation_template, allow_walkin_claims")
       .eq("id", true)
       .single()
-      .then(async (res) => {
+      .then(async (res: any) => {
         if (res.error) {
-          const fallback = await supabase
+          const fallback = await (supabase as any)
             .from("app_settings")
             .select("loyalty_formula_mode, peso_per_point, void_auth_code_hash")
             .eq("id", true)
             .single();
-          return { data: fallback.data ? { ...fallback.data, sms_confirmation_template: null } : null };
+          return {
+            data: fallback.data
+              ? {
+                  ...fallback.data,
+                  sms_confirmation_template: null,
+                  allow_walkin_claims: true,
+                }
+              : null,
+          };
         }
         return res;
       }),
@@ -89,6 +97,7 @@ export default async function SettingsPage() {
         initialPesoPerPoint={appSettings?.peso_per_point ?? null}
         initialVoidAuthCodeConfigured={!!appSettings?.void_auth_code_hash}
         initialSmsTemplate={appSettings?.sms_confirmation_template ?? null}
+        initialAllowWalkinClaims={appSettings?.allow_walkin_claims ?? true}
       />
     </div>
   );

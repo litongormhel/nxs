@@ -91,6 +91,20 @@ export async function requestWalkinClaim(
     db = supabase;
   }
 
+  // 1.5. Check allow_walkin_claims setting before processing
+  const { data: settings } = await (db as any)
+    .from("app_settings")
+    .select("allow_walkin_claims, loyalty_formula_mode, peso_per_point")
+    .eq("id", true)
+    .maybeSingle();
+
+  if (settings && settings.allow_walkin_claims === false) {
+    return {
+      ok: false,
+      error: "Past walk-in claims are currently disabled.",
+    };
+  }
+
   // 2. Validate booking exists and is unlinked
   const { data: booking, error: bkErr } = await db
     .from("bookings")
@@ -137,12 +151,6 @@ export async function requestWalkinClaim(
   if (serviceName === "Wet Area") {
     pointsToCredit = WET_AREA_POINTS;
   } else {
-    const { data: settings } = await db
-      .from("app_settings")
-      .select("loyalty_formula_mode, peso_per_point")
-      .eq("id", true)
-      .maybeSingle();
-
     const mode = (settings?.loyalty_formula_mode ?? "proportional") as LoyaltyFormulaMode;
     pointsToCredit = computeLoyaltyPoints(
       mode,

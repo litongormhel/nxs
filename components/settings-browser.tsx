@@ -20,6 +20,7 @@ import {
   updateRoomCount,
   updateSmsTemplate,
   resetSmsTemplate,
+  updateWalkinClaimsSetting,
 } from "@/app/(staff)/settings/actions";
 import { compareSlotTimes } from "@/lib/bookings/slots";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -96,6 +97,7 @@ export function SettingsBrowser({
   initialPesoPerPoint,
   initialVoidAuthCodeConfigured,
   initialSmsTemplate,
+  initialAllowWalkinClaims = true,
 }: {
   initialServices: Service[];
   initialPromos: Promo[];
@@ -108,6 +110,7 @@ export function SettingsBrowser({
   initialPesoPerPoint: number | null;
   initialVoidAuthCodeConfigured: boolean;
   initialSmsTemplate?: string | null;
+  initialAllowWalkinClaims?: boolean;
 }) {
   const router = useRouter();
 
@@ -119,6 +122,7 @@ export function SettingsBrowser({
   const { currentStaff, currentRole, sessionStaff } = useStaffSim();
   const selectedStaffId = sessionStaff?.id ?? "";
 
+  const isOwner = currentRole === "Owner";
   const canEditServices =
     currentRole === "Supervisor" || currentRole === "Owner";
   const canEditPromos = currentRole === "Owner";
@@ -126,6 +130,32 @@ export function SettingsBrowser({
     currentRole === "Supervisor" || currentRole === "Owner";
   const canEditLoyaltyFormula = currentRole === "Owner";
   const canEditVoidAuthCode = currentRole === "Owner";
+
+  // Walk-in Claims Toggle state
+  const [allowWalkinClaims, setAllowWalkinClaims] = useState<boolean>(
+    initialAllowWalkinClaims ?? true
+  );
+  const [isSavingWalkinToggle, setIsSavingWalkinToggle] = useState(false);
+
+  const handleToggleWalkinClaims = async (enabled: boolean) => {
+    if (!isOwner) return;
+    setIsSavingWalkinToggle(true);
+    const prev = allowWalkinClaims;
+    setAllowWalkinClaims(enabled);
+    const res = await updateWalkinClaimsSetting(enabled, selectedStaffId);
+    setIsSavingWalkinToggle(false);
+    if (!res.ok) {
+      setAllowWalkinClaims(prev);
+      showToast(`Failed to update setting: ${res.error}`);
+      return;
+    }
+    showToast(
+      enabled
+        ? "Walk-in visit claims enabled"
+        : "Walk-in visit claims disabled"
+    );
+    router.refresh();
+  };
 
   // Data states
   const [services, setServices] = useState<Service[]>(() => {
@@ -867,6 +897,59 @@ export function SettingsBrowser({
         canEdit={canEditVoidAuthCode}
         staffId={selectedStaffId}
       />
+
+      {/* SECTION: Walk-in Visit Claims */}
+      <div>
+        <div className="text-[10.5px] font-bold tracking-[0.13em] uppercase text-muted mb-2.5">
+          Walk-in Visit Claims
+        </div>
+        <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-4 flex-wrap gap-2.5">
+          <div>
+            <div className="text-[13px] font-bold text-foreground">
+              Allow Walk-in Visit Claims
+            </div>
+            <div className="text-[11px] text-muted mt-0.5">
+              Allow receptionists to initiate claims for unlinked past walk-in visits from Member Profile drawers.
+            </div>
+            {!isOwner && (
+              <div className="text-[10.5px] text-accent-gold/80 mt-1">
+                Owner-only setting. Only the Owner role can modify this setting.
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2.5">
+            <label
+              className={`relative inline-block w-11 h-[25px] shrink-0 ${
+                isOwner ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+              }`}
+              title={!isOwner ? "Only the Owner role can change this setting" : undefined}
+            >
+              <input
+                type="checkbox"
+                className="opacity-0 w-0 h-0"
+                checked={allowWalkinClaims}
+                disabled={!isOwner || isSavingWalkinToggle}
+                onChange={(e) => handleToggleWalkinClaims(e.target.checked)}
+              />
+              <span
+                className={`absolute inset-0 rounded-full border transition-colors ${
+                  allowWalkinClaims
+                    ? "bg-gradient-to-br from-[#c89b3c] to-[#a97e2e] border-[#a97e2e]"
+                    : "bg-[#1d1610] border-border"
+                }`}
+              >
+                <span
+                  className={`absolute top-[2px] left-[2px] w-[19px] h-[19px] rounded-full transition-transform ${
+                    allowWalkinClaims
+                      ? "translate-x-[19px] bg-background"
+                      : "bg-muted"
+                  }`}
+                />
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
 
       {/* SECTION: Promo Codes */}
       <div>
