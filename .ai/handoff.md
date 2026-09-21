@@ -4,10 +4,20 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#3d7b9a2e` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#8b4d1c9e` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Add Subtitle, Date Stepper Chevrons, and Inline Filter Bar to Bookings Tab — complete**
+  (`ohm#8b4d1c9e`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Subtitle (`app/(staff)/bookings/page.tsx`)**: Added `<p className="text-sm text-muted">Manage today's massage schedule</p>` directly below `<h1>Bookings</h1>`. JSX apostrophe escaped as `&apos;`.
+  - **Date Stepper Chevrons (`components/booking-browser.tsx`)**: Replaced the bare `Date` label + input with `‹ [date input] ›`. Each chevron button uses local `Date` arithmetic (`new Date(\`${date}T00:00:00\`)` + `setDate(d.getDate() ± 1)` + `.toISOString().slice(0,10)`) to safely step one calendar day without timezone drift. Calls `setDate()` which automatically triggers the existing `useEffect([date, reloadToken])` data re-fetch — no router.push needed. Buttons styled at 32×32 px matching the existing toolbar aesthetic (`border-border bg-surface-2`, `hover:border-gold hover:text-foreground`).
+  - **Inline Filter Bar (`components/booking-browser.tsx`)**: Removed the vertical two-row layout (search top / pills bottom with `border-t` divider). Replaced with a single `flex flex-wrap items-center gap-3` container holding the `w-80 max-w-xs shrink-0` search input and a nested pills `flex flex-wrap` group. Slot pills and the `All` pill are unchanged in behavior. Record counter moved below the row as a `text-right` paragraph — keeps the count visible without crowding the interactive row.
+  - **No regressions**: tab membership, slot filtering, search matching, `reassignmentKey`, server actions, modals, DB constraints — all untouched.
+  - **Tests & Verification**: `npm run build` verified clean (0 compilation errors, 26 routes generated).
+
 
 - **Remove 11:00 AM Slot and Align Filter Pills with Settings Weekend/Weekday Time Slots — complete**
   (`ohm#3d7b9a2e`, 2026-09-21).

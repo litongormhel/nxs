@@ -227,6 +227,7 @@ export default async function BookingsPage() {
   return (
     <div className="p-8">
       <h1 className="text-xl font-semibold text-gold animate-fade-in">Bookings</h1>
+      <p className="text-sm text-muted">Manage today&apos;s massage schedule</p>
 
       <ReassignmentPanel
         bookings={reassignmentBookings}

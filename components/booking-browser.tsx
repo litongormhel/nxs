@@ -490,10 +490,19 @@ export function BookingBrowser({
   return (
     <div className="mt-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <label className="text-xs text-muted" htmlFor="booking-date">
-            Date
-          </label>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              const d = new Date(`${date}T00:00:00`);
+              d.setDate(d.getDate() - 1);
+              setDate(d.toISOString().slice(0, 10));
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface-2 text-sm text-muted hover:border-gold hover:text-foreground transition-all"
+            title="Previous day"
+          >
+            ‹
+          </button>
           <input
             id="booking-date"
             type="date"
@@ -501,6 +510,18 @@ export function BookingBrowser({
             onChange={(e) => setDate(e.target.value)}
             className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
           />
+          <button
+            type="button"
+            onClick={() => {
+              const d = new Date(`${date}T00:00:00`);
+              d.setDate(d.getDate() + 1);
+              setDate(d.toISOString().slice(0, 10));
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface-2 text-sm text-muted hover:border-gold hover:text-foreground transition-all"
+            title="Next day"
+          >
+            ›
+          </button>
         </div>
         <div className="flex gap-3">
           <button
@@ -556,15 +577,16 @@ export function BookingBrowser({
       </div>
 
       {/* Filter Bar Controls */}
-      <div className="space-y-3 rounded-xl border border-border bg-surface p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
+        {/* Inline row: search + slot pills */}
+        <div className="flex flex-wrap items-center gap-3">
           {/* Quick Search Input */}
-          <div className="relative flex-1 max-w-md">
+          <div className="relative w-80 max-w-xs shrink-0">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by client codename or locker # (e.g. KD, 23)..."
+              placeholder="Search by client codename or locker # (e.g. KD, 23)"
               className="w-full rounded-md border border-border bg-background py-2 pl-3 pr-8 text-xs text-foreground placeholder:text-stone-500 focus:border-gold outline-none"
             />
             {searchQuery && (
@@ -579,51 +601,51 @@ export function BookingBrowser({
             )}
           </div>
 
-          {/* Record Counter */}
-          <div className="text-xs font-medium text-stone-400">
-            {searchQuery.trim() !== "" || selectedTimeSlot !== "all" ? (
-              <span>
-                Showing <strong className="text-foreground">{filteredRows.length}</strong> of{" "}
-                <strong className="text-foreground">{rowsForTab.length}</strong> bookings
-              </span>
-            ) : (
-              <span>
-                Showing <strong className="text-foreground">{rowsForTab.length}</strong> bookings
-              </span>
-            )}
+          {/* Time Slot Pills */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setSelectedTimeSlot("all")}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                selectedTimeSlot === "all"
+                  ? "bg-gold text-black font-semibold"
+                  : "bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200"
+              }`}
+            >
+              All
+            </button>
+            {availableSlots.map((slot) => {
+              const active = selectedTimeSlot.slice(0, 5) === slot.slice(0, 5);
+              return (
+                <button
+                  key={slot}
+                  type="button"
+                  onClick={() => setSelectedTimeSlot(slot)}
+                  className={`rounded-full px-3 py-1 text-xs transition-all ${
+                    active
+                      ? "bg-gold text-black font-semibold"
+                      : "bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200"
+                  }`}
+                >
+                  {fmtTime(slot)}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Time Slot Pills */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border/50">
-          <button
-            type="button"
-            onClick={() => setSelectedTimeSlot("all")}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
-              selectedTimeSlot === "all"
-                ? "bg-gold text-black font-semibold"
-                : "bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200"
-            }`}
-          >
-            All
-          </button>
-          {availableSlots.map((slot) => {
-            const active = selectedTimeSlot.slice(0, 5) === slot.slice(0, 5);
-            return (
-              <button
-                key={slot}
-                type="button"
-                onClick={() => setSelectedTimeSlot(slot)}
-                className={`rounded-full px-3 py-1 text-xs transition-all ${
-                  active
-                    ? "bg-gold text-black font-semibold"
-                    : "bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200"
-                }`}
-              >
-                {fmtTime(slot)}
-              </button>
-            );
-          })}
+        {/* Record Counter */}
+        <div className="text-xs font-medium text-stone-400 text-right">
+          {searchQuery.trim() !== "" || selectedTimeSlot !== "all" ? (
+            <span>
+              Showing <strong className="text-foreground">{filteredRows.length}</strong> of{" "}
+              <strong className="text-foreground">{rowsForTab.length}</strong> bookings
+            </span>
+          ) : (
+            <span>
+              Showing <strong className="text-foreground">{rowsForTab.length}</strong> bookings
+            </span>
+          )}
         </div>
       </div>
 
