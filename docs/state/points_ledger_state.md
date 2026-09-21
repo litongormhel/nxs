@@ -152,3 +152,20 @@ owner-configured `app_settings.loyalty_formula_mode`/`peso_per_point` (see
   screen before closing (driven by the new `pointsAwarded: number | null`
   field on `LogVisitBookingResult`/`QuickWalkinResult`), so reception sees
   the gap live, not just in `action_logs`.
+
+## 100 Points Loyalty Redemption in Booking Promo Dropdown (`ohm#2c8f1e4a`, 2026-09-21)
+
+- **Dynamic Promo Option Injection & Gating (`components/booking-form-modal.tsx`, `components/quick-walkin-modal.tsx`, `components/log-visit-modal.tsx`)**:
+  - Live query to `public.clients` for `points_balance` upon member selection (`clientId` / `clientSelectValue`).
+  - Evaluates `canRedeemLoyalty = !!clientId && (clientPointsBalance ?? 0) >= 100`.
+  - Injects `Loyalty Reward: Redeem 100 pts (Free Service / 100% off)` (`value="redeem_100_pts"`) into Promo dropdowns for qualified members.
+  - Injects disabled option `Loyalty Reward: Redeem 100 pts (Requires 100 pts • Current: X pts)` for members with `< 100` points. Hides redemption completely for walk-in guests.
+  - Automatically resets `promoId` to `"none"` if member selection changes or balance becomes insufficient.
+- **Amount Recalculation & Inline Indicators**:
+  - Sets base service amount to ₱0 across calculation paths (`computedAmount`, `amount`, `servicePaidAmount`, SMS preview), leaving add-ons payable.
+  - Displays inline badge `🏅 100 points will be deducted upon confirmation` under Promo select.
+- **Backend & Ledger Enforcement (`app/(staff)/bookings/actions.ts`)**:
+  - Extended `QuickWalkinInput` with `isRedemption?: boolean`.
+  - Added server-side guard in `quickWalkin` and `logVisitBooking` validating member portal account and balance `>= 100` before execution.
+  - Inserts `point_transactions` row with `entry_type = 'REDEEM'`, `points_delta = -100` tied to `client_id`, `booking_id`, and `sale_id`.
+- `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.

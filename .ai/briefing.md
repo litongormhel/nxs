@@ -81,33 +81,34 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-21 — Align ROOM Column Styling with Locker # in Bookings Table**
+1. **2026-09-21 — Implement 100 Points Loyalty Redemption in Booking Promo Dropdown**
+   (`ohm#2c8f1e4a`). Implementation plan presented and approved before code execution.
+   - **Dynamic Promo Option Injection & Gating (`components/booking-form-modal.tsx`, `components/quick-walkin-modal.tsx`, `components/log-visit-modal.tsx`)**: Look up `points_balance` dynamically for selected `clientId`. If `points_balance >= 100`, injects option `"Loyalty Reward: Redeem 100 pts (Free Service / 100% off)"` (`value="redeem_100_pts"`). If registered member has `< 100` points, renders disabled option with badge `"Loyalty Reward: Redeem 100 pts (Requires 100 pts • Current: X pts)"`. Walk-in guests without accounts do not see any redemption option.
+   - **Amount Recalculation & Inline Indicator**: When `redeem_100_pts` is selected, calculates discounted amount by reducing base service price to ₱0 while add-ons remain payable. Displays inline indicator `"🏅 100 points will be deducted upon confirmation"`.
+   - **Ledger Integration & Server Action Guard (`app/(staff)/bookings/actions.ts`)**: Added `isRedemption?: boolean` to `quickWalkin` input and server-side balance validation in both `quickWalkin` and `logVisitBooking`. Verifies member portal account and `points_balance >= 100` at time of execution, rejecting any attempt below 100 points. Successfully records `point_transactions` row with `entry_type = 'REDEEM'`, `points_delta = -100` linked to `client_id`, `booking_id`, and `sale_id`.
+   - `npm run build` clean (0 errors). See [[bookings_state]], [[points_ledger_state]], and `.ai/handoff.md`.
+
+2. **2026-09-21 — Align ROOM Column Styling with Locker # in Bookings Table**
    (`ohm#4f8c2e1b`). Implementation plan presented and approved before code execution.
    - **ROOM pill removed (`components/booking-browser.tsx`)**: `renderRoomPill()` previously wrapped room display in a `rounded-full border bg-background px-2 py-0.5 text-[8.5px] font-extrabold text-accent-gold` badge span. All pill/badge classes stripped. Now renders `<span className="text-muted">Room {row.room_number}</span>` (or `—` for unassigned), matching the plain `text-muted` typography of the LOCKER # column exactly. Single-point change covers all three tabs (Upcoming, Check-in, Check-out). Null safety guard (`row.room_number ? ... : "—"`) preserved verbatim.
    - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
 
-2. **2026-09-21 — Add Subtitle, Date Stepper Chevrons, and Inline Filter Bar to Bookings Tab**
+3. **2026-09-21 — Add Subtitle, Date Stepper Chevrons, and Inline Filter Bar to Bookings Tab**
    (`ohm#8b4d1c9e`). Implementation plan presented and approved before code execution.
    - **Subtitle (`app/(staff)/bookings/page.tsx`)**: Added `<p className="text-sm text-muted">Manage today's massage schedule</p>` directly below the `<h1>Bookings</h1>` heading.
    - **Date Stepper Chevrons (`components/booking-browser.tsx`)**: Replaced the bare date-label + input group with `‹ [date input] ›` — two 32 px square buttons using local `Date` arithmetic (`T00:00:00` prefix prevents timezone drift) that call `setDate()`, triggering the existing `useEffect([date, reloadToken])` re-fetch automatically. No router push needed — date is local component state.
    - **Inline Filter Bar (`components/booking-browser.tsx`)**: Collapsed the two-row layout (search on top, pills below with divider) into a single `flex flex-wrap items-center gap-3` row containing a `w-80 max-w-xs` search input followed by the slot pills group. Record counter moved below as a right-aligned `text-right` line.
    - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-21 — Remove 11:00 AM Slot and Align Filter Pills with Settings Weekend/Weekday Time Slots**
+4. **2026-09-21 — Remove 11:00 AM Slot and Align Filter Pills with Settings Weekend/Weekday Time Slots**
    (`ohm#3d7b9a2e`). Implementation plan presented and approved before code execution.
    - **Root Cause & Fix (`components/booking-browser.tsx`)**: The `availableSlots` memo was union-ing the configured `timeSlots` prop with every `dayBookings[].start_time` from live booking data. A real booking row with `start_time = '11:00'` (11:00 AM, outside spa hours) was being promoted to a filter pill. Fixed by removing the `dayBookings` loop — filter pills now strictly reflect the configured `weekend_slots` (via the `timeSlots` prop), not arbitrary booking data. `booking-form-modal.tsx` and `app/(staff)/bookings/page.tsx` were already correct and untouched.
    - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-21 — Fix SMS Template Save Error and Add Optional Room Variable**
+5. **2026-09-21 — Fix SMS Template Save Error and Add Optional Room Variable**
    (`ohm#7d3e2a8f`). Implementation plan presented and approved before code execution.
    - **Error Serialization & Permissions Fix (`app/(staff)/settings/actions.ts`, `components/settings-browser.tsx`)**: Resolved `[object Object]` error serialization in `fail()` by extracting `message`, `error`, `details`, or `hint` from Postgrest error objects. Updated `updateSmsTemplate` and `resetSmsTemplate` server actions to utilize `createServiceClient()` with fallback to authenticated client, resolving Supabase RLS / permission failures on `app_settings` updates. Added defensive string unwrap in settings template toast notifications.
    - **Optional Room Variable Support (`lib/bookings/sms.ts`, `components/settings-browser.tsx`, `components/booking-form-modal.tsx`, `components/sms-preview-modal.tsx`)**: Added `{room_number}` (with `{room}` alias) to `SMS_TEMPLATE_VARIABLES` with description `"Room number (e.g. Room 1 or None)"` and `isOptional: true`, rendering the clickable insertion chip in Settings template editor. Updated `interpolateSmsTemplate` to cleanly resolve `{room_number}` to `"Room X"` (if assigned) or `"None"` (if unassigned or Wet Area). Forwarded resolved room number from `BookingFormModal` and `SmsPreviewModal`.
-   - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
-
-5. **2026-09-21 — Format Booking Date as MMM D, YYYY in SMS Confirmation Template**
-   (`ohm#9c2e4f7a`). Implementation plan presented and approved before code execution.
-   - **Date Formatter Utility (`lib/bookings/sms.ts`)**: Added and exported `formatSmsDate(dateStr?: string | null): string` that parses `YYYY-MM-DD` components directly without converting to UTC timestamps, avoiding any timezone shifting bugs (e.g., `"2026-09-21"` consistently parses to `"Sep 21, 2026"`). Implemented fallback to current date if missing/empty, or raw value if non-standard.
-   - **Template Interpolation & Modal Integration (`lib/bookings/sms.ts`, `components/booking-form-modal.tsx`)**: Updated `interpolateSmsTemplate` to format `{booking_date}` to `"MMM D, YYYY"` format and updated `SMS_TEMPLATE_VARIABLES` metadata. In `BookingFormModal`, formatted `date` using `formatSmsDate` before passing to `interpolateSmsTemplate` and `setSmsBooking`, ensuring the SMS preview displays `Date: Sep 21, 2026`.
    - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
 
 

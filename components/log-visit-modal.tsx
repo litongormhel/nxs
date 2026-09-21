@@ -154,6 +154,31 @@ export function LogVisitModal({
 
   const [addonIds, setAddonIds] = useState<string[]>([]);
   const [promoId, setPromoId] = useState<string>(initialBooking?.promo_id ?? "none");
+  const [clientPointsBalance, setClientPointsBalance] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!clientId) {
+      setClientPointsBalance(null);
+      return;
+    }
+    const supabase = createClient();
+    supabase
+      .from("clients")
+      .select("points_balance")
+      .eq("id", clientId)
+      .maybeSingle()
+      .then(({ data }) => {
+        setClientPointsBalance(data?.points_balance ?? 0);
+      });
+  }, [clientId]);
+
+  const canRedeemLoyalty = !!clientId && (clientPointsBalance ?? 0) >= 100;
+
+  useEffect(() => {
+    if (promoId === "redeem_100_pts" && !canRedeemLoyalty) {
+      setPromoId("none");
+    }
+  }, [canRedeemLoyalty, promoId]);
   const [paymentMethod, setPaymentMethod] = useState<
     "Cash" | "GCash" | "Split (Cash + GCash)"
   >("Cash");
@@ -295,6 +320,7 @@ export function LogVisitModal({
   function onServiceSelect(val: string) {
     if (val === "REDEEM") {
       setIsRedemption(true);
+      setPromoId("none");
       const combi = services.find((s) => s.name === "Combi Massage") ?? services[0];
       if (combi) setServiceId(combi.id);
     } else {
@@ -332,6 +358,9 @@ export function LogVisitModal({
     );
   }
 
+  const isPromoRedemption = promoId === "redeem_100_pts";
+  const isEffectiveRedemption = isRedemption || isPromoRedemption;
+
   const computedAmount = useMemo(() => {
     if (isRedemption && !isUpgraded) return 0;
     if (isRedemption && isUpgraded) {
@@ -339,6 +368,12 @@ export function LogVisitModal({
         .filter((a) => addonIds.includes(a.id))
         .reduce((sum, a) => sum + a.price, 0);
       return upgradeCash + addonsTotal;
+    }
+    if (isPromoRedemption) {
+      const addonsTotal = addons
+        .filter((a) => addonIds.includes(a.id))
+        .reduce((sum, a) => sum + a.price, 0);
+      return addonsTotal;
     }
 
     const basePrice = selectedService?.price ?? 0;
@@ -361,6 +396,7 @@ export function LogVisitModal({
     isRedemption,
     isUpgraded,
     upgradeCash,
+    isPromoRedemption,
     selectedService,
     selectedPromo,
     manualDiscountOn,
@@ -376,6 +412,7 @@ export function LogVisitModal({
   const servicePaidAmount = useMemo(() => {
     if (isRedemption && !isUpgraded) return 0;
     if (isRedemption && isUpgraded) return upgradeCash;
+    if (isPromoRedemption) return 0;
 
     const basePrice = selectedService?.price ?? 0;
     if (selectedPromo) return Math.max(basePrice - selectedPromo.discount, 0);
@@ -389,6 +426,7 @@ export function LogVisitModal({
     isRedemption,
     isUpgraded,
     upgradeCash,
+    isPromoRedemption,
     selectedService,
     selectedPromo,
     manualDiscountOn,
@@ -398,7 +436,7 @@ export function LogVisitModal({
 
   // Calculate dynamic points (auto) based on formula mode
   const pointsDelta = useMemo(() => {
-    if (isRedemption) return -100;
+    if (isEffectiveRedemption) return -100;
     if (isWetArea) return WET_AREA_POINTS;
     if (!selectedService) return 0;
     return computeLoyaltyPoints(
@@ -409,7 +447,7 @@ export function LogVisitModal({
       loyaltySettings.pesoPerPoint
     );
   }, [
-    isRedemption,
+    isEffectiveRedemption,
     isWetArea,
     selectedService,
     loyaltySettings,
@@ -484,7 +522,7 @@ export function LogVisitModal({
         bookingDate: date,
         startTime: linkedBooking?.start_time ?? "16:00",
         lockerNumber: Number(lockerNumber),
-        promoId: promoId === "none" ? null : promoId,
+        promoId: promoId === "none" || isPromoRedemption ? null : promoId,
         manualDiscountType: manualDiscountOn ? discountType : null,
         manualDiscountValue: manualDiscountOn ? discountValue : null,
         addonIds,
@@ -494,7 +532,7 @@ export function LogVisitModal({
         splitCashAmount: isSplit ? numCash : null,
         splitGcashAmount: isSplit ? numGcash : null,
         paymentRef: (paymentMethod === "GCash" || (isSplit && numGcash > 0)) ? gcashRef.trim() || null : null,
-        isRedemption,
+        isRedemption: isEffectiveRedemption,
         upgradeTo: isUpgraded ? upgradeTo : null,
         upgradeCash: isUpgraded ? upgradeCash : null,
         staffId,
@@ -505,7 +543,7 @@ export function LogVisitModal({
         return;
       }
 
-      if (clientId && !isRedemption && result.pointsAwarded === null) {
+      if (clientId && !isEffectiveRedemption && result.pointsAwarded === null) {
         setPointsWarning(
           "Visit logged, pero WALANG POINTS na-award — hindi pa naka-configure ang loyalty formula sa Settings."
         );
@@ -621,7 +659,7 @@ export function LogVisitModal({
 
             {clientId && (
               <div className="border-b border-[#292524] pb-2.5 flex items-center justify-between">
-                <span className="text-muted text-[11px]">Points Earned</span>
+                <span className="text-muted text-[11px]">{pointsDelta < 0 ? "Points Redeemed" : "Points Earned"}</span>
                 <span className="font-mono text-xs font-bold text-accent-gold">
                   {pointsDelta >= 0 ? `+${pointsDelta} pts` : `${pointsDelta} pts`}
                 </span>
@@ -964,7 +1002,7 @@ export function LogVisitModal({
                 id="fManualDiscount"
                 checked={manualDiscountOn}
                 onChange={(e) => onManualDiscountToggle(e.target.checked)}
-                disabled={promoId !== "none"}
+                disabled={promoId !== "none" || isRedemption}
                 className="accent-gold"
               />
               Manual discount (e.g. Senior or PWD)
@@ -1015,17 +1053,33 @@ export function LogVisitModal({
             <select
               id="fPromo"
               value={promoId}
-              disabled={manualDiscountOn}
+              disabled={manualDiscountOn || isRedemption}
               onChange={(e) => onPromoChange(e.target.value)}
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none disabled:opacity-50"
             >
               <option value="none">None</option>
+              {!isRedemption && canRedeemLoyalty && (
+                <option value="redeem_100_pts" className="text-gold font-medium">
+                  Loyalty Reward: Redeem 100 pts (Free Service / 100% off)
+                </option>
+              )}
+              {!isRedemption && !canRedeemLoyalty && !!clientId && (
+                <option value="redeem_disabled" disabled className="text-muted">
+                  Loyalty Reward: Redeem 100 pts (Requires 100 pts • Current: {clientPointsBalance ?? 0} pts)
+                </option>
+              )}
               {promos.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label} (−₱{p.discount})
                 </option>
               ))}
             </select>
+            {isPromoRedemption && (
+              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-gold font-medium">
+                <span>🏅</span>
+                <span>100 points will be deducted upon confirmation</span>
+              </div>
+            )}
           </div>
 
           {/* Add-ons Box */}

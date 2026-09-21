@@ -4,10 +4,34 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#4f8c2e1b` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#2c8f1e4a` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Implement 100 Points Loyalty Redemption in Booking Promo Dropdown — complete**
+  (`ohm#2c8f1e4a`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Dynamic Client Balance Lookups (`components/booking-form-modal.tsx`, `components/quick-walkin-modal.tsx`, `components/log-visit-modal.tsx`)**:
+    - Added `clientPointsBalance` state and per-client `useEffect` query to retrieve live `points_balance` from `public.clients` whenever `clientId` / `clientSelectValue` changes.
+    - Derived `canRedeemLoyalty = !!clientId && (clientPointsBalance ?? 0) >= 100`.
+    - Added reactive reset effect resetting `promoId` back to `"none"` if selected client drops below 100 points or is unlinked.
+  - **Dynamic Promo Option Injection & Gating**:
+    - Registered members with `points_balance >= 100` see the injected promo option: `<option value="redeem_100_pts">Loyalty Reward: Redeem 100 pts (Free Service / 100% off)</option>`.
+    - Registered members with `< 100` points see a disabled option with informative badge: `<option value="redeem_disabled" disabled>Loyalty Reward: Redeem 100 pts (Requires 100 pts • Current: X pts)</option>`.
+    - Walk-in guests without an account do not see any redemption option in the dropdown.
+    - Promo dropdown in `BookingFormModal` is dynamically loaded and wired for massage services, passing `promoId: null` on submit to designate booking intent without creating fake DB promo rows.
+  - **Amount Recalculation & Inline Indicators**:
+    - Selecting `redeem_100_pts` reduces base service price to ₱0 in all calculation contexts (`computedAmount`, `amount`, `servicePaidAmount`, SMS preview amount).
+    - Add-ons (e.g. Towel +₱50) remain payable and accurately summed into the final transaction amount.
+    - Rendered gold inline indicator below Promo dropdown: `🏅 100 points will be deducted upon confirmation`.
+  - **Backend Ledger Integration & Execution Guard (`app/(staff)/bookings/actions.ts`)**:
+    - Added `isRedemption?: boolean` to `QuickWalkinInput`.
+    - Added authoritative server-side guard in `quickWalkin` and `logVisitBooking` validating that member has a portal account and `points_balance >= 100` at execution time, returning friendly error if insufficient.
+    - For `quickWalkin`, suppressed `EARN` insertion via `p_points_earned: null` and created atomic `point_transactions` row with `entry_type = 'REDEEM'`, `points_delta = -100` linked to `client_id`, `booking_id`, and `sale_id`.
+    - For `logVisitBooking`, wired `isEffectiveRedemption` into the existing `REDEEM` ledger creation path.
+  - **Tests & Verification**:
+    - `npm run build` verified clean (0 compilation errors, 26 routes generated).
 
 - **Align ROOM Column Styling with Locker # in Bookings Table — complete**
   (`ohm#4f8c2e1b`, 2026-09-21).

@@ -332,6 +332,23 @@ export function QuickWalkinModal({
 
   const [lockerNumber, setLockerNumber] = useState<number | "">("");
   const [promoId, setPromoId] = useState<string>("none");
+  const [clientPointsBalance, setClientPointsBalance] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!clientId) {
+      setClientPointsBalance(null);
+      return;
+    }
+    const supabase = createClient();
+    supabase
+      .from("clients")
+      .select("points_balance")
+      .eq("id", clientId)
+      .maybeSingle()
+      .then(({ data }) => {
+        setClientPointsBalance(data?.points_balance ?? 0);
+      });
+  }, [clientId]);
   const [manualDiscountOn, setManualDiscountOn] = useState(false);
   const [discountType, setDiscountType] = useState<"pct" | "fixed">("pct");
   const [discountValue, setDiscountValue] = useState(20);
@@ -710,10 +727,22 @@ export function QuickWalkinModal({
     }
   }, [servicesLoaded, therapistId, serviceId, therapistServicesMap, services]);
 
+  const canRedeemLoyalty = !!clientId && (clientPointsBalance ?? 0) >= 100;
+
+  useEffect(() => {
+    if (promoId === "redeem_100_pts" && !canRedeemLoyalty) {
+      setPromoId("none");
+    }
+  }, [canRedeemLoyalty, promoId]);
+
+  const isLoyaltyRedemption = promoId === "redeem_100_pts";
+
   const amount = useMemo(() => {
     const base = selectedService?.price ?? 0;
     let value = base;
-    if (selectedPromo) {
+    if (isLoyaltyRedemption) {
+      value = 0;
+    } else if (selectedPromo) {
       value = Math.max(base - selectedPromo.discount, 0);
     } else if (manualDiscountOn) {
       value =
@@ -725,12 +754,13 @@ export function QuickWalkinModal({
       .filter((a) => addonIds.includes(a.id))
       .reduce((sum, a) => sum + a.price, 0);
     return value + addonsTotal;
-  }, [selectedService, selectedPromo, manualDiscountOn, discountType, discountValue, addonIds, addons]);
+  }, [selectedService, isLoyaltyRedemption, selectedPromo, manualDiscountOn, discountType, discountValue, addonIds, addons]);
 
   // Service-only paid amount (post-promo/discount, excluding add-ons) — the
   // input to the loyalty formula. Distinct from `amount`, which is what's
   // recorded on the sale and includes add-ons.
   const servicePaidAmount = useMemo(() => {
+    if (isLoyaltyRedemption) return 0;
     const base = selectedService?.price ?? 0;
     if (selectedPromo) return Math.max(base - selectedPromo.discount, 0);
     if (manualDiscountOn) {
@@ -739,7 +769,7 @@ export function QuickWalkinModal({
         : Math.max(base - discountValue, 0);
     }
     return base;
-  }, [selectedService, selectedPromo, manualDiscountOn, discountType, discountValue]);
+  }, [selectedService, isLoyaltyRedemption, selectedPromo, manualDiscountOn, discountType, discountValue]);
 
   useEffect(() => {
     if (isSplitPayment) {
@@ -845,13 +875,14 @@ export function QuickWalkinModal({
         bookingDate: date,
         startTime: isMassageService ? time : roundedNowTime(),
         lockerNumber: lockerNumber as number,
-        promoId: promoId === "none" ? null : promoId,
+        promoId: promoId === "none" || isLoyaltyRedemption ? null : promoId,
         manualDiscountType: manualDiscountOn ? discountType : null,
         manualDiscountValue: manualDiscountOn ? discountValue : null,
         addonIds,
         amount,
         servicePaidAmount,
         paymentMethod,
+        isRedemption: isLoyaltyRedemption,
         isSplitPayment,
         splitMethod1: "Cash",
         splitAmount1: numCash,
@@ -1361,12 +1392,28 @@ export function QuickWalkinModal({
                 className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-50"
               >
                 <option value="none">No Promo</option>
+                {canRedeemLoyalty && (
+                  <option value="redeem_100_pts" className="text-gold font-medium">
+                    Loyalty Reward: Redeem 100 pts (Free Service / 100% off)
+                  </option>
+                )}
+                {!canRedeemLoyalty && !!clientId && (
+                  <option value="redeem_disabled" disabled className="text-muted">
+                    Loyalty Reward: Redeem 100 pts (Requires 100 pts • Current: {clientPointsBalance ?? 0} pts)
+                  </option>
+                )}
                 {promos.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label} (−₱{p.discount})
                   </option>
                 ))}
               </select>
+              {isLoyaltyRedemption && (
+                <div className="mt-1.5 flex items-center gap-1.5 text-xs text-gold font-medium">
+                  <span>🏅</span>
+                  <span>100 points will be deducted upon confirmation</span>
+                </div>
+              )}
             </div>
           )}
 

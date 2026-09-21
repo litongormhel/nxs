@@ -9,7 +9,7 @@ import { spaDayNow } from "@/lib/analytics/spa-day";
 import { SmsPreviewModal } from "@/components/sms-preview-modal";
 import { ClientCombobox } from "@/components/client-combobox";
 import { DEFAULT_SMS_TEMPLATE, interpolateSmsTemplate, formatSmsDate } from "@/lib/bookings/sms";
-import type { Client, Service, Staff, Therapist } from "@/components/booking-browser";
+import type { Client, Promo, Service, Staff, Therapist } from "@/components/booking-browser";
 import type { Database } from "@/lib/types/database";
 
 type ConflictRow = {
@@ -133,6 +133,37 @@ export function BookingFormModal({
       }
     }
   }, [initialTherapistId, therapists, therapistId]);
+
+  const [promos, setPromos] = useState<Promo[]>([]);
+  const [promoId, setPromoId] = useState<string>("none");
+  const [clientPointsBalance, setClientPointsBalance] = useState<number | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("promos")
+      .select("id, label, discount")
+      .eq("active", true)
+      .then(({ data }) => {
+        if (data) setPromos(data);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (clientSelectValue === "__walkin__" || !clientSelectValue) {
+      setClientPointsBalance(null);
+      return;
+    }
+    const supabase = createClient();
+    supabase
+      .from("clients")
+      .select("points_balance")
+      .eq("id", clientSelectValue)
+      .maybeSingle()
+      .then(({ data }) => {
+        setClientPointsBalance(data?.points_balance ?? 0);
+      });
+  }, [clientSelectValue]);
 
   const [date, setDate] = useState(defaultDate || spaDayNow());
   const [slotTime, setSlotTime] = useState<string>("");
@@ -264,6 +295,14 @@ export function BookingFormModal({
   }, [error]);
 
   const isWalkIn = clientSelectValue === "__walkin__";
+  const canRedeemLoyalty = !isWalkIn && !!clientSelectValue && (clientPointsBalance ?? 0) >= 100;
+
+  useEffect(() => {
+    if (promoId === "redeem_100_pts" && !canRedeemLoyalty) {
+      setPromoId("none");
+    }
+  }, [canRedeemLoyalty, promoId]);
+
   const selectedClient = isWalkIn ? null : clients.find((c) => c.id === clientSelectValue);
   const selectedService = services.find((s) => s.id === serviceId);
   const duration = selectedService?.duration_minutes ?? 0;
@@ -390,6 +429,10 @@ export function BookingFormModal({
 
   function onServiceChange(nextServiceId: string) {
     setServiceId(nextServiceId);
+    const nextService = services.find((s) => s.id === nextServiceId);
+    if (nextService?.name === "Wet Area") {
+      setPromoId("none");
+    }
     const offeringSet = serviceTherapistMap.get(nextServiceId);
     const isStillQualified = !!therapistId && !!offeringSet?.has(therapistId);
     if (!isStillQualified) {
@@ -509,6 +552,11 @@ export function BookingFormModal({
     }
 
     startTransition(async () => {
+      const isRedeeming = promoId === "redeem_100_pts";
+      const selectedPromo = promos.find((p) => p.id === promoId);
+      const effectivePromoId = isRedeeming || promoId === "none" ? null : promoId;
+      const derivedPax = selectedPromo?.label.includes("3") ? 3 : selectedPromo?.label.includes("4") ? 4 : null;
+
       const result = await createBooking({
         clientId: isWalkIn ? null : clientSelectValue,
         guestLabel: isWalkIn ? walkinName.trim() : null,
@@ -518,8 +566,8 @@ export function BookingFormModal({
         bookingDate: date,
         startTime: isMassageService ? time : roundedNowTime(),
         status: "Booked",
-        paxCount: null,
-        promoId: null,
+        paxCount: derivedPax,
+        promoId: effectivePromoId,
         createdBy: staffId,
       });
 
@@ -549,7 +597,12 @@ export function BookingFormModal({
         description: toastSubtitle,
       };
 
-      const servicePrice = selectedService?.price ?? 0;
+      const basePrice = selectedService?.price ?? 0;
+      const servicePrice = isRedeeming
+        ? 0
+        : selectedPromo
+        ? Math.max(basePrice - selectedPromo.discount, 0)
+        : basePrice;
       const serviceName = selectedService?.name ?? "Service";
       const formattedBookingDate = formatSmsDate(date);
       const resolvedRoomNumber = isMassageService && roomNumber ? roomNumber : null;
@@ -877,6 +930,44 @@ export function BookingFormModal({
                   </>
                 )}
               </select>
+            </div>
+          )}
+
+          {/* Promo */}
+          {isMassageService && (
+            <div id="bPromoField">
+              <label className="text-xs text-muted" htmlFor="bPromo">
+                Promo
+              </label>
+              <select
+                id="bPromo"
+                value={promoId}
+                onChange={(e) => setPromoId(e.target.value)}
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+              >
+                <option value="none">No Promo</option>
+                {canRedeemLoyalty && (
+                  <option value="redeem_100_pts" className="text-gold font-medium">
+                    Loyalty Reward: Redeem 100 pts (Free Service / 100% off)
+                  </option>
+                )}
+                {!canRedeemLoyalty && !isWalkIn && !!clientSelectValue && (
+                  <option value="redeem_disabled" disabled className="text-muted">
+                    Loyalty Reward: Redeem 100 pts (Requires 100 pts • Current: {clientPointsBalance ?? 0} pts)
+                  </option>
+                )}
+                {promos.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label} (−₱{p.discount})
+                  </option>
+                ))}
+              </select>
+              {promoId === "redeem_100_pts" && (
+                <div className="mt-1.5 flex items-center gap-1.5 text-xs text-gold font-medium">
+                  <span>🏅</span>
+                  <span>100 points will be deducted upon confirmation</span>
+                </div>
+              )}
             </div>
           )}
 

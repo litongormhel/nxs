@@ -204,6 +204,7 @@ export type QuickWalkinInput = {
   splitGcashAmount?: number | null;
   paymentRef: string | null;
   staffId: string;
+  isRedemption?: boolean;
 };
 
 export type QuickWalkinResult =
@@ -260,7 +261,38 @@ export async function quickWalkin(
   let pointsAwarded: number | null = null;
   let pointsReason: "unconfigured_formula" | "no_portal_account" | null = null;
 
-  if (input.clientId) {
+  if (input.isRedemption) {
+    if (!input.clientId) {
+      return { ok: false, error: "Loyalty redemption requires a registered member account." };
+    }
+
+    const { data: portalAccount } = await supabase
+      .from("client_portal_accounts")
+      .select("client_id")
+      .eq("client_id", input.clientId)
+      .maybeSingle();
+
+    if (!portalAccount) {
+      return { ok: false, error: "Client must have an active portal account to redeem points." };
+    }
+
+    const { data: clientRow, error: clientErr } = await supabase
+      .from("clients")
+      .select("points_balance")
+      .eq("id", input.clientId)
+      .single();
+
+    if (clientErr || !clientRow) {
+      return { ok: false, error: "Client not found." };
+    }
+
+    if ((clientRow.points_balance ?? 0) < 100) {
+      return {
+        ok: false,
+        error: `Insufficient loyalty points. Requires 100 pts • Current: ${clientRow.points_balance ?? 0} pts.`,
+      };
+    }
+  } else if (input.clientId) {
     // Only attempt to award points if the client has a registered client_portal_accounts row.
     // The DB trigger trg_require_portal_account_for_earn_redeem strictly blocks point_transactions
     // insertions for clients without portal accounts. Skipping points allows walk-in creation to succeed cleanly.
@@ -418,24 +450,42 @@ export async function quickWalkin(
       }
     }
 
-    if (input.clientId && pointsAwarded != null) {
+    if (input.clientId) {
       const { data: svc } = await supabase
         .from("services")
         .select("name")
         .eq("id", input.serviceId)
         .single();
-      const { error: ptsErr } = await supabase.from("point_transactions").insert({
-        client_id: input.clientId,
-        booking_id: bookingId,
-        sale_id: saleId,
-        points_delta: pointsAwarded,
-        entry_type: "EARN",
-        source: "STAFF_MANUAL",
-        processed_by: input.staffId,
-        notes: `Visit: ${svc?.name ?? "Service"}`,
-      });
-      if (ptsErr) {
-        console.warn("[quickWalkin] points insert warning:", ptsErr);
+
+      if (input.isRedemption) {
+        const { error: ptsErr } = await supabase.from("point_transactions").insert({
+          client_id: input.clientId,
+          booking_id: bookingId,
+          sale_id: saleId,
+          points_delta: -100,
+          entry_type: "REDEEM",
+          source: "STAFF_MANUAL",
+          processed_by: input.staffId,
+          notes: `Redemption: ${svc?.name ?? "Service"}`,
+        });
+        if (ptsErr) {
+          console.warn("[quickWalkin] redemption points insert warning:", ptsErr);
+          return { ok: false, error: ptsErr.message };
+        }
+      } else if (pointsAwarded != null) {
+        const { error: ptsErr } = await supabase.from("point_transactions").insert({
+          client_id: input.clientId,
+          booking_id: bookingId,
+          sale_id: saleId,
+          points_delta: pointsAwarded,
+          entry_type: "EARN",
+          source: "STAFF_MANUAL",
+          processed_by: input.staffId,
+          notes: `Visit: ${svc?.name ?? "Service"}`,
+        });
+        if (ptsErr) {
+          console.warn("[quickWalkin] points insert warning:", ptsErr);
+        }
       }
     }
 
@@ -480,10 +530,14 @@ export async function quickWalkin(
       .eq("id", input.serviceId)
       .single();
 
+    const pointsLogNote = input.isRedemption
+      ? " points_redeemed=100"
+      : ` points_awarded=${pointsAwarded ?? (input.clientId ? "NONE:formula_not_configured" : "n/a")}`;
+
     await supabase.from("action_logs").insert({
       staff_id: input.staffId,
       action: "quick_walkin",
-      detail: `client=${input.clientId} guest=${input.guestLabel} service=${svc?.name ?? "Service"} amount=${primaryAmount} sale_id=${saleId} booking_id=${bookingId} points_awarded=${pointsAwarded ?? (input.clientId ? "NONE:formula_not_configured" : "n/a")}`,
+      detail: `client=${input.clientId} guest=${input.guestLabel} service=${svc?.name ?? "Service"} amount=${primaryAmount} sale_id=${saleId} booking_id=${bookingId}${pointsLogNote}`,
     });
 
     revalidatePath("/bookings");
@@ -511,7 +565,7 @@ export async function quickWalkin(
     p_payment_method: primaryMethod,
     p_payment_ref: isSplit ? (method1 !== "Cash" ? input.paymentRef : null) : (input.paymentMethod !== "Cash" ? input.paymentRef : null),
     p_staff_id: input.staffId,
-    p_points_earned: pointsAwarded,
+    p_points_earned: input.isRedemption ? null : pointsAwarded,
   });
 
   if (error) {
@@ -549,8 +603,31 @@ export async function quickWalkin(
   }
 
   const bookingId = data?.[0]?.booking_id;
+  const saleId = data?.[0]?.sale_id;
   if (!bookingId) {
     return { ok: false, error: "Quick walk-in did not return a booking id." };
+  }
+
+  if (input.clientId && input.isRedemption) {
+    const { data: svc } = await supabase
+      .from("services")
+      .select("name")
+      .eq("id", input.serviceId)
+      .single();
+    const { error: ptsErr } = await supabase.from("point_transactions").insert({
+      client_id: input.clientId,
+      booking_id: bookingId,
+      sale_id: saleId ?? null,
+      points_delta: -100,
+      entry_type: "REDEEM",
+      source: "STAFF_MANUAL",
+      processed_by: input.staffId,
+      notes: `Redemption: ${svc?.name ?? "Service"}`,
+    });
+    if (ptsErr) {
+      console.warn("[quickWalkin] redemption points insert error:", ptsErr);
+      return { ok: false, error: ptsErr.message };
+    }
   }
 
   if (isSplit && amount2 > 0) {
@@ -1181,6 +1258,39 @@ export async function logVisitBooking(
       return { ok: false, error: res.error, field: res.field };
     }
     return { ok: true, saleId: null, ledgerId: null, pointsAwarded: res.pointsAwarded };
+  }
+
+  if (input.isRedemption) {
+    if (!input.clientId) {
+      return { ok: false, error: "Loyalty redemption requires a registered member account." };
+    }
+
+    const { data: portalAccount } = await supabase
+      .from("client_portal_accounts")
+      .select("client_id")
+      .eq("client_id", input.clientId)
+      .maybeSingle();
+
+    if (!portalAccount) {
+      return { ok: false, error: "Client must have an active portal account to redeem points." };
+    }
+
+    const { data: clientRow, error: clientErr } = await supabase
+      .from("clients")
+      .select("points_balance")
+      .eq("id", input.clientId)
+      .single();
+
+    if (clientErr || !clientRow) {
+      return { ok: false, error: "Client not found." };
+    }
+
+    if ((clientRow.points_balance ?? 0) < 100) {
+      return {
+        ok: false,
+        error: `Insufficient loyalty points. Requires 100 pts • Current: ${clientRow.points_balance ?? 0} pts.`,
+      };
+    }
   }
 
   // 1. Fetch service info
