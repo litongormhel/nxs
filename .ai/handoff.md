@@ -4,10 +4,36 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#1c4e9a7b` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#8f2b4c1a` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Implement Pending Walk-in Visit Claims Tab with Staff Audit Trail and Approve All — complete**
+  (`ohm#8f2b4c1a`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Database Migration & Schema (`supabase/migrations/20260921160000_past_visit_claims.sql`)**:
+    - Created `public.visit_claims` table with `id uuid primary key default gen_random_uuid()`, `booking_id uuid not null references public.bookings(id) on delete cascade unique`, `target_client_id uuid not null references public.clients(id) on delete cascade`, `requested_by_staff_id uuid not null references public.staff(id)`, `reviewed_by_staff_id uuid references public.staff(id)`, `points_to_credit integer not null default 0`, `status text not null default 'pending' check (status in ('pending', 'approved', 'rejected'))`, `created_at timestamptz not null default now()`, and `reviewed_at timestamptz`.
+    - Added RLS policies: `visit_claims_staff_select` (`SELECT` using `is_staff()`), `visit_claims_staff_insert` (`INSERT` with check `is_staff()`), and `visit_claims_supervisor_update` (`UPDATE` using `is_supervisor_or_above()` with check `is_supervisor_or_above()`).
+    - Added schema reload notification: `notify pgrst, 'reload schema';`.
+  - **Server Actions Layer (`app/(staff)/clients/actions.ts`)**:
+    - `requestWalkinClaim(bookingId, targetClientId)`: Validates that booking is unlinked and not already pending claim. Computes loyalty points to credit using `computeLoyaltyPoints()` and `app_settings` (`loyalty_formula_mode`, `peso_per_point`), handling Wet Area fixed 3 points. Inserts or re-opens rejected row in `visit_claims` with `status: 'pending'` and records initiating staff ID (`auth.uid() -> staff.id`).
+    - `approveWalkinClaim(claimId)`: Strictly gated to Supervisors or Owners (`is_supervisor_or_above()`). Atomically updates `bookings`, `sales`, and `locker_occupancy` with `client_id = target_client_id`. Inserts ledger entry into `point_transactions` (`entry_type = 'EARN'`, `points_delta = points_to_credit`, `source = 'STAFF_MANUAL'`), triggering `apply_points_delta()` to update the member's balance. Updates `visit_claims` status to `'approved'` and records `reviewed_by_staff_id` + `reviewed_at`.
+    - `approveAllWalkinClaims()`: Iterates through all currently pending claims and executes atomic approval sequentially in batch.
+    - `rejectWalkinClaim(claimId)`: Updates `visit_claims` status to `'rejected'`, leaving the booking unlinked and restoring it to the available walk-in pool.
+  - **Server Component Queries (`app/(staff)/clients/page.tsx`)**:
+    - Fetches `app_settings` for dynamic formula resolution and `visit_claims` for pending claim processing.
+    - Filters unlinked walk-ins (`rawWalkIns`) to strictly exclude any bookings with `status = 'pending'` in `visit_claims`, preventing duplicate claims.
+    - Resolves pending claim records with member identities, original booking dates, 12-hour massage times, services, therapists, locker numbers, and amount paid.
+  - **Client Browser Component UI (`components/client-browser.tsx`)**:
+    - **Tab Switcher**: Added third tab `Pending Claims (count)` with gold count pill when pending claims exist.
+    - **Member Details Drawer**: Added "Claim Past Walk-in Visit" button to member profile drawer.
+    - **Candidate Search Modal**: Opens modal displaying search filter and candidate cards (Date, Time, Service, Therapist, Room, Locker #, Amount Paid, and dynamic Preview Points `+X pts`). Submitting sends claim to pending queue.
+    - **Pending Claims Tab**: Lists all pending claims with target member, original stay details, points to be credited, and staff audit trail (`Requested by: [Staff Name] on [Date/Time]`).
+    - **Actions**: Direct single `[Approve]` and `[Reject]` buttons (no modal) for Supervisors/Owners; `[Approve All]` button with confirmation modal (*"Approve All Claims? This will approve X pending claims and credit a total of Y points."*).
+  - **Tests & Verification**:
+    - `npm run build` passed clean (0 compilation errors, 26 routes generated).
+
 
 - **Add Resilient Fallback for quick_walkin RPC Parameter Signature — complete**
   (`ohm#1c4e9a7b`, 2026-09-21).

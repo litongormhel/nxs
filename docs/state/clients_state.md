@@ -2,6 +2,26 @@
 
 ## Implemented
 
+- **Pending Walk-in Visit Claims Tab with Staff Audit Trail and Approve All (`ohm#8f2b4c1a`, 2026-09-21)**:
+  - **Database Schema & RLS (`supabase/migrations/20260921160000_past_visit_claims.sql`)**:
+    - Created `public.visit_claims` table: `id` (PK, UUID), `booking_id` (FK `bookings`, unique), `target_client_id` (FK `clients`), `requested_by_staff_id` (FK `staff`), `reviewed_by_staff_id` (FK `staff`, nullable), `points_to_credit` (integer), `status` (`pending`, `approved`, `rejected`), `created_at`, `reviewed_at`.
+    - Configured RLS policies: `is_staff()` for SELECT and INSERT, `is_supervisor_or_above()` for UPDATE.
+  - **Server Actions (`app/(staff)/clients/actions.ts`)**:
+    - `requestWalkinClaim`: Validates booking is unlinked and no existing pending claim exists. Dynamically computes loyalty points to credit using `app_settings` mode & peso_per_point (Wet Area = 3 fixed points). Inserts/updates `visit_claims` and records initiating staff ID (`auth.uid() -> staff.id`).
+    - `approveWalkinClaim`: Gated to Supervisors/Owners (`is_supervisor_or_above()`). Atomically updates `bookings`, `sales`, and `locker_occupancy` with `client_id = target_client_id`. Inserts immutable `EARN` ledger entry into `point_transactions` (firing trigger `apply_points_delta()` to update member's `points_balance`). Sets claim status to `'approved'` and logs audit trail.
+    - `approveAllWalkinClaims`: Gated to Supervisors/Owners. Atomically loops through all pending claims and executes bulk approvals.
+    - `rejectWalkinClaim`: Gated to Supervisors/Owners. Updates claim status to `'rejected'`, restoring the walk-in visit to the unlinked pool.
+  - **Server Component Queries (`app/(staff)/clients/page.tsx`)**:
+    - Queries `visit_claims` and `app_settings`.
+    - Builds `pendingClaimBookingIds` set and excludes any pending claim bookings from the **Walk-In Without Account** tab to prevent duplicate claims.
+    - Resolves pending claims with target member codename/username/code, booking date, massage time, service, therapist, locker number, amount paid, and requesting staff name.
+  - **Client Browser UI (`components/client-browser.tsx`)**:
+    - Added third tab: **Pending Claims (count)** with badge highlighting pending requests.
+    - Member Details Drawer: Added "Claim Past Walk-in Visit" button opening a search & candidate selection card modal with live points preview (`+X pts`).
+    - Pending Claims Tab: Displays each pending claim row with target member details, original stay details, points to be credited, and staff audit trail (`Requested by: [Staff Name] on [Date/Time]`).
+    - Single-click `[Approve]` and `[Reject]` actions immediately execute without modal for Supervisors/Owners.
+    - "Approve All" button triggers confirmation modal (*"Approve All Claims? This will approve X pending claims and credit a total of Y points."*) before executing bulk approval.
+
 - **Refine Member Portal UI and Align Verified Past Visit Queries (`ohm#8c1e4f9b`, 2026-09-21)**:
   - **Member Portal UI Refinements (`components/client-portal/member-dashboard.tsx`)**:
     - Removed the `#M-XXXXXX` member code badge from the greeting card, keeping `@username` cleanly displayed.

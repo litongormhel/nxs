@@ -4,6 +4,34 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { LogVisitModal } from "@/components/log-visit-modal";
+import { useStaffSim } from "@/lib/staff-context";
+import { computeLoyaltyPoints, WET_AREA_POINTS, type LoyaltyFormulaMode } from "@/lib/loyalty";
+import {
+  requestWalkinClaim,
+  approveWalkinClaim,
+  approveAllWalkinClaims,
+  rejectWalkinClaim,
+} from "@/app/(staff)/clients/actions";
+
+export type PendingClaim = {
+  id: string;
+  booking_id: string;
+  target_client_id: string;
+  target_client_codename: string;
+  target_client_username: string;
+  target_client_member_code: string;
+  points_to_credit: number;
+  status: string;
+  created_at: string;
+  requested_by_staff_name: string;
+  booking_date: string;
+  start_time: string | null;
+  service_name: string | null;
+  therapist_name: string | null;
+  locker_number: number | null;
+  amount: number | null;
+  payment_method: string | null;
+};
 
 export type Client = {
   id: string;
@@ -112,6 +140,8 @@ function QRImage({ value, size = 160 }: { value: string; size?: number }) {
 export function ClientBrowser({
   clients = [],
   walkInVisits = [],
+  pendingClaims = [],
+  loyaltySettings = { mode: "proportional", pesoPerPoint: null },
   memberTransactions = [],
   memberBookings = [],
   services = [],
@@ -124,6 +154,8 @@ export function ClientBrowser({
 }: {
   clients?: Client[];
   walkInVisits?: WalkInVisit[];
+  pendingClaims?: PendingClaim[];
+  loyaltySettings?: { mode: string; pesoPerPoint: number | null };
   memberTransactions?: any[];
   memberBookings?: any[];
   services?: Service[];
@@ -135,7 +167,10 @@ export function ClientBrowser({
   clientLockerMap?: Record<string, number>;
 }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"members" | "walkins">("members");
+  const { currentRole, sessionStaff } = useStaffSim();
+  const canReviewClaims = currentRole === "Supervisor" || currentRole === "Owner";
+
+  const [activeTab, setActiveTab] = useState<"members" | "walkins" | "claims">("members");
   const [search, setSearch] = useState("");
 
   // Pagination states
@@ -144,6 +179,9 @@ export function ClientBrowser({
 
   const [walkInsPageSize, setWalkInsPageSize] = useState<number>(10);
   const [walkInsCurrentPage, setWalkInsCurrentPage] = useState<number>(1);
+
+  const [claimsPageSize, setClaimsPageSize] = useState<number>(10);
+  const [claimsCurrentPage, setClaimsCurrentPage] = useState<number>(1);
 
   // Modal states for Members
   const [selectedMemberForProfile, setSelectedMemberForProfile] = useState<Client | null>(null);
@@ -159,6 +197,22 @@ export function ClientBrowser({
   const [showLogVisit, setShowLogVisit] = useState(false);
   const [logVisitClient, setLogVisitClient] = useState<Client | null>(null);
 
+  // Claim actions and modal states
+  const [approvingClaimId, setApprovingClaimId] = useState<string | null>(null);
+  const [rejectingClaimId, setRejectingClaimId] = useState<string | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const [showApproveAllModal, setShowApproveAllModal] = useState(false);
+  const [isApprovingAll, setIsApprovingAll] = useState(false);
+  const [bulkApproveFeedback, setBulkApproveFeedback] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Claim Past Walk-in Modal (initiated from Member Profile drawer)
+  const [showClaimModal, setShowClaimModal] = useState(false);
+  const [claimSearch, setClaimSearch] = useState("");
+  const [selectedCandidate, setSelectedCandidate] = useState<WalkInVisit | null>(null);
+  const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
+  const [claimFeedback, setClaimFeedback] = useState<{ ok: boolean; message: string } | null>(null);
+
   // Live locker map (updated by realtime)
   const [lockerMap, setLockerMap] = useState<Record<string, number>>(initialLockerMap);
 
@@ -166,7 +220,24 @@ export function ClientBrowser({
   useEffect(() => {
     setMembersCurrentPage(1);
     setWalkInsCurrentPage(1);
-  }, [search, membersPageSize, walkInsPageSize]);
+    setClaimsCurrentPage(1);
+  }, [search, membersPageSize, walkInsPageSize, claimsPageSize]);
+
+  // Compute preview points helper
+  const computeCandidatePoints = (v: WalkInVisit): number => {
+    if (v.service_name === "Wet Area") return WET_AREA_POINTS;
+    const svc = services.find((s) => s.name === v.service_name);
+    const fullPrice = svc?.price ? Number(svc.price) : (v.amount != null ? Number(v.amount) : 0);
+    const basePoints = svc?.points_earned ? Number(svc.points_earned) : 0;
+    const paid = v.amount != null ? Number(v.amount) : fullPrice;
+    return computeLoyaltyPoints(
+      (loyaltySettings?.mode ?? "proportional") as LoyaltyFormulaMode,
+      paid,
+      fullPrice,
+      basePoints,
+      loyaltySettings?.pesoPerPoint ?? null
+    );
+  };
 
   // Aggregate member visits from point_transactions and memberBookings
   const memberVisitsMap = useMemo(() => {
@@ -396,6 +467,144 @@ export function ClientBrowser({
     };
   }, []);
 
+  // Filtered and Paginated Pending Claims
+  const filteredPendingClaims = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return pendingClaims;
+    return pendingClaims.filter((c) => {
+      return (
+        c.target_client_codename.toLowerCase().includes(q) ||
+        c.target_client_username.toLowerCase().includes(q) ||
+        c.target_client_member_code.toLowerCase().includes(q) ||
+        c.requested_by_staff_name.toLowerCase().includes(q) ||
+        c.booking_date.includes(q) ||
+        (c.service_name && c.service_name.toLowerCase().includes(q)) ||
+        (c.therapist_name && c.therapist_name.toLowerCase().includes(q)) ||
+        (c.locker_number != null && c.locker_number.toString().includes(q))
+      );
+    });
+  }, [pendingClaims, search]);
+
+  const totalPendingClaims = filteredPendingClaims.length;
+  const totalClaimsPages = Math.ceil(totalPendingClaims / claimsPageSize) || 1;
+  const claimsStartIndex = (claimsCurrentPage - 1) * claimsPageSize;
+  const paginatedPendingClaims = useMemo(() => {
+    return filteredPendingClaims.slice(claimsStartIndex, claimsStartIndex + claimsPageSize);
+  }, [filteredPendingClaims, claimsStartIndex, claimsPageSize]);
+
+  // Candidate visits for Claim modal (filtered by claimSearch)
+  const candidateWalkIns = useMemo(() => {
+    const q = claimSearch.trim().toLowerCase();
+    if (!q) return walkInVisits;
+    return walkInVisits.filter((v) => {
+      return (
+        v.guest_label.toLowerCase().includes(q) ||
+        v.booking_date.includes(q) ||
+        (v.locker_number != null && v.locker_number.toString().includes(q)) ||
+        (v.service_name && v.service_name.toLowerCase().includes(q)) ||
+        (v.therapist_name && v.therapist_name.toLowerCase().includes(q))
+      );
+    });
+  }, [walkInVisits, claimSearch]);
+
+  const totalPointsToCreditAll = useMemo(() => {
+    return pendingClaims.reduce((sum, c) => sum + (c.points_to_credit ?? 0), 0);
+  }, [pendingClaims]);
+
+  async function handleApproveSingle(claimId: string) {
+    setApprovingClaimId(claimId);
+    setActionFeedback(null);
+    try {
+      const res = await approveWalkinClaim(claimId);
+      if (!res.ok) {
+        setActionFeedback({ ok: false, message: res.error });
+      } else {
+        setActionFeedback({ ok: true, message: "Claim approved successfully! Points credited and visit linked." });
+        router.refresh();
+      }
+    } catch (err: any) {
+      setActionFeedback({ ok: false, message: err?.message || "Failed to approve claim." });
+    } finally {
+      setApprovingClaimId(null);
+    }
+  }
+
+  async function handleRejectSingle(claimId: string) {
+    setRejectingClaimId(claimId);
+    setActionFeedback(null);
+    try {
+      const res = await rejectWalkinClaim(claimId);
+      if (!res.ok) {
+        setActionFeedback({ ok: false, message: res.error });
+      } else {
+        setActionFeedback({ ok: true, message: "Claim rejected. Walk-in visit restored to available pool." });
+        router.refresh();
+      }
+    } catch (err: any) {
+      setActionFeedback({ ok: false, message: err?.message || "Failed to reject claim." });
+    } finally {
+      setRejectingClaimId(null);
+    }
+  }
+
+  async function handleApproveAllConfirm() {
+    setIsApprovingAll(true);
+    setBulkApproveFeedback(null);
+    try {
+      const res = await approveAllWalkinClaims();
+      if (res.ok) {
+        setBulkApproveFeedback({
+          ok: true,
+          message: `Approved all ${res.count} pending claims (+${res.pointsTotal} pts total credited)!`,
+        });
+        setTimeout(() => {
+          setShowApproveAllModal(false);
+          setBulkApproveFeedback(null);
+          router.refresh();
+        }, 1200);
+      } else {
+        setBulkApproveFeedback({ ok: false, message: res.error });
+      }
+    } catch (err: any) {
+      setBulkApproveFeedback({ ok: false, message: err?.message || "Failed to bulk approve claims." });
+    } finally {
+      setIsApprovingAll(false);
+    }
+  }
+
+  async function handleSubmitClaim() {
+    if (!selectedCandidate || !selectedMemberForProfile) return;
+    setIsSubmittingClaim(true);
+    setClaimFeedback(null);
+
+    try {
+      const res = await requestWalkinClaim({
+        bookingId: selectedCandidate.id,
+        targetClientId: selectedMemberForProfile.id,
+      });
+
+      if (res.ok) {
+        setClaimFeedback({
+          ok: true,
+          message: "Claim request submitted! It is now pending Owner / Supervisor review.",
+        });
+        setTimeout(() => {
+          setShowClaimModal(false);
+          setSelectedCandidate(null);
+          setClaimFeedback(null);
+          setSelectedMemberForProfile(null);
+          router.refresh();
+        }, 1200);
+      } else {
+        setClaimFeedback({ ok: false, message: res.error });
+      }
+    } catch (err: any) {
+      setClaimFeedback({ ok: false, message: err?.message || "Failed to submit claim request." });
+    } finally {
+      setIsSubmittingClaim(false);
+    }
+  }
+
   return (
     <div className="mt-6 flex flex-col gap-5">
       {/* Top-level tab switcher */}
@@ -405,6 +614,7 @@ export function ClientBrowser({
           onClick={() => {
             setActiveTab("members");
             setSearch("");
+            setActionFeedback(null);
           }}
           className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
             activeTab === "members"
@@ -429,6 +639,7 @@ export function ClientBrowser({
           onClick={() => {
             setActiveTab("walkins");
             setSearch("");
+            setActionFeedback(null);
           }}
           className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
             activeTab === "walkins"
@@ -445,6 +656,33 @@ export function ClientBrowser({
             }`}
           >
             {groupedWalkIns.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("claims");
+            setSearch("");
+            setActionFeedback(null);
+          }}
+          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer ${
+            activeTab === "claims"
+              ? "border-gold text-gold"
+              : "border-transparent text-muted hover:text-foreground"
+          }`}
+        >
+          <span>Pending Claims</span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs ${
+              activeTab === "claims"
+                ? "bg-gold/20 text-gold font-bold"
+                : pendingClaims.length > 0
+                ? "bg-gold/20 text-gold font-semibold"
+                : "bg-surface-accent text-muted"
+            }`}
+          >
+            {pendingClaims.length}
           </span>
         </button>
       </div>
@@ -467,7 +705,9 @@ export function ClientBrowser({
           placeholder={
             activeTab === "members"
               ? "Search by codename, phone, or @username..."
-              : "Search by guest codename (e.g. Wax, Marky) or date..."
+              : activeTab === "walkins"
+              ? "Search by guest codename (e.g. Wax, Marky) or date..."
+              : "Search claims by member, staff, or service..."
           }
           className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-4 text-sm text-foreground placeholder:text-muted focus:border-gold/50 focus:outline-none"
         />
@@ -784,7 +1024,235 @@ export function ClientBrowser({
         </div>
       )}
 
-      {/* CLIENT PROFILE MODAL ("View Profile →") */}
+      {/* PENDING CLAIMS TAB */}
+      {activeTab === "claims" && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+                Pending Visit Claims ({filteredPendingClaims.length})
+              </p>
+              <p className="text-xs text-muted">
+                Review and approve unlinked walk-in visit claims requested by front desk staff.
+              </p>
+            </div>
+            {canReviewClaims && pendingClaims.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkApproveFeedback(null);
+                  setShowApproveAllModal(true);
+                }}
+                className="rounded-md border border-gold bg-gold/15 px-3 py-1.5 text-xs font-semibold text-gold hover:bg-gold/25 transition-colors cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <span>✓✓</span> Approve All ({pendingClaims.length})
+              </button>
+            )}
+          </div>
+
+          {actionFeedback && (
+            <div
+              className={`rounded-lg p-3 text-xs flex items-center justify-between ${
+                actionFeedback.ok
+                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                  : "bg-red-500/10 text-red-400 border border-red-500/20"
+              }`}
+            >
+              <span>{actionFeedback.message}</span>
+              <button
+                type="button"
+                onClick={() => setActionFeedback(null)}
+                className="text-xs opacity-70 hover:opacity-100 ml-2 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {filteredPendingClaims.length === 0 ? (
+            <div className="rounded-lg border border-border bg-surface p-8 text-center text-sm text-muted">
+              {search.trim()
+                ? "No pending claims match your search."
+                : "No pending walk-in visit claims at this time."}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="overflow-hidden rounded-lg border border-border bg-surface">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-border bg-surface-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                    <tr>
+                      <th className="px-4 py-3">Target Member</th>
+                      <th className="px-4 py-3">Original Walk-In Details</th>
+                      <th className="px-4 py-3">Points Credit</th>
+                      <th className="px-4 py-3">Initiated By</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border text-foreground">
+                    {paginatedPendingClaims.map((claim) => {
+                      const isApproving = approvingClaimId === claim.id;
+                      const isRejecting = rejectingClaimId === claim.id;
+
+                      return (
+                        <tr key={claim.id} className="hover:bg-gold/5 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col">
+                              <span className="font-semibold text-gold">
+                                {claim.target_client_codename}
+                              </span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="font-mono text-xs text-muted">
+                                  @{claim.target_client_username}
+                                </span>
+                                {claim.target_client_member_code && (
+                                  <span className="rounded bg-surface-accent px-1.5 py-0.2 font-mono text-[10px] text-muted">
+                                    #{claim.target_client_member_code}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3 text-xs">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-foreground">
+                                  {formatDisplayDate(claim.booking_date)}
+                                </span>
+                                <span className="font-mono text-muted">
+                                  {claim.start_time ? formatTime(claim.start_time) : "None (Wet Area)"}
+                                </span>
+                              </div>
+                              <div className="text-muted text-[11px] flex flex-wrap gap-x-2">
+                                <span>{claim.service_name ?? "Wet Area"}</span>
+                                <span>•</span>
+                                <span>Therapist: {claim.therapist_name ?? "Unassigned"}</span>
+                                {claim.locker_number != null && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-gold">Locker {claim.locker_number}</span>
+                                  </>
+                                )}
+                              </div>
+                              <div className="text-[11px] font-medium text-foreground">
+                                {claim.amount != null ? (
+                                  <span>
+                                    ₱{Number(claim.amount).toLocaleString()}{" "}
+                                    {claim.payment_method && (
+                                      <span className="text-muted text-[10px]">({claim.payment_method})</span>
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted italic">—</span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3 text-xs">
+                            <span className="rounded bg-gold/15 border border-gold/30 px-2 py-0.5 text-xs font-bold text-gold">
+                              +{claim.points_to_credit} pts
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-3 text-xs">
+                            <div className="text-muted">
+                              Requested by: <strong className="text-foreground">{claim.requested_by_staff_name}</strong>
+                              <div className="text-[11px] font-mono text-muted mt-0.5">
+                                {formatDisplayDate(claim.created_at.split("T")[0])}
+                                {claim.created_at.includes("T")
+                                  ? ` · ${formatTime(claim.created_at.split("T")[1]?.slice(0, 5))}`
+                                  : ""}
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3 text-right text-xs">
+                            {canReviewClaims ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleApproveSingle(claim.id)}
+                                  disabled={isApproving || isRejecting}
+                                  className="rounded border border-gold/60 bg-gold/10 px-2.5 py-1 text-xs font-semibold text-gold hover:bg-gold/20 disabled:opacity-50 transition-colors cursor-pointer"
+                                >
+                                  {isApproving ? "Approving..." : "Approve"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRejectSingle(claim.id)}
+                                  disabled={isApproving || isRejecting}
+                                  className="rounded border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition-colors cursor-pointer"
+                                >
+                                  {isRejecting ? "Rejecting..." : "Reject"}
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="rounded bg-surface-accent px-2 py-0.5 text-[11px] text-muted font-medium">
+                                Supervisor review required
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Claims Pagination Controls Bar */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-lg border border-border bg-surface p-4 text-sm">
+                <div className="text-xs text-muted">
+                  Showing <span className="font-medium text-foreground">{claimsStartIndex + 1}</span>–
+                  <span className="font-medium text-foreground">
+                    {Math.min(claimsStartIndex + claimsPageSize, totalPendingClaims)}
+                  </span>{" "}
+                  of <span className="font-medium text-foreground">{totalPendingClaims}</span> claims
+                </div>
+
+                <div className="flex flex-wrap items-center gap-6">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted">Rows per page:</span>
+                    <select
+                      value={claimsPageSize}
+                      onChange={(e) => setClaimsPageSize(Number(e.target.value))}
+                      className="rounded-md border border-[#292524] bg-[#141210] px-2.5 py-1 text-xs text-[#f5f5f4] focus:border-gold/50 focus:outline-none"
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={claimsCurrentPage <= 1}
+                      onClick={() => setClaimsCurrentPage((p) => Math.max(1, p - 1))}
+                      className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors cursor-pointer"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs text-muted">
+                      Page <span className="font-medium text-foreground">{claimsCurrentPage}</span> of{" "}
+                      <span className="font-medium text-foreground">{totalClaimsPages}</span>
+                    </span>
+                    <button
+                      type="button"
+                      disabled={claimsCurrentPage >= totalClaimsPages}
+                      onClick={() => setClaimsCurrentPage((p) => Math.min(totalClaimsPages, p + 1))}
+                      className="rounded-md border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-40 transition-colors cursor-pointer"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       {selectedMemberForProfile && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
@@ -887,6 +1355,18 @@ export function ClientBrowser({
                 className="w-full flex items-center justify-center gap-1.5 rounded-md border border-gold bg-gold/10 px-4 py-2 text-xs font-semibold text-gold hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
               >
                 <span>+</span> Log Visit for Member
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCandidate(null);
+                  setClaimSearch("");
+                  setClaimFeedback(null);
+                  setShowClaimModal(true);
+                }}
+                className="w-full flex items-center justify-center gap-1.5 rounded-md border border-gold/40 bg-gold/5 px-4 py-2 text-xs font-semibold text-gold hover:bg-gold/15 transition-colors cursor-pointer"
+              >
+                <span>🏷</span> Claim Past Walk-in Visit
               </button>
               <button
                 type="button"
@@ -1216,6 +1696,243 @@ export function ClientBrowser({
             router.refresh();
           }}
         />
+      )}
+
+      {/* APPROVE ALL CONFIRMATION MODAL */}
+      {showApproveAllModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 animate-fade-in">
+          <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="text-base font-bold text-foreground">Approve All Claims?</h3>
+              <button
+                type="button"
+                onClick={() => setShowApproveAllModal(false)}
+                disabled={isApprovingAll}
+                className="text-muted hover:text-foreground p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-sm text-muted leading-relaxed">
+              Approve All Claims? This will approve <strong className="text-foreground">{pendingClaims.length}</strong> pending claims and credit a total of <strong className="text-gold font-bold">+{totalPointsToCreditAll} points</strong> to their respective members.
+            </p>
+
+            {bulkApproveFeedback && (
+              <div
+                className={`rounded-lg p-3 text-xs ${
+                  bulkApproveFeedback.ok
+                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                    : "bg-red-500/10 text-red-400 border border-red-500/20"
+                }`}
+              >
+                {bulkApproveFeedback.message}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowApproveAllModal(false)}
+                disabled={isApprovingAll}
+                className="rounded-md border border-border px-4 py-2 text-xs font-medium text-muted hover:text-foreground transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleApproveAllConfirm}
+                disabled={isApprovingAll || pendingClaims.length === 0}
+                className="rounded-md border border-gold bg-gold px-4 py-2 text-xs font-bold text-black hover:bg-gold/90 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isApprovingAll ? "Approving All..." : "Confirm Bulk Approval"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CLAIM PAST WALK-IN VISIT MODAL (Candidate Search & Initiation) */}
+      {showClaimModal && selectedMemberForProfile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 animate-fade-in"
+          onClick={() => {
+            if (!isSubmittingClaim) setShowClaimModal(false);
+          }}
+        >
+          <div
+            className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl border border-border bg-surface shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="border-b border-border p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-gold">
+                  Claim Past Walk-In Visit
+                </p>
+                <h2 className="text-lg font-bold text-foreground mt-0.5">
+                  {selectedMemberForProfile.codename}{" "}
+                  <span className="text-xs font-mono text-muted">(@{selectedMemberForProfile.username})</span>
+                </h2>
+                <p className="text-xs text-muted mt-0.5">
+                  Search unlinked walk-ins. Submitted claims require Owner / Supervisor review before points are credited.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowClaimModal(false)}
+                disabled={isSubmittingClaim}
+                className="rounded-md p-1 text-muted hover:text-foreground transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Search filter in modal */}
+            <div className="p-4 border-b border-border bg-surface-2">
+              <input
+                type="text"
+                value={claimSearch}
+                onChange={(e) => setClaimSearch(e.target.value)}
+                placeholder="Search candidate visits by guest codename, date (YYYY-MM-DD), locker #, or service..."
+                className="w-full rounded-lg border border-border bg-surface py-2 px-3 text-xs text-foreground placeholder:text-muted focus:border-gold/50 focus:outline-none"
+              />
+            </div>
+
+            {/* Candidate list */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {candidateWalkIns.length === 0 ? (
+                <div className="rounded-lg border border-border bg-surface-2 p-8 text-center text-xs text-muted">
+                  {claimSearch.trim()
+                    ? "No unlinked walk-in visits match your search criteria."
+                    : "No unlinked walk-in visits currently available to claim."}
+                </div>
+              ) : (
+                candidateWalkIns.map((candidate) => {
+                  const isSelected = selectedCandidate?.id === candidate.id;
+                  const previewPoints = computeCandidatePoints(candidate);
+
+                  return (
+                    <div
+                      key={candidate.id}
+                      onClick={() => setSelectedCandidate(candidate)}
+                      className={`rounded-lg border p-3.5 transition-all cursor-pointer ${
+                        isSelected
+                          ? "border-gold bg-gold/10 shadow-md ring-1 ring-gold/40"
+                          : "border-border bg-surface-2 hover:border-gold/30 hover:bg-gold/5"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-gold">
+                            {candidate.guest_label}
+                          </span>
+                          <span className="text-[11px] font-mono text-muted">
+                            {formatDisplayDate(candidate.booking_date)}
+                            {candidate.start_time ? ` · ${formatTime(candidate.start_time)}` : ""}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="rounded bg-gold/15 border border-gold/30 px-2 py-0.5 text-xs font-bold text-gold">
+                            +{previewPoints} pts
+                          </span>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded font-medium ${
+                              isSelected
+                                ? "bg-gold text-black font-semibold"
+                                : "bg-surface text-muted border border-border"
+                            }`}
+                          >
+                            {isSelected ? "Selected" : "Select"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-2.5 text-xs">
+                        <div>
+                          <p className="text-[10px] uppercase text-muted">Service</p>
+                          <p className="font-medium text-foreground truncate">
+                            {candidate.service_name ?? "Wet Area"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase text-muted">Therapist</p>
+                          <p className="font-medium text-foreground truncate">
+                            {candidate.therapist_name ?? "Unassigned"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase text-muted">Room</p>
+                          <p className="font-medium text-foreground truncate">
+                            {candidate.room_number ? `Room ${candidate.room_number}` : "None"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase text-muted">Locker</p>
+                          <p className="font-medium text-foreground">
+                            {candidate.locker_number ? `Locker ${candidate.locker_number}` : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase text-muted">Amount</p>
+                          <p className="font-medium text-foreground">
+                            {candidate.amount != null ? `₱${candidate.amount.toLocaleString()}` : "—"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Footer / Feedback */}
+            <div className="border-t border-border p-4 bg-surface-2 flex flex-col gap-3">
+              {claimFeedback && (
+                <div
+                  className={`rounded-lg p-3 text-xs ${
+                    claimFeedback.ok
+                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                      : "bg-red-500/10 text-red-400 border border-red-500/20"
+                  }`}
+                >
+                  {claimFeedback.message}
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="text-xs text-muted">
+                  {selectedCandidate ? (
+                    <span>
+                      Selected: <strong className="text-foreground">{selectedCandidate.guest_label}</strong> ({formatDisplayDate(selectedCandidate.booking_date)}) · Preview: <strong className="text-gold">+{computeCandidatePoints(selectedCandidate)} pts</strong>
+                    </span>
+                  ) : (
+                    <span>Select a candidate visit above to claim</span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 self-end sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setShowClaimModal(false)}
+                    disabled={isSubmittingClaim}
+                    className="rounded-md border border-border px-4 py-2 text-xs font-medium text-foreground hover:border-gold/30 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSubmitClaim}
+                    disabled={!selectedCandidate || isSubmittingClaim}
+                    className="rounded-md border border-gold bg-gold px-4 py-2 text-xs font-bold text-black hover:bg-gold/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    {isSubmittingClaim ? "Submitting..." : "Submit Claim Request"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
