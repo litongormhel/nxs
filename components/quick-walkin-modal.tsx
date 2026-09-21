@@ -420,22 +420,29 @@ export function QuickWalkinModal({
 
       const stMap = new Map<string, Set<string>>();
       const tsMap = new Map<string, Set<string>>();
+      const scrubAndMassage = services.find((s) => s.name === "Scrub + Massage");
+      const activeScrubId = scrubAndMassage?.id ?? "8c97c5db-eaa9-47b9-89c0-9db114000483";
+      const legacyScrubId = "326e0b78-49cb-441c-aa03-e54453f2f67f";
+
       for (const row of servicesOffered.data ?? []) {
-        if (!stMap.has(row.service_id)) {
-          stMap.set(row.service_id, new Set());
+        const effectiveServiceId =
+          row.service_id === legacyScrubId ? activeScrubId : row.service_id;
+
+        if (!stMap.has(effectiveServiceId)) {
+          stMap.set(effectiveServiceId, new Set());
         }
-        stMap.get(row.service_id)!.add(row.therapist_id);
+        stMap.get(effectiveServiceId)!.add(row.therapist_id);
 
         if (!tsMap.has(row.therapist_id)) {
           tsMap.set(row.therapist_id, new Set());
         }
-        tsMap.get(row.therapist_id)!.add(row.service_id);
+        tsMap.get(row.therapist_id)!.add(effectiveServiceId);
       }
       setServiceTherapistMap(stMap);
       setTherapistServicesMap(tsMap);
       setServicesLoaded(true);
     });
-  }, [date]);
+  }, [date, services]);
 
   useEffect(() => {
     if (error) errorRef.current?.scrollIntoView({ block: "nearest" });

@@ -4,10 +4,27 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#9d3b7e1a` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#1b4e9f7a` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Audit and Fix Service Name vs ID Mismatch in Therapist Booking Flow — complete**
+  (`ohm#1b4e9f7a`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Database & Catalog Resolution (`public.services`, `public.therapist_services`)**:
+    - Discovered root cause of missing scrub service: `public.services` contains two records: inactive `Scrub` (`326e0b78-49cb-441c-aa03-e54453f2f67f`, `active: false`, ₱900) vs active `Scrub + Massage` (`8c97c5db-eaa9-47b9-89c0-9db114000483`, `active: true`, ₱1,800).
+    - 7 therapist records in `public.therapist_services` previously pointed to the inactive `Scrub` UUID. Migrated all 7 records to the active `Scrub + Massage` UUID (`8c97c5db-eaa9-47b9-89c0-9db114000483`).
+  - **Roster Card & Browser Alignment (`components/therapist-browser.tsx`)**:
+    - Preserved concise `"Scrub"` pill label on cards to maintain tight button widths and responsive card grid spacing.
+    - Updated `serviceIdMap` initializer: resolves `"Scrub"` to `serviceIds["Scrub + Massage"] ?? serviceIds["Scrub"]`.
+    - Added `normalizeServiceNames` helper to convert server-joined `"Scrub + Massage"` strings into `"Scrub"` on card initialization and server sync revalidation (`useEffect`).
+    - Verified service toggle mutations (`handleConfirmBadgeAction`) and Add Therapist modal (`handleConfirmAdd`) resolve `"Scrub"` to the active `Scrub + Massage` ID before writing to Postgres.
+  - **Quick Walk-in Modal Resilience (`components/quick-walkin-modal.tsx`)**:
+    - Added defense-in-depth normalization in `therapist_services` query processing, mapping legacy inactive `Scrub` ID to active `Scrub + Massage` ID.
+    - Verified bidirectional filtering: selecting a therapist who offers scrub immediately renders `Scrub + Massage · 90min` in `availableServices`; selecting `Scrub + Massage` limits the therapist dropdown strictly to scrub-qualified therapists (Ron, Tristan, Roy, Xander, Dan, Marco, Josh) and excludes non-offering therapists (Leo, Don, Akio, Ruru).
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors). Node simulation verified active services and therapist capability resolution across all 11 roster therapists.
+  - **Next steps / References**: See [[therapists_state]], [[bookings_state]], and `.ai/briefing.md`.
 
 - **Add Confirmation Modal for Weekly Days Off and Services Offered Changes — complete**
   (`ohm#9d3b7e1a`, 2026-09-21).

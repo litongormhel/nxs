@@ -523,6 +523,15 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Added fallback empty option `— no services available —` when a therapist has no offered services.
   - Recalculations: `amount`, duration, room availability calculations, and split payment auto-balancing recalculate seamlessly on dynamic service adjustments.
 
+**Correction, `ohm#1b4e9f7a` (2026-09-21)** — Audit and Fix Service Name vs ID Mismatch in Therapist Booking Flow.
+
+- **Catalog & Capability Discrepancy Resolution (`public.services`, `public.therapist_services`, `components/quick-walkin-modal.tsx`)**:
+  - Identified database discrepancy: `public.services` contains inactive legacy service `"Scrub"` (`326e0b78-49cb-441c-aa03-e54453f2f67f`, `active: false`, ₱900) and active catalog service `"Scrub + Massage"` (`8c97c5db-eaa9-47b9-89c0-9db114000483`, `active: true`, ₱1,800).
+  - Previously, therapist cards and `therapist_services` referenced the inactive `Scrub` UUID. Because `QuickWalkinModal` filters active services (`.eq("active", true)`), `availableServices` omitted the inactive Scrub row while also omitting `"Scrub + Massage"` because therapists lacked its active UUID.
+  - Repointed existing `therapist_services` capability rows from the inactive `Scrub` UUID to the active `Scrub + Massage` UUID (`8c97c5db...`).
+  - Added defense-in-depth alias normalization in `QuickWalkinModal` query processing mapping legacy `Scrub` ID to `Scrub + Massage` ID.
+  - Verified bidirectional filtering in `QuickWalkinModal`: launching or selecting a therapist offering scrub immediately includes `Scrub + Massage · 90min` in `availableServices`; selecting `Scrub + Massage` filters qualified therapists strictly to those offering the service.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - The New Booking conflict-greying query re-fetches on every date change

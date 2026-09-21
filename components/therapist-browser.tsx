@@ -118,6 +118,10 @@ function windowOverlap(
   return aStart < bStart + bDur && bStart < aStart + aDur;
 }
 
+function normalizeServiceNames(list: string[]): string[] {
+  return list.map((name) => (name === "Scrub + Massage" ? "Scrub" : name));
+}
+
 export function TherapistBrowser({
   initialTherapists,
   initialDayOff = {},
@@ -165,7 +169,15 @@ export function TherapistBrowser({
   // Maps service display name -> real DB services.id, for resolving the
   // fixed UI labels (Combi Massage / Signature Massage / Scrub) into the
   // FK therapist_services.service_id expects.
-  const [serviceIdMap] = useState<Record<string, string>>(() => serviceIds);
+  // Note: The UI pill is labeled "Scrub", which maps to the active catalog
+  // record "Scrub + Massage" (id: 8c97c5db-eaa9-47b9-89c0-9db114000483).
+  const [serviceIdMap] = useState<Record<string, string>>(() => {
+    const map = { ...serviceIds };
+    if (serviceIds["Scrub + Massage"]) {
+      map["Scrub"] = serviceIds["Scrub + Massage"];
+    }
+    return map;
+  });
 
   const [therapistMeta, setTherapistMeta] = useState<
     Record<string, TherapistMetaRecord>
@@ -185,9 +197,9 @@ export function TherapistBrowser({
           : [],
         services:
           initialTherapists && initialTherapists.length > 0
-            ? (initialServices[r.id] ? initialServices[r.id].slice() : [])
+            ? (initialServices[r.id] ? normalizeServiceNames(initialServices[r.id]) : [])
             : r.id in initialServices
-            ? initialServices[r.id].slice()
+            ? normalizeServiceNames(initialServices[r.id])
             : restricted[r.name]
             ? restricted[r.name].slice()
             : ALL_THERAPIST_SERVICES.slice(),
@@ -208,7 +220,8 @@ export function TherapistBrowser({
       let changed = false;
       const next = { ...prev };
       for (const r of initialRecords) {
-        const dbList = initialServices[r.id] ?? [];
+        const rawDbList = initialServices[r.id] ?? [];
+        const dbList = normalizeServiceNames(rawDbList);
         const current = next[r.name];
         if (current) {
           const isSame =
