@@ -66,6 +66,11 @@ function fmtPhtTime(isoString: string, selectedSpaDate: string): string {
   return timeStr;
 }
 
+/** Returns true if the sale's created_at is more than 3 days (72 h) old. */
+function isSaleLapsed(createdAt: string): boolean {
+  return Date.now() - new Date(createdAt).getTime() > 3 * 24 * 60 * 60 * 1000;
+}
+
 const GRID_COLS = "1.1fr 1fr 1fr .9fr 1.1fr .9fr 1fr 1.6fr";
 
 export function SalesBrowser({
@@ -500,20 +505,38 @@ export function SalesBrowser({
               <div className="flex flex-wrap items-center gap-1.5">
                 {!s.voided ? (
                   <>
-                    <button
-                      disabled={!editAllowed}
-                      title={editAllowed ? undefined : "Supervisor or Owner only"}
-                      onClick={() => editAllowed && openEdit(s)}
-                      className="rounded-md border border-border px-2 py-1 text-[10.5px] font-semibold text-foreground hover:border-gold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => openVoidModal(s)}
-                      className="rounded-md border border-[#6b2b2b] px-2 py-1 text-[10.5px] font-semibold text-accent-red hover:bg-accent-red/10 cursor-pointer"
-                    >
-                      Void
-                    </button>
+                    {(() => {
+                      const lapsed = isSaleLapsed(s.created_at);
+                      const isOwner = currentRole === "Owner";
+                      const editLocked = lapsed && !isOwner;
+                      const voidLocked = lapsed && !isOwner;
+                      return (
+                        <>
+                          <button
+                            disabled={!editAllowed || editLocked}
+                            title={
+                              editLocked
+                                ? "Editing locked after 3 days. Owner only"
+                                : editAllowed
+                                ? undefined
+                                : "Supervisor or Owner only"
+                            }
+                            onClick={() => !editLocked && editAllowed && openEdit(s)}
+                            className="rounded-md border border-border px-2 py-1 text-[10.5px] font-semibold text-foreground hover:border-gold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            disabled={voidLocked}
+                            title={voidLocked ? "Void locked after 3 days. Owner only" : undefined}
+                            onClick={() => !voidLocked && openVoidModal(s)}
+                            className="rounded-md border border-[#6b2b2b] px-2 py-1 text-[10.5px] font-semibold text-accent-red hover:bg-accent-red/10 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            Void
+                          </button>
+                        </>
+                      );
+                    })()}
                   </>
                 ) : (
                   <button

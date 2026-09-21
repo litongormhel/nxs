@@ -81,7 +81,16 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-21 — Display "Redeem" for Points Redemption Transactions in Sales Table**
+1. **2026-09-21 — Restrict Sales Action Buttons After 3 Days to Owner Role Only**
+   (`ohm#4a9e1d2c`). Implementation plan presented and approved before code execution.
+   - **`isSaleLapsed` helper (`components/sales-browser.tsx`)**: Pure function returning `true` when `Date.now() - new Date(createdAt).getTime() > 3 * 24 * 60 * 60 * 1000`.
+   - **Edit button**: `disabled={!editAllowed || editLocked}` where `editLocked = isSaleLapsed(s.created_at) && currentRole !== "Owner"`. Title switches between lapse message and role message. `onClick` double-guards both conditions.
+   - **Void button**: gains `disabled={voidLocked}` and `title="Void locked after 3 days. Owner only"` (previously had no `disabled` state at all). `onClick` guards `!voidLocked`.
+   - **`guardLapsedSale` helper (`app/(staff)/sales/actions.ts`)**: Fetches `created_at` via `adminClient`, checks 72-hour age. If lapsed, resolves caller via `auth.getUser()` → `staff.position`; rejects non-Owners with `"Sales older than 3 days can only be modified or voided by the Owner."`.
+   - **`editSale`**: calls `guardLapsedSale` before DB update. **`voidSale`**: calls `guardLapsedSale` after PIN validation (Step 2b), before DB update. `restoreSale` untouched. No DB migrations.
+   - `npm run build` clean (0 errors). See [[sales_state]] and `.ai/handoff.md`.
+
+2. **2026-09-21 — Display "Redeem" for Points Redemption Transactions in Sales Table**
    (`ohm#7d2a1c4e`). Implementation plan presented and approved before code execution.
    - **Promo Column (`components/sales-browser.tsx`)**: When `payment_method === 'Points'`, renders a gold `Redeem` badge (`bg-gold/15 text-accent-gold`, uppercase, matching the Voided badge style) instead of `—`. All non-Points rows continue to display `promo_label ?? "—"` — unaffected.
    - **Payment Column (`components/sales-browser.tsx`)**: When `payment_method === 'Points'`, renders `Points` in `text-accent-gold font-medium` so it is visually distinct from `Cash` / `GCash` / `Card`. All other payment methods render as plain muted text — unaffected.
@@ -89,28 +98,20 @@ Full invariant list: [[nxs-architecture-locks]].
    - **`app/(staff)/sales/page.tsx`**: No changes — `payment_method` was already fetched and mapped.
    - `npm run build` clean (0 errors). See [[sales_state]] and `.ai/handoff.md`.
 
-2. **2026-09-21 — Sort Call Sheet by Operating Shift Time (4:00 PM First, 1:00 AM Last)**
+3. **2026-09-21 — Sort Call Sheet by Operating Shift Time (4:00 PM First, 1:00 AM Last)**
    (`ohm#3f8a2c1d`). Implementation plan presented and approved before code execution.
    - **Shift-Aware Sort (`components/call-sheet-browser.tsx`)**: Added `getOperatingMinutes(slotTime: string | null): number` helper that converts a `HH:MM` slot time to absolute minutes on the operating day. Post-midnight times (`h < 6`, e.g. `01:00`) are offset by `+24 h` so they rank after all PM slots. `null` slot_time returns `9999` (sinks to bottom). Updated the `useMemo` for `filtered` to spread-copy and `.sort()` with primary key = `getOperatingMinutes(slot_time)` ascending, secondary key = `locker_number` ascending. Filter pill buttons and the `availableSlots` array are completely untouched.
    - `npm run build` clean (0 errors). See [[operations_state]] and `.ai/handoff.md`.
 
-2. **2026-09-21 — Fix Date Navigator Chevron Jumping and Align Status Tabs Beside Date Picker**
+4. **2026-09-21 — Fix Date Navigator Chevron Jumping and Align Status Tabs Beside Date Picker**
    (`ohm#9a4c2e1f`). Implementation plan presented and approved before code execution.
    - **Date Chevron Fix (`components/booking-browser.tsx`)**: Root cause was `.toISOString().slice(0, 10)` output on the chevron handlers converting local midnight back to UTC, causing a 1-day rollback in UTC+8. Fixed with strict local date arithmetic using `split('-').map(Number)`, `new Date(y, m - 1, d)`, `setDate(±1)`, and local `getFullYear()`/`getMonth()`/`getDate()` getters for the output string. Left chevron now decrements exactly 1 day; right chevron increments exactly 1 day — no UTC drift.
    - **Single-Row Header Layout (`components/booking-browser.tsx`)**: Removed standalone tab row below the date navigator. Merged date stepper, status tabs (`UPCOMING/CHECK-IN/CHECK-OUT`), and action buttons into one `flex flex-wrap items-center` row. Vertical divider (`h-6 w-px bg-border`) separates the stepper from the tabs; `sm:ml-auto` pushes action buttons to the far right. Active tab indicator, counts, and filtering behavior are fully preserved.
    - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-21 — Prevent Owner and Current Staff from Archiving Themselves**
+5. **2026-09-21 — Prevent Owner and Current Staff from Archiving Themselves**
    (`ohm#8e1a4f2c`). Implementation plan presented and approved before code execution.
    - **Server Action Safeguards (`app/(staff)/staff/actions.ts`)**: In `archiveStaff`, resolved caller's authenticated staff identity (`callerStaff`) from `supabase.auth.getUser()`. Added Guard 1 rejecting self-archival (`target.id === callerStaff.id || target.user_id === user.id`) with `"You cannot archive your own account."`. Added Guard 2 rejecting last-owner archival (`target.position === 'Owner'` with 0 other active owners) with `"Cannot archive the only active Owner."`.
    - **Staff Directory UI (`components/staff-browser.tsx`)**: Resolved current staff identity from `useStaffSim()`. On the current staff member's own card, rendered the "Archive" dropdown option disabled with `title="You cannot archive your own account"` and muted styling, while keeping "Reset password" and "Edit details" fully functional and interactive. Added client-side defense-in-depth checks in `openArchiveModal` and `confirmArchive`.
    - `npm run build` clean (0 errors). See [[staff_state]] and `.ai/handoff.md`.
-
-4. **2026-09-21 — Redesign Member Profile Drawer with Streamlined Header and 2-Column Stats**
-   (`ohm#5c8e1a4f`). Implementation plan presented and approved before code execution.
-   - **Streamlined Header (`components/client-browser.tsx`)**: Replaced standalone "MOBILE NUMBER" and "MEMBER SINCE" full-width cards with a consolidated 3-tier header: (1) Member codename with close `[✕]` button, (2) Combined username and mobile number (`@{username} • {phone}`), and (3) `Member since {date}` directly beneath in muted text.
-   - **2-Column Stats Grid (`components/client-browser.tsx`)**: Unified key member metrics into a side-by-side 2-column card layout: Left Card "AVAILABLE POINTS" with bold gold accent value (`{points} pts`), Right Card "CURRENT STATUS" with active locker check-in badge (`Locker {locker}` in gold or muted `Not Checked In`).
-   - **Compact QR Code Container & Actions (`components/client-browser.tsx`)**: Reduced QR code footprint (`130px`) with centered padding and truncated token string with click-to-copy button and `✓ Copied` feedback. Structured action buttons cleanly (+ Log Visit for Member, Claim Past Walk-in Visit honoring disabled toggle and tooltip, and Close).
-   - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
-
 

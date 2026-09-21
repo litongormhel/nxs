@@ -4,8 +4,24 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#3f8a2c1d` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#4a9e1d2c` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
+
+## In progress
+
+- **Restrict Sales Action Buttons After 3 Days to Owner Role Only — complete**
+  (`ohm#4a9e1d2c`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **`isSaleLapsed` helper (`components/sales-browser.tsx`)**: Added pure function `isSaleLapsed(createdAt: string): boolean` that returns `true` when `Date.now() - new Date(createdAt).getTime() > 3 * 24 * 60 * 60 * 1000`. Placed after `fmtPhtTime` (module-private).
+  - **Edit button (`components/sales-browser.tsx`, row action cell)**: Replaced with IIFE that computes `lapsed = isSaleLapsed(s.created_at)`, `isOwner = currentRole === "Owner"`, `editLocked = lapsed && !isOwner`. Button is `disabled={!editAllowed || editLocked}`. Title is "Editing locked after 3 days. Owner only" when `editLocked`, else "Supervisor or Owner only" when role-restricted, else `undefined`. `onClick` guards both `!editLocked && editAllowed` before opening.
+  - **Void button (`components/sales-browser.tsx`, row action cell)**: Added `disabled={voidLocked}` (where `voidLocked = lapsed && !isOwner`) and `title="Void locked after 3 days. Owner only"` when locked. `onClick` guards `!voidLocked` before opening the PIN modal. Also added `disabled:opacity-40 disabled:cursor-not-allowed` to CSS classes (previously absent).
+  - **Restore button**: completely untouched.
+  - **`guardLapsedSale` helper (`app/(staff)/sales/actions.ts`)**: New async function accepting `adminClient`, `supabase`, `saleId`. Fetches `created_at` via `adminClient` (bypasses RLS), computes age. If ≤ 3 days returns `null`. If > 3 days, resolves caller from `supabase.auth.getUser()` → `staff.position`. Returns `{ ok: false, error: "Sales older than 3 days can only be modified or voided by the Owner." }` for non-Owners, `null` for Owners.
+  - **`editSale` (`app/(staff)/sales/actions.ts`)**: Creates `adminClient = createStaffServiceClient()` at top of try-block, calls `guardLapsedSale(adminClient, supabase, saleId)` before the DB update. Returns guard error immediately if denied.
+  - **`voidSale` (`app/(staff)/sales/actions.ts`)**: Creates `supabase = await createClient()` alongside the existing `adminClient`. Calls `guardLapsedSale` between Step 2 (PIN validation) and Step 3 (DB update). Returns guard error immediately if denied.
+  - **`restoreSale`**: not modified (not in scope).
+  - **No DB migrations.** No new dependencies.
+  - **Verification**: `npm run build` clean (0 errors, 26 routes generated).
 
 ## In progress
 

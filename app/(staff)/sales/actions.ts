@@ -43,6 +43,56 @@ function verifyVoidPin(pin: string, storedHash: string): boolean {
   return trimmedPin === storedHash;
 }
 
+const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * Guard for the 3-day lapse rule.
+ * Fetches the sale's created_at, and if it is older than 3 days (72 h)
+ * verifies that the caller's authenticated session belongs to an Owner.
+ * Returns an ActionResult error if access should be denied, or null to allow.
+ */
+async function guardLapsedSale(
+  adminClient: ReturnType<typeof createStaffServiceClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  saleId: string
+): Promise<ActionResult | null> {
+  const { data: sale, error: saleErr } = await adminClient
+    .from("sales")
+    .select("created_at")
+    .eq("id", saleId)
+    .single();
+
+  if (saleErr || !sale) return { ok: false, error: "Sale not found." };
+
+  const ageMs = Date.now() - new Date(sale.created_at).getTime();
+  if (ageMs <= THREE_DAYS_MS) return null; // within 3 days — no restriction
+
+  // Sale is lapsed: caller must be Owner
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { data: staffRow, error: staffErr } = await supabase
+    .from("staff")
+    .select("position")
+    .eq("user_id", user.id)
+    .single();
+
+  if (staffErr || !staffRow) {
+    return { ok: false, error: "Could not verify staff role." };
+  }
+
+  if (staffRow.position !== "Owner") {
+    return {
+      ok: false,
+      error: "Sales older than 3 days can only be modified or voided by the Owner.",
+    };
+  }
+
+  return null; // caller is Owner — allowed
+}
+
 export async function editSale(
   saleId: string,
   updates: {
@@ -55,6 +105,11 @@ export async function editSale(
 ): Promise<ActionResult> {
   try {
     const supabase = await createClient();
+    const adminClient = createStaffServiceClient();
+
+    // 3-day lapse guard: non-Owner cannot edit sales older than 3 days
+    const lapseErr = await guardLapsedSale(adminClient, supabase, saleId);
+    if (lapseErr) return lapseErr;
 
     const { error } = await supabase
       .from("sales")
@@ -124,6 +179,7 @@ export async function voidSale(
     }
 
     const adminClient = createStaffServiceClient();
+    const supabase = await createClient();
 
     // Step 1: Fetch void_auth_code_hash directly from app_settings
     const { data: settings, error: settingsError } = await adminClient
@@ -145,6 +201,10 @@ export async function voidSale(
     if (!isValid) {
       return { ok: false, error: "Invalid Manager / Owner PIN." };
     }
+
+    // Step 2b: 3-day lapse guard — non-Owner cannot void sales older than 3 days
+    const lapseErr = await guardLapsedSale(adminClient, supabase, saleId);
+    if (lapseErr) return lapseErr;
 
     // Step 3: Directly update public.sales with fallback if void_reason column is not in DB cache
     let { error: updateError } = await adminClient
