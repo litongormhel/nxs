@@ -112,6 +112,21 @@ function sortBySpaDay(rows: BookingRow[]): BookingRow[] {
   return [...rows].sort((a, b) => compareSlotTimes(a.start_time, b.start_time));
 }
 
+function sortByLatestCheckin(rows: BookingRow[]): BookingRow[] {
+  return [...rows].sort((a, b) => {
+    const aTime = occupancyOf(a)?.checked_in_at;
+    const bTime = occupancyOf(b)?.checked_in_at;
+    const aMs = aTime ? new Date(aTime).getTime() : 0;
+    const bMs = bTime ? new Date(bTime).getTime() : 0;
+    if (aMs !== bMs && !isNaN(aMs) && !isNaN(bMs)) {
+      return bMs - aMs;
+    }
+    if (!isNaN(bMs) && bMs > 0 && (isNaN(aMs) || aMs === 0)) return 1;
+    if (!isNaN(aMs) && aMs > 0 && (isNaN(bMs) || bMs === 0)) return -1;
+    return b.id.localeCompare(a.id);
+  });
+}
+
 export function BookingBrowser({
   clients,
   services,
@@ -242,7 +257,7 @@ export function BookingBrowser({
   );
   const checkinRows = useMemo(
     () =>
-      sortBySpaDay(
+      sortByLatestCheckin(
         dayBookings.filter((r) => r.status === "Completed" && !occupancyOf(r)?.checked_out_at)
       ),
     [dayBookings]
@@ -479,7 +494,7 @@ export function BookingBrowser({
 
   function renderRoomPill(row: BookingRow) {
     return row.room_number ? (
-      <span className="text-muted">Room {row.room_number}</span>
+      <span className="text-muted">{row.room_number}</span>
     ) : (
       <span className="text-muted">—</span>
     );

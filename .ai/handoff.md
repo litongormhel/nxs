@@ -4,10 +4,23 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#6b3e8a1d` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#9a4e2f8c` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Format ROOM Column as Number Only and Sort CHECK-IN Tab by Latest Check-in Time — complete**
+  (`ohm#9a4e2f8c`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **ROOM Column Number-Only Formatting (`components/booking-browser.tsx`)**:
+    - In `renderRoomPill()`, updated display to render `<span className="text-muted">{row.room_number}</span>` without the "Room " prefix, matching the clean number-only styling of the LOCKER # column.
+    - Preserved `<span className="text-muted">—</span>` fallback for unassigned/Wet Area bookings across all tabs (Upcoming, Check-in, Check-out).
+  - **CHECK-IN Tab Descending Sort by Check-in Time (`components/booking-browser.tsx`)**:
+    - Added helper `sortByLatestCheckin(rows: BookingRow[])` sorting active check-in bookings by `occupancyOf(r)?.checked_in_at` in descending order (`desc` — newest check-in at the top of the table).
+    - Provided robust date parsing (`new Date(bTime).getTime() - new Date(aTime).getTime()`) with fallback to `b.id.localeCompare(a.id)` for missing or identical timestamps.
+    - Maintained chronological scheduled time sorting (`sortBySpaDay`) for the UPCOMING tab.
+  - **Tests & Verification**:
+    - `npm run build` clean (0 errors, 26 routes generated).
 
 - **Dynamically Derive 100-Points Loyalty Discount from Live Combi Massage Price — complete**
   (`ohm#6b3e8a1d`, 2026-09-21).

@@ -680,6 +680,17 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Strictly deducts 100 points via `point_transactions` ledger entry (`entry_type = 'REDEEM'`, `points_delta = -100`).
 - `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
 
+**Correction, `ohm#9a4e2f8c` (2026-09-21)** — Format ROOM Column as Number Only and Sort CHECK-IN Tab by Latest Check-in Time.
+
+- **ROOM Column Number-Only Formatting (`components/booking-browser.tsx`)**:
+  - In `renderRoomPill()`, updated display to render `<span className="text-muted">{row.room_number}</span>` without the "Room " prefix, matching the clean number-only styling of the LOCKER # column.
+  - Preserved `<span className="text-muted">—</span>` fallback for unassigned/Wet Area bookings across all tabs (Upcoming, Check-in, Check-out).
+- **CHECK-IN Tab Descending Sort by Check-in Time (`components/booking-browser.tsx`)**:
+  - Added helper `sortByLatestCheckin(rows: BookingRow[])` sorting active check-in bookings by `occupancyOf(r)?.checked_in_at` in descending order (`desc` — newest check-in at the top of the table).
+  - Provided robust date parsing with fallback to `b.id.localeCompare(a.id)` for missing or identical timestamps.
+  - Maintained chronological scheduled time sorting (`sortBySpaDay`) for the UPCOMING tab.
+- `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - The New Booking conflict-greying query re-fetches on every date change
