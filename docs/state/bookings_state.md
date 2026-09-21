@@ -127,7 +127,7 @@
     automatically assigns the first free room from live conflict calculations.
   - Placeholder staff picker (`// TEMP: placeholder actor pending Staff Auth phase`)
     for audit tracking (`created_by`).
-  - Triggers SMS preview modal for registered clients upon creation; walk-ins complete directly.
+  - Triggers SMS preview modal for all bookings (registered clients and walk-in guests) upon creation.
 - `components/quick-walkin-modal.tsx` — **(Rebuilt, `ohm#8r3n6y1q`) Quick
   Walk-in**: full mockup parity, scoped to the mockup's `openQuickWalkin()`
   flow only (instant, one-step, no pre-existing booking) —
@@ -167,7 +167,7 @@
   - **(`ohm#quickwalkinlockerdisabledstate`, 2026-09-18) Keep Occupied Lockers as Disabled Options**:
     `QuickWalkinModal` updated locker options mapping to render all lockers without filtering occupied ones out. Occupied lockers are rendered with `disabled` attribute and text `Locker {n} — Occupied` with `text-muted` styling. Default option formatted as `— select locker —`. Added validation in `canSubmit` and `handleSubmit` ensuring selected locker is strictly unoccupied.
 - `components/sms-preview-modal.tsx` — shown after a successful New
-  Booking for a registered client (`client_id` not null). Editable
+  Booking for both registered clients and walk-in guests (`ohm#1f4c7a9b`). Editable
   textarea pre-filled with the active customized SMS template from Settings
   (or default official Nexus Spa copy: `DEFAULT_SMS_TEMPLATE` from
   `lib/bookings/sms.ts`, `ohm#4f8e1b2d`) interpolated dynamically with
@@ -594,6 +594,18 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Emits audit log to `action_logs` (`quick_walkin`) and revalidates paths (`/bookings`, `/dashboard`, `/sales`, `/lockers`).
 - **Database Migration (`supabase/migrations/20260921120000_quick_walkin_active_locker_reuse.sql`)**:
   - Updated `quick_walkin` PL/pgSQL function to support locker reuse on matching `p_locker_number` and client identity, updating existing occupancy rather than attempting an unconditional duplicate insert.
+- `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
+
+**Correction, `ohm#1f4c7a9b` (2026-09-21)** — Fix SMS Confirmation Modal Not Appearing in New Booking Flow.
+
+- **Root Cause & Walk-in SMS Support (`components/booking-form-modal.tsx`)**:
+  - Resolved issue where `handleSubmit` checked `if (isRegisteredClient)` (`!isWalkIn`), prematurely skipping SMS preview and immediately firing `showBookingToast` and `onCreated()` on walk-in / guest bookings (the default client selector state).
+  - Resolved client display name to `walkinName.trim() || "Guest"` for walk-in / no account bookings and member codename for registered clients.
+  - Unified SMS confirmation preview generation so all advance bookings created from `BookingFormModal` prompt the SMS confirmation modal with fully interpolated details.
+- **Portaling & Modal Lifecycle (`components/sms-preview-modal.tsx`, `components/booking-form-modal.tsx`)**:
+  - Portaled `SmsPreviewModal` directly to `document.body` via React's `createPortal` with client mount hydration guard and `z-[60]` layer, ensuring clean unobstructed visibility over parent modals and backdrop layers.
+  - Rendered `<SmsPreviewModal />` alongside `BookingFormModal` without early return unmounts.
+  - Postponed parent `onCreated()` and `showBookingToast` triggers until the receptionist clicks "Done" in the SMS Preview modal.
 - `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
 
 ## Known simplifications (not gaps — deliberate for this phase's scope)

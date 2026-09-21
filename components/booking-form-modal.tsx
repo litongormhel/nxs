@@ -548,61 +548,36 @@ export function BookingFormModal({
         description: toastSubtitle,
       };
 
-      const isRegisteredClient = !isWalkIn && (!!selectedClient || clientSelectValue !== "__walkin__");
-      if (isRegisteredClient) {
-        const clientCodename = selectedClient?.codename ?? "Client";
-        const servicePrice = selectedService?.price ?? 0;
-        const serviceName = selectedService?.name ?? "Service";
+      const servicePrice = selectedService?.price ?? 0;
+      const serviceName = selectedService?.name ?? "Service";
 
-        setPendingSuccessToast(successToastData);
-        const interpolated = interpolateSmsTemplate(activeSmsTemplate, {
-          booking_date: date,
-          client_name: clientCodename,
-          slot_time: formattedSlot || time,
-          therapist_name: resolvedTherapistName ?? "—",
-          service_name: serviceName,
-          amount: servicePrice,
-        });
+      setPendingSuccessToast(successToastData);
+      const interpolated = interpolateSmsTemplate(activeSmsTemplate, {
+        booking_date: date,
+        client_name: resolvedClientName,
+        slot_time: formattedSlot || time,
+        therapist_name: resolvedTherapistName ?? "—",
+        service_name: serviceName,
+        amount: servicePrice,
+      });
 
-        setSmsBooking({
-          codename: clientCodename,
-          price: servicePrice,
-          serviceName: serviceName,
-          date,
-          startTime: formattedSlot || time,
-          therapistName: resolvedTherapistName,
-          message: interpolated,
-        });
-        setShowSmsPreview(true);
-        return;
-      }
-
-      showBookingToast(successToastData);
-      onCreated();
+      setSmsBooking({
+        codename: resolvedClientName,
+        price: servicePrice,
+        serviceName: serviceName,
+        date,
+        startTime: formattedSlot || time,
+        therapistName: resolvedTherapistName,
+        message: interpolated,
+      });
+      setShowSmsPreview(true);
     });
   }
 
-  if (showSmsPreview && smsBooking) {
-    return (
-      <SmsPreviewModal
-        booking={smsBooking}
-        initialMessage={smsBooking.message}
-        onClose={() => {
-          setShowSmsPreview(false);
-          setSmsBooking(null);
-          if (pendingSuccessToast) {
-            showBookingToast(pendingSuccessToast);
-            setPendingSuccessToast(null);
-          }
-          onCreated();
-        }}
-      />
-    );
-  }
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="text-base font-semibold text-foreground">New Booking</h2>
         <p className="mt-0.5 text-xs text-muted">
           Room assigns automatically — override manually if needed.
@@ -933,5 +908,22 @@ export function BookingFormModal({
         </div>
       </div>
     </div>
+
+    {showSmsPreview && smsBooking && (
+      <SmsPreviewModal
+        booking={smsBooking}
+        initialMessage={smsBooking.message}
+        onClose={() => {
+          setShowSmsPreview(false);
+          setSmsBooking(null);
+          if (pendingSuccessToast) {
+            showBookingToast(pendingSuccessToast);
+            setPendingSuccessToast(null);
+          }
+          onCreated();
+        }}
+      />
+    )}
+  </>
   );
 }

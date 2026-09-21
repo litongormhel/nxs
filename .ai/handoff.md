@@ -4,10 +4,25 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#5e9a1b3d` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#1f4c7a9b` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Fix SMS Confirmation Modal Not Appearing in New Booking Flow — complete**
+  (`ohm#1f4c7a9b`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Root Cause Resolution (`components/booking-form-modal.tsx`)**:
+    - Identified that `clientSelectValue` defaults to `"__walkin__"` (`isWalkIn === true`).
+    - Previously, `handleSubmit` checked `if (isRegisteredClient) { setShowSmsPreview(true); return; }` and immediately fell through to `showBookingToast(...)` and `onCreated()` for walk-ins/guests, bypassing the SMS preview modal and instantly closing `BookingFormModal` before any modal could render.
+    - Updated `handleSubmit` to resolve `clientDisplayName`: `isWalkIn ? (walkinName.trim() || "Guest") : (selectedClient?.codename ?? "Client")`.
+    - Unified the SMS preview generation across all new bookings (registered members and walk-in guests) using `interpolateSmsTemplate` from `lib/bookings/sms.ts`, setting `smsBooking` and `showSmsPreview(true)`.
+  - **Robust Portaling & Modal Lifecycle (`components/sms-preview-modal.tsx`, `components/booking-form-modal.tsx`)**:
+    - Portaled `SmsPreviewModal` directly to `document.body` via `createPortal(..., document.body)` with client mount hydration guard (`mounted` state check) and `z-[60]` layer, ensuring unobstructed visibility over any parent modals, overflow clipping, or backdrops.
+    - Rendered `<SmsPreviewModal />` alongside `BookingFormModal` without early return unmounts.
+    - Postponed calling `onCreated()` and `showBookingToast(...)` until the receptionist reviews the preview and clicks "Done" in `SmsPreviewModal`.
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors, 26 routes generated).
+  - **Next steps / References**: See [[bookings_state]], `.ai/briefing.md`, and `walkthrough.md`.
 
 - **Allow Active Locker Reuse for Successive Bookings of Same Client — complete**
   (`ohm#5e9a1b3d`, 2026-09-21).

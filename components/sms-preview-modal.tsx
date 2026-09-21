@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { DEFAULT_SMS_TEMPLATE, interpolateSmsTemplate } from "@/lib/bookings/sms";
 
 export function SmsPreviewModal({
@@ -19,6 +20,7 @@ export function SmsPreviewModal({
   initialMessage?: string;
   onClose: () => void;
 }) {
+  const [mounted, setMounted] = useState(false);
   const [text, setText] = useState(() => {
     if (initialMessage) return initialMessage;
     return interpolateSmsTemplate(DEFAULT_SMS_TEMPLATE, {
@@ -34,6 +36,7 @@ export function SmsPreviewModal({
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    setMounted(true);
     return () => {
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
@@ -68,9 +71,13 @@ export function SmsPreviewModal({
     }
   }
 
-  return (
+  if (!mounted || typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
@@ -114,6 +121,7 @@ export function SmsPreviewModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
