@@ -77,6 +77,7 @@ Full invariant list: [[nxs-architecture-locks]].
 - Active sprint / in-progress: `.ai/handoff.md`
 - Architecture docs: `docs/architecture/system.md`, `rbac.md`, `workflow.md`
 - Compact invariant list: `.ai/architecture_locks/ADR-001-nxs-spa-architecture.md`
+- Active blockers: None (working tree clean, all 5 recent tasks build and pass clean).
 
 ### Last Completed Tasks
 

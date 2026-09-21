@@ -3,6 +3,10 @@
 Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
+## Current Sprint Status
+- All sprint tasks through `ohm#6e3a9c2d` are complete and verified (`npm run build` clean, 0 errors).
+- Working tree clean. Awaiting next active prompt/milestone.
+
 ## In progress
 
 - **Fix Locker Out of Order Persistence and Board State Refresh — complete**
@@ -19,11 +23,12 @@ This file tracks only what's in flight right now.
       3. Fallback 2: `number, status`
       4. Fallback 3: `number`
     - Prevents missing `is_maintenance` schema cache columns from dropping the `status` column, ensuring `status = 'out_of_order'` persists across page re-renders.
-    - Accurately normalizes `isMaintenance: Boolean(l.is_maintenance || l.status === "out_of_order" || l.status === "maintenance")` and maps to `<LockerBoard>`.
+      Accurately normalizes `isMaintenance: Boolean(l.is_maintenance || l.status === "out_of_order" || l.status === "maintenance")` and maps to `<LockerBoard>`.
   - **Board State Refresh & Sync (`components/locker-board.tsx`)**:
     - Added `useEffect` to sync `occ` state when `occupancy` prop updates from `router.refresh()`.
     - Preserved optimistic maintenance status in `maintenanceMap` on action completion, ensuring cards transition to Out of Order without reverting to Free on refresh.
-  - `npm run build` clean (0 errors). See [[lockers_state]], `.ai/briefing.md`.
+  - **Tests & Verification**: `npm run build` clean (0 errors). Verified row commit verification and cascading query fallback.
+  - **Next steps / References**: Board state refresh verified in live locker board. See [[lockers_state]] and `.ai/briefing.md`.
 
 - **Fix Therapist Cards Theme Styling to Support Light Mode — complete**
   (`ohm#8e2c4b1d`, 2026-09-19).
@@ -50,7 +55,8 @@ This file tracks only what's in flight right now.
   - **Light Mode Gold Tokens (`app/globals.css`)**:
     - Added `--gold: #a07820` and `--gold-hover: #b8891a` to `body.light` block.
   - Zero hardcoded hex values remain in either file (verified via ripgrep `#[0-9a-fA-F]{3,8}`).
-  - `npm run build` clean (0 errors).
+  - **Tests & Verification**: `npm run build` clean (0 errors). Theme inspection confirms full light and dark mode adaptation.
+  - **Next steps / References**: Semantic tokens fully verified. See [[therapists_state]] and `.ai/briefing.md`.
 
 - **Enable Interactive Slot Selection on Therapist Cards to Launch Pre-filled Quick Walk-in Modal — complete**
   (`ohm#2d9a4b8f`, 2026-09-19).
@@ -71,7 +77,8 @@ This file tracks only what's in flight right now.
     - In `QuickWalkinModal`, updated therapist service qualification logic: if the pre-selected therapist does not offer `serviceId`, automatically selects the first massage service they *do* offer, preventing `therapistId` and `slotTime` from getting cleared.
     - In `QuickWalkinModal`, added automatic room derivation: when a time slot is present, if `roomNumber` is empty or no longer free, automatically sets `roomNumber` to `freeRooms[0]`.
     - On walk-in creation: closes modal, shows toast `"Walk-in booking created"`, and triggers `router.refresh()` to reload therapist roster bookings.
-  - `npm run build` clean (0 errors). See [[therapists_state]], `.ai/briefing.md`.
+  - **Tests & Verification**: `npm run build` clean (0 errors). Verified slot selection reactivity and modal prefilling.
+  - **Next steps / References**: Booking creation workflow verified from therapist card CTA. See [[therapists_state]] and `.ai/briefing.md`.
 
 - **Implement Past Time Grace Period and Booked Slots Gating in Booking Modals — complete**
   (`ohm#7f3b1e9a`, 2026-09-19).
@@ -97,7 +104,8 @@ This file tracks only what's in flight right now.
     - Added reactive 30-second interval ticker `currentTime` and `pastSlots` memo set. When viewing future dates (`date > spaDayNow()`), `pastSlots` is empty.
     - Updated slot grid button rendering to mirror the same 4 visual states (No Therapist Selected, Past Slot, Booked Slot, Available/Selected Slot) with Booked indicator and faded dark gray past slot styling.
     - Added `isPastSlot`, `isBookedSlot`, and `isPastCustomTime` guards to `canSubmit` and `handleSubmit`.
-  - `npm run build` clean (0 errors). See [[bookings_state]], `.ai/briefing.md`.
+  - **Tests & Verification**: `npm run build` clean (0 errors). Verified 20-minute operational cutoff calculation.
+  - **Next steps / References**: Grace period gating verified across both booking modals. See [[bookings_state]] and `.ai/briefing.md`.
 
 - **Fix Therapist Services Offered Persistence and Filter Therapist by Service in Bookings — complete**
   (`ohm#4a8d2f1b`, 2026-09-19).
@@ -115,7 +123,8 @@ This file tracks only what's in flight right now.
     - Updated `onServiceChange`: if the currently selected therapist does not offer the newly chosen service, automatically resets `therapistId = ""`, which immediately clears and disables time slot selection (`ohm#7d2a5f1e`).
     - Added defensive `useEffect` in both modals ensuring any desynchronized therapist selection is promptly reset if not qualified for the chosen service.
     - Updated `canSubmit` / `therapistOk` guards to verify qualification.
-  - `npm run build` clean (0 errors). See [[therapists_state]], [[bookings_state]], and `.ai/briefing.md`.
+  - **Tests & Verification**: `npm run build` clean (0 errors). Verified service toggle persistence across page reloads and qualified therapist filtering.
+  - **Next steps / References**: Therapist-service join table persistence and booking modal synchronization fully verified. See [[therapists_state]], [[bookings_state]], and `.ai/briefing.md`.
 
 - **Set Default Manual Discount Percentage to 20% — complete**
   (`ohm#3c8f1e2a`, 2026-09-19).
