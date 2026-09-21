@@ -2,6 +2,18 @@
 
 ## Implemented
 
+- **Refine Member Portal UI and Align Verified Past Visit Queries (`ohm#8c1e4f9b`, 2026-09-21)**:
+  - **Member Portal UI Refinements (`components/client-portal/member-dashboard.tsx`)**:
+    - Removed the `#M-XXXXXX` member code badge from the greeting card, keeping `@username` cleanly displayed.
+    - Removed the `DURATION` column header and duration text cells from the desktop Past Visits table.
+    - Removed the duration text span from the mobile cards.
+    - Verified that the pill badge next to "Past Visits" dynamically renders the exact count of verified visits (`3 visits`).
+  - **Verified Past Visit Query Alignment (`app/portal/page.tsx`)**:
+    - Upgraded `bookings` query with relational joins to `point_transactions ( id, entry_type )` and `sales ( id, voided )`.
+    - Included visits where `status.toLowerCase() === "completed"` OR bookings linked to an active `EARN` point ledger entry or active non-voided sale.
+    - Strictly excludes genuinely cancelled or no-show bookings that lack points or sales records (e.g., member `ohmpayatt`'s unverified Sep 21 cancelled bookings).
+    - Accurately retrieves and displays all 3 verified visits on Sep 18 for member `ohmpayatt` (Combi Massage with Ron at 20:30, Combi Massage with Ruru at 17:30, Signature Massage with Ron at 17:30) sorted descending chronologically with status normalized to `"Completed"`.
+
 - **Update Portal Login Redirect and Confirmation Flow to Member Dashboard (`ohm#5d8f1e2c`, 2026-09-21)**:
   - Updated portal login success handler in `app/portal/login/page.tsx` from `router.push("/portal/confirmation")` to `router.push("/portal")`, routing logging-in members directly to their Points & Past Visits dashboard.
   - Enhanced the registration confirmation screen (`app/portal/confirmation/page.tsx`) by adding a prominent primary CTA button ("Go to Dashboard →") leading to `/portal`, while retaining the secondary "View my Member QR →" link.

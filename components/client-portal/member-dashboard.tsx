@@ -81,9 +81,6 @@ export function MemberDashboard({ member, pastVisits }: MemberDashboardProps) {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium tracking-wide bg-surface-2 border border-border text-gold">
-                #{member.memberCode}
-              </span>
               <span className="text-xs text-muted">@{member.username}</span>
             </div>
             <h1 className="text-2xl font-bold text-foreground tracking-tight">
@@ -199,7 +196,6 @@ export function MemberDashboard({ member, pastVisits }: MemberDashboardProps) {
                     <th className="pb-3 pl-1">Date & Time</th>
                     <th className="pb-3 px-3">Service</th>
                     <th className="pb-3 px-3">Therapist</th>
-                    <th className="pb-3 px-3">Duration</th>
                     <th className="pb-3 pr-1 text-right">Status</th>
                   </tr>
                 </thead>
@@ -219,9 +215,6 @@ export function MemberDashboard({ member, pastVisits }: MemberDashboardProps) {
                         ) : (
                           <span className="text-muted italic text-xs">None (Wet Area)</span>
                         )}
-                      </td>
-                      <td className="py-3 px-3 text-muted">
-                        {visit.durationMinutes ? `${visit.durationMinutes} mins` : "—"}
                       </td>
                       <td className="py-3 pr-1 text-right">
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-[#8a9a76]/10 text-[#8a9a76] border border-[#8a9a76]/30">
@@ -259,7 +252,6 @@ export function MemberDashboard({ member, pastVisits }: MemberDashboardProps) {
                         <span className="italic">None (Wet Area)</span>
                       )}
                     </span>
-                    <span>{visit.durationMinutes ? `${visit.durationMinutes} mins` : "—"}</span>
                   </div>
                 </div>
               ))}

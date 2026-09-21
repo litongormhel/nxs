@@ -4,10 +4,26 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#5d8f1e2c` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#8c1e4f9b` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Refine Member Portal UI and Align Verified Past Visit Queries — complete**
+  (`ohm#8c1e4f9b`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Member Portal UI Refinements (`components/client-portal/member-dashboard.tsx`)**:
+    - Removed the `#M-XXXXXX` member code badge from the greeting and profile card, keeping `@username` cleanly displayed.
+    - Removed the `DURATION` column header and duration text cells from the desktop Past Visits table.
+    - Removed the duration text span from the mobile cards.
+    - Verified that the pill badge next to "Past Visits" dynamically renders the exact count of verified visits (`3 visits`).
+  - **Verified Past Visit Query Alignment (`app/portal/page.tsx`)**:
+    - Replaced rigid `.eq("status", "Completed")` with relational joins to `point_transactions ( id, entry_type )` and `sales ( id, voided )`.
+    - Implemented verified visit qualification: a booking qualifies if status is completed, or if linked to an active `EARN` point ledger entry or active non-voided sale.
+    - Strictly excludes genuinely cancelled or no-show bookings that lack points or sales records (e.g., member `ohmpayatt`'s unverified Sep 21 cancelled bookings).
+    - Accurately retrieves and displays all 3 verified visits on Sep 18 for member `ohmpayatt` (Combi Massage with Ron at 20:30, Combi Massage with Ruru at 17:30, Signature Massage with Ron at 17:30) sorted in descending chronological order.
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors, 26 routes generated). Live scratch test verified exact 3 visits returned for `ohmpayatt`.
+  - **Next steps / References**: See [[clients_state]], `.ai/briefing.md`, and `walkthrough.md`.
 
 - **Update Portal Login Redirect and Confirmation Flow to Member Dashboard — complete**
   (`ohm#5d8f1e2c`, 2026-09-21).
