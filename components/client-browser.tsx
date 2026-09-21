@@ -1106,22 +1106,22 @@ export function ClientBrowser({
                               <span className="font-semibold text-gold">
                                 {claim.target_client_codename}
                               </span>
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="font-mono text-xs text-muted">
-                                  @{claim.target_client_username}
-                                </span>
-                                {claim.target_client_member_code && (
-                                  <span className="rounded bg-surface-accent px-1.5 py-0.2 font-mono text-[10px] text-muted">
-                                    #{claim.target_client_member_code}
-                                  </span>
-                                )}
-                              </div>
+                              <span className="font-mono text-xs text-muted mt-0.5">
+                                @{claim.target_client_username}
+                              </span>
                             </div>
                           </td>
 
                           <td className="px-4 py-3 text-xs">
                             <div className="space-y-1">
-                              {/* Top: Date & Time */}
+                              {/* Line 1: Codename badge */}
+                              <div className="flex items-center">
+                                <span className="inline-flex items-center gap-1 rounded bg-gold/10 border border-gold/30 px-1.5 py-0.5 font-semibold text-gold text-[11px]">
+                                  Codename: {claim.walkin_codename ?? "Walk-in Guest"}
+                                </span>
+                              </div>
+
+                              {/* Line 2: Date & Time */}
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-foreground">
                                   {formatDisplayDate(claim.booking_date)}
@@ -1131,14 +1131,7 @@ export function ClientBrowser({
                                 </span>
                               </div>
 
-                              {/* Middle: Codename: [guest_label] */}
-                              <div className="flex items-center">
-                                <span className="inline-flex items-center gap-1 rounded bg-gold/10 border border-gold/30 px-1.5 py-0.5 font-semibold text-gold text-[11px]">
-                                  Codename: {claim.walkin_codename ?? "Walk-in Guest"}
-                                </span>
-                              </div>
-
-                              {/* Bottom: Service • Therapist • Locker # • Amount (Payment Method) */}
+                              {/* Line 3: Service • Therapist • Locker # • Amount */}
                               <div className="text-muted text-[11px] flex flex-wrap items-center gap-x-2">
                                 <span>{claim.service_name ?? "Wet Area"}</span>
                                 <span>•</span>
@@ -1152,12 +1145,7 @@ export function ClientBrowser({
                                 <span>•</span>
                                 <span className="font-medium text-foreground">
                                   {claim.amount != null ? (
-                                    <span>
-                                      ₱{Number(claim.amount).toLocaleString()}{" "}
-                                      {claim.payment_method && (
-                                        <span className="text-muted text-[10px]">({claim.payment_method})</span>
-                                      )}
-                                    </span>
+                                    <span>₱{Number(claim.amount).toLocaleString()}</span>
                                   ) : (
                                     <span className="text-muted italic">—</span>
                                   )}

@@ -4,10 +4,24 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#2f7a9d4c` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#6d1f3e8a` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Refine Layout of Pending Claims Table Columns — complete**
+  (`ohm#6d1f3e8a`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Target Member Column (`components/client-browser.tsx`)**:
+    - Removed the `#M-{target_client_member_code}` badge pill from the table cell.
+    - Preserved member display name (`{claim.target_client_codename}`) and username handle (`@{claim.target_client_username}`) in a clean vertical alignment.
+  - **Original Walk-In Details Column (`components/client-browser.tsx`)**:
+    - Reordered cell layout into a clear 3-line vertical hierarchy:
+      - Line 1 (Top): Highlighted gold accent badge `Codename: {claim.walkin_codename ?? "Walk-in Guest"}` (`bg-gold/10 border border-gold/30 text-gold font-semibold text-[11px]`).
+      - Line 2 (Middle): Date & 12-hour formatted time (`{formatDisplayDate(claim.booking_date)}` & `{claim.start_time ? formatTime(claim.start_time) : "None (Wet Area)"}`).
+      - Line 3 (Bottom): Meta details `Service • Therapist: {therapist} • Locker {locker} • ₱{amount}`, omitting the payment method tag `(Cash)` / `(GCash)`. Amount strictly formatted via `.toLocaleString()`.
+  - **Verification**:
+    - `npm run build` verified clean (0 compilation errors, 26 routes generated).
 
 - **Display Used Walk-in Codename in Pending Claims Details and Search — complete**
   (`ohm#2f7a9d4c`, 2026-09-21).

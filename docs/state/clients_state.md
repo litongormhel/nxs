@@ -2,6 +2,15 @@
 
 ## Implemented
 
+- **Refine Layout of Pending Claims Table Columns (`ohm#6d1f3e8a`, 2026-09-21)**:
+  - **Pending Claims Table UI (`components/client-browser.tsx`)**:
+    - **Target Member Column**: Removed the `#M-...` member code badge pill from the table cell, retaining clean display of member codename and username (`@{username}`).
+    - **Original Walk-In Details Column**: Reordered hierarchy into 3 lines:
+      1. Line 1: Accent badge `Codename: {claim.walkin_codename ?? "Walk-in Guest"}` placed at the very top of the cell.
+      2. Line 2: Formatted date and 12-hour time (`formatDisplayDate(claim.booking_date)` & `formatTime(claim.start_time)` or `"None (Wet Area)"`).
+      3. Line 3: `Service • Therapist: {therapist} • Locker {locker} • ₱{amount}` (removed payment method tag `(Cash)` / `(GCash)`).
+  - `npm run build` verified clean (0 errors).
+
 - **Display Used Walk-in Codename in Pending Claims Details and Search (`ohm#2f7a9d4c`, 2026-09-21)**:
   - **Server Data Query & Typings (`app/(staff)/clients/page.tsx`, `components/client-browser.tsx`)**:
     - Updated `visit_claims` query to join `bookings` (`id, guest_label, booking_date, start_time, services(name), therapists(name), sales(amount, payment_method, guest_label), locker_occupancy(locker_number, guest_label)`).
