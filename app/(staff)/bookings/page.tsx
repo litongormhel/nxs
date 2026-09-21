@@ -25,8 +25,8 @@ export default async function BookingsPage() {
     { data: lockers },
     { data: weekendSlots },
     { data: portalAccounts },
-    { data: dbFlaggedStatus },
-    { data: dbActiveBookings },
+    { data: dbFlaggedStatus, error: flaggedError },
+    { data: dbActiveBookings, error: activeBookingsError },
     { data: dbAbsences },
     { data: dbLeaves },
     { data: dbDaysOff },
@@ -104,6 +104,51 @@ export default async function BookingsPage() {
       .select("therapist_id, weekday"),
   ]);
 
+  let effectiveFlaggedStatus = dbFlaggedStatus;
+  if (flaggedError) {
+    console.error("[BookingsPage] Error fetching flagged status bookings:", flaggedError);
+    if (flaggedError.code === "42703" || flaggedError.message?.includes("notes")) {
+      console.warn("[BookingsPage] Retrying flagged status bookings without 'notes' column fallback...");
+      const { data: fallbackFlagged, error: fallbackFlaggedErr } = await (supabase
+        .from("bookings") as any)
+        .select(
+          "id, booking_date, start_time, duration_minutes, room_number, therapist_id, status, therapists(name, archived), services(name), clients(codename), guest_label"
+        )
+        .eq("status", "Needs Reassignment")
+        .gte("booking_date", currentSpaDate)
+        .order("booking_date", { ascending: true })
+        .order("start_time", { ascending: true });
+      if (fallbackFlagged) {
+        effectiveFlaggedStatus = fallbackFlagged;
+      } else if (fallbackFlaggedErr) {
+        console.error("[BookingsPage] Fallback flagged query failed:", fallbackFlaggedErr);
+      }
+    }
+  }
+
+  let effectiveActiveBookings = dbActiveBookings;
+  if (activeBookingsError) {
+    console.error("[BookingsPage] Error fetching active bookings:", activeBookingsError);
+    if (activeBookingsError.code === "42703" || activeBookingsError.message?.includes("notes")) {
+      console.warn("[BookingsPage] Retrying active bookings without 'notes' column fallback...");
+      const { data: fallbackActive, error: fallbackActiveErr } = await (supabase
+        .from("bookings") as any)
+        .select(
+          "id, booking_date, start_time, duration_minutes, room_number, therapist_id, status, therapists(name, archived), services(name), clients(codename), guest_label, locker_occupancy(id, checked_in_at, checked_out_at)"
+        )
+        .gte("booking_date", currentSpaDate)
+        .not("therapist_id", "is", null)
+        .neq("status", "Cancelled")
+        .order("booking_date", { ascending: true })
+        .order("start_time", { ascending: true });
+      if (fallbackActive) {
+        effectiveActiveBookings = fallbackActive;
+      } else if (fallbackActiveErr) {
+        console.error("[BookingsPage] Fallback active bookings query failed:", fallbackActiveErr);
+      }
+    }
+  }
+
   const timeSlots = sortSlotTimes((weekendSlots ?? []).map((s) => s.slot_time.slice(0, 5)));
 
   // Which clients can EARN/REDEEM points — must have a client_portal_accounts row
@@ -177,11 +222,11 @@ export default async function BookingsPage() {
 
   const mapById = new Map<string, FlaggedRow>();
 
-  for (const b of (dbFlaggedStatus ?? []) as FlaggedRow[]) {
+  for (const b of (effectiveFlaggedStatus ?? []) as FlaggedRow[]) {
     mapById.set(b.id, b);
   }
 
-  for (const b of (dbActiveBookings ?? []) as FlaggedRow[]) {
+  for (const b of (effectiveActiveBookings ?? []) as FlaggedRow[]) {
     if (!b.therapist_id) continue;
     const nid = normId(b.therapist_id);
     const ndate = normDate(b.booking_date);
@@ -236,7 +281,7 @@ export default async function BookingsPage() {
         daysOff={dbDaysOff ?? []}
         absences={dbAbsences ?? []}
         leaves={dbLeaves ?? []}
-        allBookings={((dbActiveBookings as FlaggedRow[]) ?? []).map((b) => ({
+        allBookings={((effectiveActiveBookings as FlaggedRow[]) ?? []).map((b) => ({
           id: b.id,
           therapist_id: b.therapist_id,
           booking_date: b.booking_date,

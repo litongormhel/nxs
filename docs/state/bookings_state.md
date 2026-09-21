@@ -711,6 +711,19 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - In the CLIENT column across tabs (Upcoming, Check-in, Check-out), render gold note badge `<div className="mt-1 flex items-center gap-1 text-[11px] text-accent-gold/90 bg-accent-gold/10 border border-accent-gold/20 rounded px-1.5 py-0.5 max-w-fit">🚗 {row.notes}</div>` underneath the client name when `row.notes && row.notes.trim() !== ''`.
   - When notes are empty, null, or undefined, strictly renders nothing to preserve compact row height.
 - `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
+ 
+**Correction, `ohm#7d2a9b4c` (2026-09-21)** — Fix Empty Bookings Table After Adding Notes Column via Resilient Query Fallback & Error Logging.
+
+- **Root Cause**: When the `notes` column does not exist on `public.bookings` (or if PostgREST schema cache is stale), querying `notes` raises Postgres error `42703` (`column bookings.notes does not exist`), returning `null` data which previously caused day bookings and flagged bookings queries to fail silently and render 0 records across all tabs.
+- **Client Component Resilience (`components/booking-browser.tsx`)**:
+  - Captured `bookingsRes.error` and logged via `console.error`.
+  - Added automatic fallback query: if `bookingsRes.error` occurs due to missing `notes` (`error.code === '42703'` or error message mentions `'notes'`), immediately retries the query excluding `notes`.
+  - Restores full visibility of all existing bookings across Upcoming, Check-in, and Check-out tabs.
+- **Server Component Resilience (`app/(staff)/bookings/page.tsx`)**:
+  - Captured `flaggedError` and `activeBookingsError` from page `Promise.all`.
+  - Added automatic fallback queries excluding `notes` for `effectiveFlaggedStatus` and `effectiveActiveBookings` if the primary query fails due to missing `notes`.
+  - Ensures `<ReassignmentPanel />` and `<BookingBrowser />` receive full booking lists without crashing or dropping rows.
+- `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
 
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 

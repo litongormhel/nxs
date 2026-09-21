@@ -4,10 +4,30 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#4a7b1c3e` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#7d2a9b4c` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Fix Empty Bookings Table After Adding Notes Column — complete**
+  (`ohm#7d2a9b4c`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Diagnostic Findings**:
+    - Querying `public.bookings` for `notes` column failed with Postgres error `42703` (`column bookings.notes does not exist`), and checking OpenAPI PostgREST schema confirmed `p_notes` was not present in the live `quick_walkin` RPC signature.
+    - Verified that migration `supabase/migrations/20260921140000_add_bookings_notes.sql` was not executed on the live database.
+    - Because `components/booking-browser.tsx` and `app/(staff)/bookings/page.tsx` selected `notes` without error handling, PostgREST returned error `42703` and `data: null`, which was silently coerced to empty lists (`[]`), completely hiding all 20 bookings on `09/21/2026`.
+  - **Client Component Defensive Resilience (`components/booking-browser.tsx`)**:
+    - Captured `bookingsRes.error` from day bookings query and logged via `console.error`.
+    - Added automatic fallback query: if `bookingsRes.error.code === "42703"` or error message includes `"notes"`, immediately retries the query excluding `notes`.
+    - Restores full visibility of all 18 active bookings for `09/21/2026` across Upcoming (3), Check-in (11), and Check-out (4) tabs.
+  - **Server Component Defensive Resilience (`app/(staff)/bookings/page.tsx`)**:
+    - Captured `flaggedError` and `activeBookingsError` from page-level `Promise.all`.
+    - Implemented automatic fallback queries without `notes` for `effectiveFlaggedStatus` and `effectiveActiveBookings`, ensuring `<ReassignmentPanel />` and `<BookingBrowser />` receive complete booking rows without dropping data.
+  - **Live DB Migration Instructions**:
+    - Provided the exact SQL migration statement (`ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS notes text; NOTIFY pgrst, 'reload schema';` and full `supabase/migrations/20260921140000_add_bookings_notes.sql`) to be run in the live Supabase project SQL Editor.
+  - **Tests & Verification**:
+    - Verified fallback query returns all 18 active bookings (3 Upcoming, 11 Check-in, 4 Check-out).
+    - `npm run build` clean (0 compilation errors, 26 static/dynamic routes generated).
 
 - **Add Session Notes / Vehicle Info to Bookings and Display in Table — complete**
   (`ohm#4a7b1c3e`, 2026-09-21).

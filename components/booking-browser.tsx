@@ -193,7 +193,34 @@ export function BookingBrowser({
         .from("locker_occupancy")
         .select("id, booking_id, client_id, guest_label, locker_number, checked_in_at, checked_out_at")
         .order("checked_in_at", { ascending: false }),
-    ]).then(([{ data: bookingsData }, { data: occupanciesData }]) => {
+    ]).then(async ([bookingsRes, { data: occupanciesData, error: occupanciesError }]) => {
+      if (occupanciesError) {
+        console.error("[BookingBrowser] Error fetching occupancies:", occupanciesError);
+      }
+      let bookingsData = bookingsRes.data;
+      if (bookingsRes.error) {
+        console.error("[BookingBrowser] Error fetching day bookings:", bookingsRes.error);
+        if (
+          bookingsRes.error.code === "42703" ||
+          bookingsRes.error.message?.includes("notes")
+        ) {
+          console.warn("[BookingBrowser] Retrying day bookings without 'notes' column fallback...");
+          const fallbackRes = await (supabase
+            .from("bookings") as any)
+            .select(
+              "id, client_id, guest_label, service_id, therapist_id, room_number, booking_date, start_time, duration_minutes, promo_id, status, pax_count, locker_occupancy(id, checked_in_at, checked_out_at, locker_number)"
+            )
+            .eq("booking_date", date)
+            .in("status", ACTIVE_STATUSES)
+            .order("start_time", { ascending: true });
+          if (fallbackRes.data) {
+            bookingsData = fallbackRes.data;
+          } else if (fallbackRes.error) {
+            console.error("[BookingBrowser] Fallback day bookings query also failed:", fallbackRes.error);
+          }
+        }
+      }
+
       const rawBookings = (bookingsData as unknown as BookingRow[]) ?? [];
       const occupancies = occupanciesData ?? [];
 
