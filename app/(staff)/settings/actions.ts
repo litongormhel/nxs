@@ -291,40 +291,119 @@ export async function updateLoyaltyFormula(
 
 // ---------- Walk-in Claims Setting (Owner Only) ----------
 
+export type WalkinClaimsSettingResult =
+  | { success: true; ok: true; enabled: boolean }
+  | { success: false; ok: false; error: string };
+
 export async function updateWalkinClaimsSetting(
   enabled: boolean,
   staffId: string
-): Promise<ActionResult> {
+): Promise<WalkinClaimsSettingResult> {
   const supabase = await createClient();
   const ownerCheck = await requireOwner(supabase);
-  if (ownerCheck) return ownerCheck;
+  if (ownerCheck) {
+    return {
+      success: false,
+      ok: false,
+      error: "error" in ownerCheck ? ownerCheck.error : "Owner only.",
+    };
+  }
 
   try {
     let clientToUse: any = supabase;
-    let { error } = await (clientToUse as any)
-      .from("app_settings")
-      .update({ allow_walkin_claims: enabled })
-      .eq("id", true);
 
-    if (error && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    // Retrieve active app_settings row to ensure we target the exact row ID
+    let { data: existingRow, error: fetchError } = await clientToUse
+      .from("app_settings")
+      .select("id")
+      .limit(1)
+      .maybeSingle();
+
+    if (fetchError && process.env.SUPABASE_SERVICE_ROLE_KEY) {
       try {
         const serviceClient = createServiceClient();
-        const { error: serviceError } = await (serviceClient as any)
+        const { data: serviceRow, error: serviceFetchError } = await (serviceClient as any)
+          .from("app_settings")
+          .select("id")
+          .limit(1)
+          .maybeSingle();
+        if (!serviceFetchError && serviceRow) {
+          existingRow = serviceRow;
+          clientToUse = serviceClient;
+          fetchError = null;
+        }
+      } catch {
+        // Fall back to original client
+      }
+    }
+
+    const targetId = existingRow?.id ?? true;
+
+    let updateRes = await (clientToUse as any)
+      .from("app_settings")
+      .update({ allow_walkin_claims: enabled })
+      .eq("id", targetId)
+      .select("allow_walkin_claims");
+
+    let error = updateRes.error;
+    let updatedData = updateRes.data;
+
+    // Fall back to service client if update failed due to RLS, or if 0 rows were updated
+    if ((error || !updatedData || updatedData.length === 0) && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const serviceClient = createServiceClient();
+        const serviceUpdate = await (serviceClient as any)
           .from("app_settings")
           .update({ allow_walkin_claims: enabled })
-          .eq("id", true);
-        if (!serviceError) {
+          .eq("id", targetId)
+          .select("allow_walkin_claims");
+
+        if (!serviceUpdate.error && serviceUpdate.data && serviceUpdate.data.length > 0) {
           error = null;
           clientToUse = serviceClient;
+          updatedData = serviceUpdate.data;
+        } else if (!serviceUpdate.error && (!serviceUpdate.data || serviceUpdate.data.length === 0)) {
+          // If row with targetId doesn't exist, check any first row or insert
+          const { data: anyRow } = await (serviceClient as any)
+            .from("app_settings")
+            .select("id")
+            .limit(1)
+            .maybeSingle();
+
+          if (anyRow) {
+            const retryRes = await (serviceClient as any)
+              .from("app_settings")
+              .update({ allow_walkin_claims: enabled })
+              .eq("id", anyRow.id)
+              .select("allow_walkin_claims");
+            if (!retryRes.error && retryRes.data && retryRes.data.length > 0) {
+              error = null;
+              clientToUse = serviceClient;
+              updatedData = retryRes.data;
+            }
+          } else {
+            const insertRes = await (serviceClient as any)
+              .from("app_settings")
+              .insert({ id: true, allow_walkin_claims: enabled })
+              .select("allow_walkin_claims");
+            if (!insertRes.error) {
+              error = null;
+              clientToUse = serviceClient;
+              updatedData = insertRes.data;
+            }
+          }
         } else {
-          error = serviceError;
+          error = serviceUpdate.error;
         }
       } catch {
         // Fall back to original error
       }
     }
 
-    if (error) return fail(error);
+    if (error) {
+      const errRes = fail(error);
+      return { success: false, ok: false, error: "error" in errRes ? errRes.error : "Failed" };
+    }
 
     await logAction(
       clientToUse,
@@ -335,9 +414,10 @@ export async function updateWalkinClaimsSetting(
 
     revalidatePath("/settings");
     revalidatePath("/clients");
-    return { ok: true };
+    return { success: true, ok: true, enabled };
   } catch (err: unknown) {
-    return fail(err);
+    const errRes = fail(err);
+    return { success: false, ok: false, error: "error" in errRes ? errRes.error : "Failed" };
   }
 }
 

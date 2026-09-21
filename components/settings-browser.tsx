@@ -137,6 +137,12 @@ export function SettingsBrowser({
   );
   const [isSavingWalkinToggle, setIsSavingWalkinToggle] = useState(false);
 
+  useEffect(() => {
+    if (typeof initialAllowWalkinClaims === "boolean") {
+      setAllowWalkinClaims(initialAllowWalkinClaims);
+    }
+  }, [initialAllowWalkinClaims]);
+
   const handleToggleWalkinClaims = async (enabled: boolean) => {
     if (!isOwner) return;
     setIsSavingWalkinToggle(true);
@@ -144,11 +150,19 @@ export function SettingsBrowser({
     setAllowWalkinClaims(enabled);
     const res = await updateWalkinClaimsSetting(enabled, selectedStaffId);
     setIsSavingWalkinToggle(false);
-    if (!res.ok) {
+
+    const isSuccess = ("success" in res && res.success) || ("ok" in res && res.ok);
+    if (!isSuccess) {
       setAllowWalkinClaims(prev);
-      showToast(`Failed to update setting: ${res.error}`);
+      const errMsg = ("error" in res && res.error) ? res.error : "Unknown error";
+      showToast(`Failed to update setting: ${errMsg}`);
       return;
     }
+
+    if ("enabled" in res && typeof res.enabled === "boolean") {
+      setAllowWalkinClaims(res.enabled);
+    }
+
     showToast(
       enabled
         ? "Walk-in visit claims enabled"

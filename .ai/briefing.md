@@ -81,7 +81,14 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-21 — Add Owner-Only Feature Toggle to Enable/Disable Past Walk-in Visit Claims**
+1. **2026-09-21 — Fix Persistence and State Binding for Walk-in Claims Settings Toggle**
+   (`ohm#4b8e2a1d`). Implementation plan presented and approved before code execution.
+   - **Settings Server Action (`app/(staff)/settings/actions.ts`)**: In `updateWalkinClaimsSetting`, resolved active singleton row using `.limit(1).maybeSingle()` instead of rigid `id = true` assumption. Added fallback to `createServiceClient()` when authenticated client encounters RLS or when 0 rows are updated. Updated return signature to `{ success: true, ok: true, enabled }` and error objects.
+   - **Settings Page Query (`app/(staff)/settings/page.tsx`)**: Replaced `.eq("id", true).single()` with `.limit(1).maybeSingle()`. Added fallback to `createServiceClient()` if authenticated client fails or returns null. Preserved actual `allow_walkin_claims` setting from database during schema cache fallback rather than unconditionally defaulting to `true`.
+   - **Settings UI State Binding (`components/settings-browser.tsx`)**: Updated `handleToggleWalkinClaims` to evaluate both `res.success` and `res.ok`, and set local state to `res.enabled`. Added `useEffect` hook listening to `initialAllowWalkinClaims` to keep client state synchronized upon server revalidation and page reload.
+   - `npm run build` clean (0 errors). See [[settings_state]] and `.ai/handoff.md`.
+
+2. **2026-09-21 — Add Owner-Only Feature Toggle to Enable/Disable Past Walk-in Visit Claims**
    (`ohm#3d8a1c9e`). Implementation plan presented and approved before code execution.
    - **Database & Schema (`supabase/migrations/20260921170000_add_walkin_claim_toggle.sql`)**: Added `allow_walkin_claims boolean not null default true` column to `public.app_settings`. Dispatched `NOTIFY pgrst, 'reload schema'` to refresh PostgREST schema cache.
    - **Settings Server Action & Page (`app/(staff)/settings/actions.ts`, `app/(staff)/settings/page.tsx`)**: Added `updateWalkinClaimsSetting` action strictly gated by `requireOwner(supabase)` with service client fallback, `action_logs` auditing, and path revalidation (`/settings`, `/clients`). Updated `app_settings` query in settings page to select `allow_walkin_claims` with resilient fallback.
@@ -89,30 +96,24 @@ Full invariant list: [[nxs-architecture-locks]].
    - **Client Drawer & Action Enforcement (`app/(staff)/clients/actions.ts`, `app/(staff)/clients/page.tsx`, `components/client-browser.tsx`)**: In `requestWalkinClaim`, checks `allow_walkin_claims` and rejects new claim creation with `"Past walk-in claims are currently disabled."` when false. In `ClientBrowser`, disables "Claim Past Walk-in Visit" in Member Profile Drawer with clear tooltip `"Walk-in claiming is currently disabled by Owner"` when disabled. Pending claims approval actions remain untouched and fully actionable.
    - `npm run build` clean (0 errors). See [[settings_state]], [[clients_state]], and `.ai/handoff.md`.
 
-2. **2026-09-21 — Refine Layout of Pending Claims Table Columns**
+3. **2026-09-21 — Refine Layout of Pending Claims Table Columns**
    (`ohm#6d1f3e8a`). Implementation plan presented and approved before code execution.
    - **Target Member Column (`components/client-browser.tsx`)**: Removed `#M-...` member code badge from the table cell, retaining clean display of member codename and handle (`@{username}`).
    - **Original Walk-In Details Column (`components/client-browser.tsx`)**: Reordered cell hierarchy: (1) Line 1: Accent badge `Codename: {codename}`, (2) Line 2: Date and 12-hour formatted Time, (3) Line 3: `Service • Therapist: {therapist} • Locker {locker} • ₱{amount}`, removing the payment method tag.
    - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
 
-3. **2026-09-21 — Display Used Walk-in Codename in Pending Claims Details and Search**
+4. **2026-09-21 — Display Used Walk-in Codename in Pending Claims Details and Search**
    (`ohm#2f7a9d4c`). Implementation plan presented and approved before code execution.
    - **Data Query & Typings (`app/(staff)/clients/page.tsx`, `components/client-browser.tsx`)**: Extended `visit_claims` query to join `bookings` (`guest_label`, `locker_occupancy`, `services`, `therapists`, `sales`). Resolved `guest_label` with cascading fallbacks to `rawWalkIns`, `sales`, and `allHistoricalOccupancy`. Extended `PendingClaim` and `PendingClaimRow` types with `walkin_codename: string | null` and `guest_label?: string | null`. Mapped `walkin_codename` and `locker_number` onto all pending claims.
    - **Pending Claims UI & Search (`components/client-browser.tsx`)**: In the Pending Claims tab table, redesigned the "ORIGINAL WALK-IN DETAILS" column into a clean 3-tier layout: (1) Top: Date & 12-hour Time, (2) Middle: highlighted gold badge `Codename: {claim.walkin_codename ?? "Walk-in Guest"}`, and (3) Bottom: Service • Therapist • Locker # (if available) • Amount (Payment Method). Included `walkin_codename` in `filteredPendingClaims` client-side search predicate and updated the search placeholder.
    - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
 
-4. **2026-09-21 — Implement Pending Walk-in Visit Claims Tab with Staff Audit Trail and Approve All**
+5. **2026-09-21 — Implement Pending Walk-in Visit Claims Tab with Staff Audit Trail and Approve All**
    (`ohm#8f2b4c1a`). Implementation plan presented and approved before code execution.
    - **Database & Schema (`supabase/migrations/20260921160000_past_visit_claims.sql`)**: Created table `public.visit_claims` with `booking_id` (unique, FK bookings), `target_client_id` (FK clients), `requested_by_staff_id` (FK staff), `reviewed_by_staff_id` (FK staff), `points_to_credit`, `status` (`pending`, `approved`, `rejected`), and audit timestamps. Added idempotent RLS policies (`staff_select` & `staff_insert` for `is_staff()`, `supervisor_update` for `is_supervisor_or_above()`).
    - **Server Actions (`app/(staff)/clients/actions.ts`)**: Added `requestWalkinClaim` to compute loyalty points based on `app_settings` and record initiating staff ID. Added `approveWalkinClaim` (Owner/Supervisor only) atomically linking `bookings`, `sales`, and `locker_occupancy`, inserting `EARN` ledger entry in `point_transactions`, and updating claim status to `approved`. Added `approveAllWalkinClaims` for batch execution and `rejectWalkinClaim` to restore visit to available walk-in pool.
    - **Queries & Component (`app/(staff)/clients/page.tsx`, `components/client-browser.tsx`)**: Excluded pending claim bookings from "Walk-In Without Account" tab. Added "Claim Past Walk-in Visit" modal to Member Details drawer with live points preview. Added third tab "Pending Claims (count)" with staff audit trail display (`Requested by: [Staff Name] on [Date/Time]`), single-click `[Approve]` and `[Reject]` (no modal), and "Approve All" confirmation modal.
    - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
-
-5. **2026-09-21 — Add Resilient Fallback for quick_walkin RPC Parameter Signature**
-   (`ohm#1c4e9a7b`). Implementation plan presented and approved before code execution.
-   - **Server Actions (`app/(staff)/bookings/actions.ts`)**: In `quickWalkin`, wrapped `supabase.rpc("quick_walkin", ...)` execution in an adaptive retry block. If PostgREST returns a function signature mismatch or schema cache error (`PGRST202` or error message referencing `p_notes` / `Could not find the function` / `schema cache`), automatically falls back to invoking `quick_walkin` without `p_notes`.
-   - **Post-Creation Notes Update (`app/(staff)/bookings/actions.ts`)**: On successful creation returning `booking_id`, updates `bookings.notes` via `.update({ notes: input.notes.trim() }).eq("id", bookingId)` wrapped in safe `try...catch` logging warnings without blocking counter operations if column is missing.
-   - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
 
 
 

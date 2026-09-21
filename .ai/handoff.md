@@ -4,10 +4,27 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#3d8a1c9e` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#4b8e2a1d` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Fix Persistence and State Binding for Walk-in Claims Settings Toggle — complete**
+  (`ohm#4b8e2a1d`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Settings Server Action (`app/(staff)/settings/actions.ts`)**:
+    - In `updateWalkinClaimsSetting`, resolved active singleton row using `.limit(1).maybeSingle()` instead of rigid `id = true` assumption.
+    - Added fallback to `createServiceClient()` when authenticated client encounters RLS or when 0 rows are updated.
+    - Updated return signature to `{ success: true, ok: true, enabled }` and error objects.
+  - **Settings Page Query (`app/(staff)/settings/page.tsx`)**:
+    - Replaced `.eq("id", true).single()` with `.limit(1).maybeSingle()`.
+    - Added fallback to `createServiceClient()` if authenticated client fails or returns null.
+    - Preserved actual `allow_walkin_claims` setting from database during schema cache fallback rather than unconditionally defaulting to `true`.
+  - **Settings UI State Binding (`components/settings-browser.tsx`)**:
+    - Updated `handleToggleWalkinClaims` to evaluate both `res.success` and `res.ok`, and set local state to `res.enabled`.
+    - Added `useEffect` hook listening to `initialAllowWalkinClaims` to keep client state synchronized upon server revalidation and page reload.
+  - **Verification**:
+    - `npm run build` verified clean (0 compilation errors, 26 routes generated).
 
 - **Add Owner-Only Feature Toggle to Enable/Disable Past Walk-in Visit Claims — complete**
   (`ohm#3d8a1c9e`, 2026-09-21).

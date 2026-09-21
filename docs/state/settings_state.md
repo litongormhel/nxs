@@ -78,13 +78,16 @@ just local React state.
   (`resetSmsTemplate`) use `createServiceClient()` with fallback, catch missing column errors
   gracefully, and write audit log entries to `action_logs`. Editable by Supervisor and Owner
   roles (`canEditCatalog`), read-only for Front Desk.
-- **Walk-in Visit Claims Toggle** (`ohm#3d8a1c9e`, 2026-09-21): Owner-only feature toggle stored in
+- **Walk-in Visit Claims Toggle** (`ohm#3d8a1c9e`, updated `ohm#4b8e2a1d`, 2026-09-21): Owner-only feature toggle stored in
   `app_settings.allow_walkin_claims` (migration `supabase/migrations/20260921170000_add_walkin_claim_toggle.sql`,
   boolean not null default `true`, reloads PostgREST schema cache). Controls whether staff can initiate claims for
   unlinked past walk-in visits from Member Profile drawers. UI card located in Promos & Security tab in
   `components/settings-browser.tsx`, strictly gated to Owner role (`isOwner`). Server action `updateWalkinClaimsSetting`
-  in `app/(staff)/settings/actions.ts` enforces `requireOwner()`, logs to `action_logs`, and revalidates `/settings`
-  and `/clients`.
+  in `app/(staff)/settings/actions.ts` enforces `requireOwner()`, resolves active singleton row ID with `.limit(1).maybeSingle()`,
+  falls back to `createServiceClient()` if RLS blocks or 0 rows are updated, returns `{ success: true, ok: true, enabled }`,
+  logs to `action_logs`, and revalidates `/settings` and `/clients`. `app/(staff)/settings/page.tsx` queries `app_settings`
+  with `.limit(1).maybeSingle()`, service client fallback, and isolated column schema resilience to ensure state does not revert on reload.
+  `components/settings-browser.tsx` synchronizes local state with `initialAllowWalkinClaims` via `useEffect` and handles dual return flags.
 - **Services & Pricing**: editable points/price per service (locked for
   Front Desk) → `updateServicePrice`/`updateServicePoints`. `+ Add Service`
   → `addService`. Delete → `deleteService` (**soft delete**, sets

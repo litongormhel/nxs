@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/portal/service-client";
 import { SettingsBrowser } from "@/components/settings-browser";
 import { compareSlotTimes } from "@/lib/bookings/slots";
 
@@ -38,30 +39,56 @@ export default async function SettingsPage() {
       .from("rooms")
       .select("*", { count: "exact", head: true })
       .eq("active", true),
-    (supabase as any)
-      .from("app_settings")
-      .select("loyalty_formula_mode, peso_per_point, void_auth_code_hash, sms_confirmation_template, allow_walkin_claims")
-      .eq("id", true)
-      .single()
-      .then(async (res: any) => {
-        if (res.error) {
-          const fallback = await (supabase as any)
+    (async () => {
+      let clientToUse: any = supabase;
+      let res = await clientToUse
+        .from("app_settings")
+        .select("id, loyalty_formula_mode, peso_per_point, void_auth_code_hash, sms_confirmation_template, allow_walkin_claims")
+        .limit(1)
+        .maybeSingle();
+
+      if ((res.error || !res.data) && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        try {
+          const serviceClient = createServiceClient();
+          const sRes = await (serviceClient as any)
             .from("app_settings")
-            .select("loyalty_formula_mode, peso_per_point, void_auth_code_hash")
-            .eq("id", true)
-            .single();
-          return {
-            data: fallback.data
-              ? {
-                  ...fallback.data,
-                  sms_confirmation_template: null,
-                  allow_walkin_claims: true,
-                }
-              : null,
-          };
+            .select("id, loyalty_formula_mode, peso_per_point, void_auth_code_hash, sms_confirmation_template, allow_walkin_claims")
+            .limit(1)
+            .maybeSingle();
+          if (!sRes.error && sRes.data) {
+            res = sRes;
+            clientToUse = serviceClient;
+          }
+        } catch {
+          // ignore
         }
-        return res;
-      }),
+      }
+
+      if (res.error) {
+        // In case specific columns (e.g. sms_confirmation_template or allow_walkin_claims) are missing in schema cache
+        const claimsRes = await clientToUse
+          .from("app_settings")
+          .select("allow_walkin_claims")
+          .limit(1)
+          .maybeSingle();
+
+        const baseRes = await clientToUse
+          .from("app_settings")
+          .select("loyalty_formula_mode, peso_per_point, void_auth_code_hash")
+          .limit(1)
+          .maybeSingle();
+
+        return {
+          data: {
+            ...(baseRes.data ?? {}),
+            sms_confirmation_template: null,
+            allow_walkin_claims: claimsRes.data?.allow_walkin_claims ?? true,
+          },
+        };
+      }
+
+      return res;
+    })(),
   ]);
 
   return (
