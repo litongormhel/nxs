@@ -4,10 +4,35 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#2a5d8f3c` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#4c9e2b1a` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Fix Walk-In Guest History Click Action, Locker Resolution, and Zero Amount Formatting — complete**
+  (`ohm#4c9e2b1a`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Interactive Walk-In Guest History Drawer (`components/client-browser.tsx`)**:
+    - Mounted the slide-over history drawer when `activeWalkInGroup` is active (triggered by clicking "View Past Stays →" or the table row for non-account walk-in guests).
+    - Rendered detailed visit cards displaying Visit #, Date, 12-hour AM/PM time via `formatTime`, Service, Therapist, Massage Time (`formatTime` or `None (Wet Area)`), Room (`Room [Num]` or `None (Wet Area)`), Locker (`Locker [Num]` or `None`), explicit Amount Paid & Payment Method, Status, and Booking ID.
+    - Added "Close History" CTA and header close trigger resetting `selectedWalkInCodename` to `null`.
+    - Maintained strict design token adherence (`bg-surface`, `bg-surface-2`, `border-border`, `text-gold`, `text-foreground`, `text-muted`) for seamless dark and light mode consistency.
+  - **Cascading Locker Number & Amount Resolution (`app/(staff)/clients/page.tsx`, `components/client-browser.tsx`)**:
+    - Audited the `rawWalkIns` query and added `room_number` to `bookings` select.
+    - Added parallel fetching in `Promise.all` for historical `locker_occupancy` (`id, locker_number, guest_label, booking_id, checked_in_at`) and historical `sales` (`id, booking_id, guest_label, amount, payment_method, created_at`).
+    - Implemented cascading fallback for locker number:
+      1. Direct `(row as any).locker_number` or `sale.locker_number` (defensive)
+      2. Joined `row.locker_occupancy` (via `booking_id`)
+      3. Historical occupancy matched by `booking_id`
+      4. Historical occupancy matched by `guest_label` (case-insensitive) on booking date (`checked_in_at` prefix)
+      5. Latest historical occupancy for that `guest_label`
+    - In `components/client-browser.tsx`, added row-level fallback `latest.locker_number ?? g.visits.find(v => v.locker_number != null)?.locker_number`, eliminating "—" for past walk-ins like "L", "jave", and "VINCE".
+  - **Zero Amount Formatting (`components/client-browser.tsx`, `app/(staff)/clients/page.tsx`)**:
+    - In `app/(staff)/clients/page.tsx`, preserved numeric zero amounts (`Number(sale.amount)`).
+    - In `components/client-browser.tsx`, replaced truthy checks with strict null/undefined checks (`amount != null`) across walk-in table rows, walk-in history cards, and member history cards.
+    - Explicitly displays `₱0` (and `(Payment Method)` if present) instead of defaulting to "—" when a transaction exists.
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors, 26 routes generated in 1202ms).
+  - **Next steps / References**: See [[clients_state]], `.ai/briefing.md`, and `walkthrough.md`.
 
 - **Prevent Auto-Dismissal of SMS Preview Modal in New Booking Flow — complete**
   (`ohm#2a5d8f3c`, 2026-09-21).

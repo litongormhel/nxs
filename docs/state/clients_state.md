@@ -2,6 +2,12 @@
 
 ## Implemented
 
+- **Walk-In History Drawer, Locker Resolution & Zero Amount Formatting (`ohm#4c9e2b1a`, 2026-09-21)**:
+  - Mounted interactive slide-over history drawer in `components/client-browser.tsx` for walk-in guests (`activeWalkInGroup`), triggered by clicking "View Past Stays →" or the guest table row.
+  - Visit cards show: Visit #, Date, 12-hour Time, Service, Therapist, Massage Time, Room (`Room [Num]` or `None (Wet Area)`), Locker (`Locker [Num]` or `None`), Amount Paid & Payment Method, Status, and Booking ID. Adheres to semantic design tokens for light and dark modes.
+  - Resolved locker numbers in `app/(staff)/clients/page.tsx` and `components/client-browser.tsx` using cascading fallbacks (relational `booking_id` join -> historical `locker_occupancy` by `booking_id` -> historical occupancy by `guest_label` and date -> latest historical locker for guest -> table-level visit fallback), ensuring past walk-ins (e.g. "L", "jave", "VINCE") display their assigned locker instead of "—".
+  - Fixed amount formatting from truthy checks to strict null/undefined checks (`amount != null`), ensuring ₱0 amounts explicitly render as `₱0` (or `₱0 (Payment Method)`).
+
 - **Walk-In Visit History Drawer Time Formatting & Massage Time (`ohm#walkindrawertimeformat`, 2026-09-17)**:
   - Added `formatTime` helper in `components/client-browser.tsx` using `toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })` to format timestamps into standard 12-hour AM/PM format (e.g., `11:30 PM`).
   - Updated visit card header timestamp display from `Sep 17, 2026 · 23:30` to `Sep 17, 2026 · 11:30 PM`.

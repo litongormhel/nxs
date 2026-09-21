@@ -22,6 +22,7 @@ export type WalkInVisit = {
   guest_label: string;
   booking_date: string;
   start_time: string;
+  room_number?: number | null;
   status: string;
   created_at: string;
   service_name: string | null;
@@ -647,6 +648,11 @@ export function ClientBrowser({
                   <tbody className="divide-y divide-border text-foreground">
                     {paginatedWalkIns.map((g) => {
                       const latest = g.latestVisit;
+                      const displayLocker =
+                        latest.locker_number ??
+                        g.visits.find((v) => v.locker_number != null)?.locker_number ??
+                        null;
+
                       return (
                         <tr
                           key={g.codename}
@@ -671,18 +677,18 @@ export function ClientBrowser({
                             {latest.therapist_name ?? <span className="text-muted italic">Unassigned</span>}
                           </td>
                           <td className="px-4 py-3 text-xs font-mono">
-                            {latest.locker_number ? (
+                            {displayLocker != null ? (
                               <span className="rounded border border-gold/30 bg-gold/10 px-1.5 py-0.5 text-gold">
-                                Locker {latest.locker_number}
+                                Locker {displayLocker}
                               </span>
                             ) : (
                               <span className="text-muted italic">—</span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-xs font-medium">
-                            {latest.amount !== null ? (
+                            {latest.amount != null ? (
                               <span>
-                                ₱{latest.amount.toLocaleString()}{" "}
+                                ₱{Number(latest.amount).toLocaleString()}{" "}
                                 {latest.payment_method && (
                                   <span className="text-muted text-[10px]">({latest.payment_method})</span>
                                 )}
@@ -977,9 +983,9 @@ export function ClientBrowser({
                       <div>
                         <p className="text-[10px] uppercase tracking-wider text-muted">Amount & Payment</p>
                         <p className="font-medium text-foreground mt-0.5">
-                          {visit.amount !== null ? (
+                          {visit.amount != null ? (
                             <span>
-                              ₱{visit.amount.toLocaleString()}{" "}
+                              ₱{Number(visit.amount).toLocaleString()}{" "}
                               {visit.payment_method && (
                                 <span className="text-muted text-[10px]">({visit.payment_method})</span>
                               )}
@@ -1017,6 +1023,156 @@ export function ClientBrowser({
             <button
               type="button"
               onClick={() => setSelectedMemberForHistory(null)}
+              className="w-full rounded-lg border border-border py-2.5 text-sm font-medium text-foreground hover:border-gold/30 transition-colors cursor-pointer"
+            >
+              Close History
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* WALK-IN GUEST VISIT HISTORY DRAWER ("View Past Stays →") */}
+      {activeWalkInGroup && (
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-black/60 transition-opacity"
+          onClick={() => setSelectedWalkInCodename(null)}
+        >
+          <div
+            className="w-full max-w-lg h-full border-l border-border bg-surface p-6 overflow-y-auto space-y-6 shadow-2xl animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border pb-4">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-gold">
+                  Walk-In Guest History
+                </p>
+                <h2 className="text-xl font-bold text-foreground mt-0.5">
+                  {activeWalkInGroup.codename}
+                </h2>
+                <p className="text-xs font-mono text-muted mt-0.5">
+                  Non-Account Guest · {activeWalkInGroup.visits.length} total visit
+                  {activeWalkInGroup.visits.length !== 1 ? "s" : ""} on record
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedWalkInCodename(null)}
+                className="rounded-lg border border-border p-2 text-muted hover:text-foreground hover:border-gold/30 transition-colors cursor-pointer"
+                aria-label="Close history drawer"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Visit Timeline / History Cards */}
+            <div className="space-y-3">
+              {activeWalkInGroup.visits.length === 0 ? (
+                <div className="rounded-lg border border-border bg-surface-2 p-6 text-center text-xs text-muted">
+                  No visit records found for this walk-in guest.
+                </div>
+              ) : (
+                activeWalkInGroup.visits.map((visit, idx) => {
+                  const resolvedLocker =
+                    visit.locker_number ??
+                    activeWalkInGroup.visits.find((v) => v.locker_number != null)?.locker_number ??
+                    null;
+
+                  return (
+                    <div
+                      key={visit.id || idx}
+                      className="rounded-lg border border-border bg-surface-2 p-4 space-y-3"
+                    >
+                      <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                        <span className="text-xs font-semibold text-gold">
+                          Visit #{activeWalkInGroup.visits.length - idx}
+                        </span>
+                        <span className="text-xs text-muted font-mono">
+                          {formatDisplayDate(visit.booking_date)}
+                          {visit.start_time ? ` · ${formatTime(visit.start_time)}` : ""}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-muted">Service</p>
+                          <p className="font-medium text-foreground mt-0.5">
+                            {visit.service_name ?? <span className="text-muted italic">Wet Area / None</span>}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-muted">Therapist</p>
+                          <p className="font-medium text-foreground mt-0.5">
+                            {visit.therapist_name ?? <span className="text-muted italic">Unassigned</span>}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-muted">Massage Time</p>
+                          <p className="font-medium text-foreground mt-0.5">
+                            {visit.start_time ? (
+                              formatTime(visit.start_time)
+                            ) : (
+                              <span className="text-muted italic">None (Wet Area)</span>
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-muted">Room</p>
+                          <p className="font-medium text-foreground mt-0.5">
+                            {visit.room_number ? (
+                              <span>Room {visit.room_number}</span>
+                            ) : (
+                              <span className="text-muted italic">None (Wet Area)</span>
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-muted">Locker</p>
+                          <p className="font-medium text-foreground mt-0.5">
+                            {resolvedLocker ? (
+                              <span className="text-gold font-mono">Locker {resolvedLocker}</span>
+                            ) : (
+                              <span className="text-muted italic">None</span>
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-muted">Amount & Payment</p>
+                          <p className="font-medium text-foreground mt-0.5">
+                            {visit.amount != null ? (
+                              <span>
+                                ₱{Number(visit.amount).toLocaleString()}{" "}
+                                {visit.payment_method && (
+                                  <span className="text-muted text-[10px]">({visit.payment_method})</span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-muted italic">—</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-muted pt-1">
+                        <span>Status: <strong className="text-foreground">{visit.status}</strong></span>
+                        <span className="text-[10px] font-mono">ID: {visit.id.slice(0, 8)}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSelectedWalkInCodename(null)}
               className="w-full rounded-lg border border-border py-2.5 text-sm font-medium text-foreground hover:border-gold/30 transition-colors cursor-pointer"
             >
               Close History
