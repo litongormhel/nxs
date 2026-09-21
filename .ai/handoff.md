@@ -4,10 +4,26 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#8e1a4f2c` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#3f8a2c1d` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Sort Call Sheet by Operating Shift Time (4:00 PM First, 1:00 AM Last) — complete**
+  (`ohm#3f8a2c1d`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Shift-Aware Sort (`components/call-sheet-browser.tsx`)**:
+    - Added `getOperatingMinutes(slotTime: string | null): number` helper (module-private function, above `CallSheetBrowser`).
+    - Converts `HH:MM` to absolute minutes on the operating day, anchored to 4:00 PM open.
+    - Post-midnight times (`h < 6`, e.g. `01:00`) are offset by `+24 h` (i.e., treated as 25:00 = 1500 mins, which sorts after 23:30 = 1410 mins).
+    - `null` slot_time returns `9999` — these walk-in entries (no linked booking) sink to the bottom of each group.
+    - Updated the `filtered` `useMemo` to: (1) spread-copy the base array to avoid mutating props, (2) `.sort()` with **primary key** = `getOperatingMinutes(a.slot_time) - getOperatingMinutes(b.slot_time)` ascending, **secondary key** = `a.locker_number - b.locker_number` ascending.
+    - Sort applies on both the "All" tab and individual slot tabs (on slot tabs all entries share the same `slot_time`, so tiebreak by locker number takes effect).
+  - **No changes to `app/(staff)/call-sheet/page.tsx`** — server query and prop shape unchanged.
+  - **Filter pills and `availableSlots` array**: completely untouched. `sortSlotTimes` (via `lib/bookings/slots.ts`) still orders the pill buttons correctly.
+  - **JPEG export**: `drawCallSheetJpeg` receives the already-sorted `filtered` array — export now reflects correct order.
+  - **Verification**:
+    - `npm run build` clean (0 errors, 26 routes generated).
 
 - **Fix Date Navigator Chevron Jumping and Align Status Tabs Beside Date Picker — complete**
   (`ohm#9a4c2e1f`, 2026-09-21).

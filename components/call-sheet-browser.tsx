@@ -173,6 +173,19 @@ function drawCallSheetJpeg(rows: Entry[], label: string): string {
   return canvas.toDataURL("image/jpeg", 0.92);
 }
 
+/**
+ * Returns minutes elapsed from the 4:00 PM spa open.
+ * Post-midnight times (h < 6, e.g. 01:00) are offset by +24 h so they sort
+ * after all PM slots rather than before them.
+ * Entries with no slot_time sink to the bottom (returns 9999).
+ */
+function getOperatingMinutes(slotTime: string | null): number {
+  if (!slotTime) return 9999;
+  const [h, m] = slotTime.split(":").map(Number);
+  const totalMins = h < 6 ? (h + 24) * 60 + m : h * 60 + m;
+  return totalMins;
+}
+
 export function CallSheetBrowser({
   inProgress,
   availableSlots,
@@ -184,10 +197,17 @@ export function CallSheetBrowser({
   const [timeFilter, setTimeFilter] = useState<string>("all");
   const downloadRef = useRef<HTMLAnchorElement>(null);
 
-  const filtered = useMemo(
-    () => (timeFilter === "all" ? inProgress : inProgress.filter((e) => e.slot_time === timeFilter)),
-    [inProgress, timeFilter]
-  );
+  const filtered = useMemo(() => {
+    const base =
+      timeFilter === "all"
+        ? inProgress
+        : inProgress.filter((e) => e.slot_time === timeFilter);
+    return [...base].sort((a, b) => {
+      const timeDiff = getOperatingMinutes(a.slot_time) - getOperatingMinutes(b.slot_time);
+      if (timeDiff !== 0) return timeDiff;
+      return a.locker_number - b.locker_number;
+    });
+  }, [inProgress, timeFilter]);
 
   const handleDownload = () => {
     const label = timeFilter === "all" ? "All Times" : fmtTime(timeFilter);
