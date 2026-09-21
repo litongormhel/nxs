@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DEFAULT_SMS_TEMPLATE, interpolateSmsTemplate } from "@/lib/bookings/sms";
 
 export function SmsPreviewModal({
@@ -31,10 +31,54 @@ export function SmsPreviewModal({
     });
   });
   const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  async function handleCopy() {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopied(false);
+      }, 3000);
+    } catch (err) {
+      console.error("Failed to copy SMS preview text:", err);
+    }
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-6 shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div
+        className="w-full max-w-lg rounded-xl border border-border bg-surface p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <h2 className="text-sm font-semibold text-accent-gold uppercase tracking-wider">
           SMS Booking Confirmation Preview
         </h2>
@@ -52,18 +96,19 @@ export function SmsPreviewModal({
         <div className="mt-6 flex justify-end gap-3">
           <button
             type="button"
-            onClick={() => {
-              navigator.clipboard?.writeText(text);
-              setCopied(true);
-            }}
-            className="rounded-md border border-border px-4 py-2 text-sm text-foreground hover:border-gold/30"
+            onClick={handleCopy}
+            className={`rounded-md border px-4 py-2 text-sm font-medium transition-all ${
+              copied
+                ? "border-emerald-500/60 bg-emerald-950/20 text-emerald-400 font-semibold"
+                : "border-border text-foreground hover:border-gold/30 hover:text-gold"
+            }`}
           >
-            {copied ? "Copied" : "Copy"}
+            {copied ? "✓ Copied!" : "Copy"}
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gold bg-gold/10 px-4 py-2 text-sm font-medium text-gold hover:bg-gold/20"
+            className="rounded-md border border-gold bg-gold/10 px-5 py-2 text-sm font-semibold text-gold hover:bg-gold/20 transition-all"
           >
             Done
           </button>

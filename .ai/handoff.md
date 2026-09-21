@@ -4,10 +4,28 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#7d2e4f1a` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#2a5d8f3c` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Prevent Auto-Dismissal of SMS Preview Modal in New Booking Flow — complete**
+  (`ohm#2a5d8f3c`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Backdrop Protection & Explicit Interaction Gate (`components/sms-preview-modal.tsx`)**:
+    - Added `onClick={(e) => e.stopPropagation()}` and `onMouseDown={(e) => e.stopPropagation()}` to both the outer backdrop scrim and the inner modal container.
+    - Accidental backdrop clicks, window switching, tab refocusing, or external document-level click listeners can no longer dismiss or close the modal.
+    - Modal strictly requires explicit receptionist action ("Done") to close.
+  - **Robust Async Copy & Visual Feedback (`components/sms-preview-modal.tsx`)**:
+    - Upgraded copy handler to async `navigator.clipboard.writeText(text)` with automatic fallback to a hidden textarea `document.execCommand("copy")` for non-secure/iframe contexts.
+    - Clicking "Copy" copies the confirmation message to the clipboard and provides clear visual feedback: button displays `"✓ Copied!"` with emerald badge styling (`border-emerald-500/60 bg-emerald-950/20 text-emerald-400 font-semibold`) with 3-second auto-reset.
+    - Most importantly: clicking "Copy" keeps the modal firmly open so staff can switch to messaging apps, paste the text, and return without losing the preview.
+  - **Lifecycle Management & Deferred Revalidation (`components/booking-form-modal.tsx`)**:
+    - Introduced explicit `showSmsPreview` modal state alongside `smsBooking` data.
+    - Handled advance bookings for registered clients (`!isWalkIn`): creates booking, prepares interpolated SMS confirmation message, stores context-rich success toast data in `pendingSuccessToast`, and opens `<SmsPreviewModal />`.
+    - Defers calling `onCreated()` and dispatching `showBookingToast` until staff clicks "Done" in the SMS Preview modal, completely preventing premature parent unmounting (`BookingBrowser` closing `BookingFormModal`) or premature toast timeout dismissal while staff is reading or copying the message.
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors, 26 routes generated in 1294ms).
+  - **Next steps / References**: See [[bookings_state]], `.ai/briefing.md`, and `walkthrough.md`.
 
 - **Fix Client Selection and Portal Account Warning Handling in Quick Walkin Modal — complete**
   (`ohm#7d2e4f1a`, 2026-09-21).

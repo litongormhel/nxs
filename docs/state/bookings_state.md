@@ -175,6 +175,9 @@
   `{service_name}`, and `{amount}`. No SMS gateway is wired into this
   repo — this is a compose/preview + copy-to-clipboard step only, not a
   real send. Staff retain full textarea editability before copying.
+  The modal stays firmly open (`stopPropagation` on backdrop and container)
+  and requires explicit staff action ("Done") to close; clicking "Copy" provides
+  visual feedback (`✓ Copied!`) while keeping the modal open (`ohm#2a5d8f3c`).
 - `app/bookings/actions.ts` — `createBooking(input)` server action for
   **New Booking** (now allows nullable `therapistId` and `roomNumber` for
   services like Wet Area and passes `promo_id`/`pax_count`), and
@@ -561,6 +564,22 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - When no portal account exists, sets `pointsAwarded: null` and returns `pointsReason: "no_portal_account"`, omitting points from `quick_walkin` RPC (`p_points_earned: null`).
   - Completely prevents trigger `trg_require_portal_account_for_earn_redeem` violation (`"Client ... has no client_portal_accounts row — cannot EARN or REDEEM points"`), allowing the walk-in booking, sale, and locker occupancy to be created cleanly with the selected `client_id`.
   - In `QuickWalkinModal`: when `pointsReason === "no_portal_account"`, bypasses the unconfigured formula warning dialog, immediately displaying the context-rich success toast and closing the modal.
+- `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
+
+**Correction, `ohm#2a5d8f3c` (2026-09-21)** — Prevent Auto-Dismissal of SMS Preview Modal in New Booking Flow.
+
+- **Modal Persistence & Backdrop Protection (`components/sms-preview-modal.tsx`)**:
+  - Added `onClick={(e) => e.stopPropagation()}` and `onMouseDown={(e) => e.stopPropagation()}` to both the backdrop scrim and inner modal dialog card.
+  - Backdrop clicks, window switching, tab refocusing, or external document-level click listeners cannot dismiss the modal.
+  - Modal strictly requires explicit receptionist interaction ("Done") to close.
+- **Copy Visual Feedback & Uninterrupted Preview (`components/sms-preview-modal.tsx`)**:
+  - Replaced basic copy handler with robust async clipboard copy (`navigator.clipboard.writeText`) and hidden textarea `execCommand("copy")` fallback.
+  - Displays `"✓ Copied!"` visual badge feedback (`border-emerald-500/60 bg-emerald-950/20 text-emerald-400`) for 3 seconds.
+  - Clicking "Copy" keeps the modal firmly open so reception can switch windows and text the client without losing the preview message.
+- **Lifecycle & Deferred Revalidation (`components/booking-form-modal.tsx`)**:
+  - Introduced explicit `showSmsPreview` modal state alongside `smsBooking` data.
+  - When saving an advance booking for a registered client (`!isWalkIn`), saves booking, stages context-rich success toast in `pendingSuccessToast`, and opens `<SmsPreviewModal />`.
+  - Defers calling `onCreated()` and dispatching `showBookingToast` until staff clicks "Done" in the SMS Preview modal, completely preventing premature parent unmounting (`BookingBrowser` unmounting `BookingFormModal`) or premature toast fade while reviewing text.
 - `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
 
 ## Known simplifications (not gaps — deliberate for this phase's scope)

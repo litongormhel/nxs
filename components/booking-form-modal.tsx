@@ -157,6 +157,7 @@ export function BookingFormModal({
   const [servicesLoaded, setServicesLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeSmsTemplate, setActiveSmsTemplate] = useState<string>(DEFAULT_SMS_TEMPLATE);
+  const [showSmsPreview, setShowSmsPreview] = useState(false);
   const [smsBooking, setSmsBooking] = useState<{
     codename: string;
     price: number;
@@ -547,26 +548,32 @@ export function BookingFormModal({
         description: toastSubtitle,
       };
 
-      if (!isWalkIn && selectedClient && selectedService) {
+      const isRegisteredClient = !isWalkIn && (!!selectedClient || clientSelectValue !== "__walkin__");
+      if (isRegisteredClient) {
+        const clientCodename = selectedClient?.codename ?? "Client";
+        const servicePrice = selectedService?.price ?? 0;
+        const serviceName = selectedService?.name ?? "Service";
+
         setPendingSuccessToast(successToastData);
         const interpolated = interpolateSmsTemplate(activeSmsTemplate, {
           booking_date: date,
-          client_name: selectedClient.codename,
+          client_name: clientCodename,
           slot_time: formattedSlot || time,
           therapist_name: resolvedTherapistName ?? "—",
-          service_name: selectedService.name,
-          amount: selectedService.price,
+          service_name: serviceName,
+          amount: servicePrice,
         });
 
         setSmsBooking({
-          codename: selectedClient.codename,
-          price: selectedService.price,
-          serviceName: selectedService.name,
+          codename: clientCodename,
+          price: servicePrice,
+          serviceName: serviceName,
           date,
           startTime: formattedSlot || time,
           therapistName: resolvedTherapistName,
           message: interpolated,
         });
+        setShowSmsPreview(true);
         return;
       }
 
@@ -575,12 +582,13 @@ export function BookingFormModal({
     });
   }
 
-  if (smsBooking) {
+  if (showSmsPreview && smsBooking) {
     return (
       <SmsPreviewModal
         booking={smsBooking}
         initialMessage={smsBooking.message}
         onClose={() => {
+          setShowSmsPreview(false);
           setSmsBooking(null);
           if (pendingSuccessToast) {
             showBookingToast(pendingSuccessToast);
