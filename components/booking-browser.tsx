@@ -52,6 +52,7 @@ type LogVisitInitialBooking = {
   start_time: string;
   promo_id: string | null;
   status: Database["public"]["Enums"]["booking_status"];
+  notes?: string | null;
 };
 
 type BookingRow = {
@@ -67,6 +68,7 @@ type BookingRow = {
   promo_id: string | null;
   status: Database["public"]["Enums"]["booking_status"];
   pax_count: number | null;
+  notes?: string | null;
   locker_occupancy: LockerOccupancyRow[] | null;
 };
 
@@ -179,10 +181,10 @@ export function BookingBrowser({
   useEffect(() => {
     const supabase = createClient();
     Promise.all([
-      supabase
-        .from("bookings")
+      (supabase
+        .from("bookings") as any)
         .select(
-          "id, client_id, guest_label, service_id, therapist_id, room_number, booking_date, start_time, duration_minutes, promo_id, status, pax_count, locker_occupancy(id, checked_in_at, checked_out_at, locker_number)"
+          "id, client_id, guest_label, service_id, therapist_id, room_number, booking_date, start_time, duration_minutes, promo_id, status, pax_count, notes, locker_occupancy(id, checked_in_at, checked_out_at, locker_number)"
         )
         .eq("booking_date", date)
         .in("status", ACTIVE_STATUSES)
@@ -725,6 +727,9 @@ export function BookingBrowser({
                             </span>
                           )}
                         </div>
+                        {row.notes && row.notes.trim() !== "" && (
+                          <div className="mt-1 flex items-center gap-1 text-[11px] text-accent-gold/90 bg-accent-gold/10 border border-accent-gold/20 rounded px-1.5 py-0.5 max-w-fit">🚗 {row.notes}</div>
+                        )}
                       </td>
                       <td className="px-3.5 py-3 text-muted">{serviceName(row.service_id)}</td>
                       <td className="px-3.5 py-3">{renderRoomPill(row)}</td>

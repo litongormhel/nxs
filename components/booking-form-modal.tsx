@@ -136,6 +136,7 @@ export function BookingFormModal({
 
   const [promos, setPromos] = useState<Promo[]>([]);
   const [promoId, setPromoId] = useState<string>("none");
+  const [notes, setNotes] = useState("");
   const [clientPointsBalance, setClientPointsBalance] = useState<number | null>(null);
 
   useEffect(() => {
@@ -571,6 +572,7 @@ export function BookingFormModal({
         paxCount: derivedPax,
         promoId: effectivePromoId,
         createdBy: staffId,
+        notes: notes.trim() || undefined,
       });
 
       if (!result.ok) {
@@ -976,6 +978,21 @@ export function BookingFormModal({
               )}
             </div>
           )}
+
+          {/* Notes / Vehicle Info */}
+          <div>
+            <label className="text-xs text-muted" htmlFor="bNotes">
+              Notes / Vehicle Info <span className="opacity-70">(optional)</span>
+            </label>
+            <input
+              id="bNotes"
+              type="text"
+              placeholder="e.g. Vios ABC-123 blocking slot 2"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-stone-500 focus:border-gold outline-none"
+            />
+          </div>
 
           {/* Error Message */}
           {error && (

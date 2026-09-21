@@ -4,10 +4,33 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#3b8e1f5a` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#4a7b1c3e` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Add Session Notes / Vehicle Info to Bookings and Display in Table — complete**
+  (`ohm#4a7b1c3e`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Database & Schema (`supabase/migrations/20260921140000_add_bookings_notes.sql`)**:
+    - Added nullable `notes text` column to `public.bookings`.
+    - Dropped old `public.quick_walkin(...)` overload and created new one accepting `p_notes text default null`, setting `notes: p_notes` on `bookings` insert and logging `notes` in `action_logs`.
+    - Reloaded PostgREST schema cache.
+  - **Server Actions (`app/(staff)/bookings/actions.ts`)**:
+    - Updated `CreateBookingInput`, `QuickWalkinInput`, and `LogVisitBookingInput` to include `notes?: string | null`.
+    - Updated `createBooking` to persist `notes: input.notes?.trim() || null`.
+    - Updated `quickWalkin` to persist `notes` in active locker reuse branch and pass `p_notes` in RPC call (with direct update fallback safeguard).
+    - Updated `logVisitBooking` to forward `notes` to `quickWalkin` (for unlinked bookings) and include `notes: input.notes?.trim() || null` in `bookings.update` (for linked bookings).
+    - Updated `app/(staff)/bookings/page.tsx` day bookings queries to select `notes`.
+  - **Modals Integration (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`, `components/log-visit-modal.tsx`)**:
+    - Added optional input field: "Notes / Vehicle Info (optional)" with placeholder "e.g. Vios ABC-123 blocking slot 2" across Quick Walk-in, New Booking, and Log Visit modals.
+    - Initialized notes in Log Visit modal from `initialBooking?.notes` and synchronized upon linking an open booking from search results.
+  - **Bookings Table Display (`components/booking-browser.tsx`)**:
+    - Selected `notes` in day bookings query.
+    - In CLIENT column across all three tabs (Upcoming, Check-in, Check-out), render gold note badge `<div className="mt-1 flex items-center gap-1 text-[11px] text-accent-gold/90 bg-accent-gold/10 border border-accent-gold/20 rounded px-1.5 py-0.5 max-w-fit">🚗 {row.notes}</div>` underneath client name strictly when `row.notes && row.notes.trim() !== ''`.
+    - If `row.notes` is empty, null, or undefined, renders nothing (no dash, no placeholder container, preserving compact row height).
+  - **Tests & Verification**:
+    - `npm run build` clean (0 errors, 26 routes generated).
 
 - **Fix Locker Out-of-Order Update Failure for Higher Locker Numbers — complete**
   (`ohm#3b8e1f5a`, 2026-09-21).

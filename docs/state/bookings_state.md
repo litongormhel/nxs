@@ -4,7 +4,8 @@
 
 `public.bookings`:
 - Columns include `client_id` (nullable), `guest_label` (nullable — check
-  constraint requires one of `client_id`/`guest_label`), `service_id`,
+  constraint requires one of `client_id`/`guest_label`), `notes` (nullable text,
+  `ohm#4a7b1c3e`), `service_id`,
   `therapist_id`, `room_number`, `booking_date`, `start_time`, `start_ts`/
   `end_ts` (computed), `duration_minutes`, `status` (enum: `Booked`,
   `Completed`, `No-show`, `Cancelled`, `Needs Reassignment`), `group_id`,
@@ -689,6 +690,26 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Added helper `sortByLatestCheckin(rows: BookingRow[])` sorting active check-in bookings by `occupancyOf(r)?.checked_in_at` in descending order (`desc` — newest check-in at the top of the table).
   - Provided robust date parsing with fallback to `b.id.localeCompare(a.id)` for missing or identical timestamps.
   - Maintained chronological scheduled time sorting (`sortBySpaDay`) for the UPCOMING tab.
+- `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
+ 
+**Correction, `ohm#4a7b1c3e` (2026-09-21)** — Add Session Notes / Vehicle Info to Bookings and Display in Table.
+ 
+- **Database & Schema (`supabase/migrations/20260921140000_add_bookings_notes.sql`)**:
+  - Added nullable `notes text` column to `public.bookings`.
+  - Replaced `public.quick_walkin(...)` function with signature accepting `p_notes text default null`, populating `bookings.notes` on atomic walk-in creation.
+  - Reloaded PostgREST schema cache.
+- **Server Actions (`app/(staff)/bookings/actions.ts`)**:
+  - Updated `CreateBookingInput`, `QuickWalkinInput`, and `LogVisitBookingInput` to include `notes?: string | null`.
+  - `createBooking` inserts `notes: input.notes?.trim() || null`.
+  - `quickWalkin` saves `notes` in the active locker reuse branch and passes `p_notes` in `quick_walkin` RPC with direct update fallback.
+  - `logVisitBooking` forwards `notes` to `quickWalkin` (unlinked branch) and updates `bookings.notes` (linked branch).
+  - Selected `notes` in day bookings queries in `app/(staff)/bookings/page.tsx`.
+- **Modals (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`, `components/log-visit-modal.tsx`)**:
+  - Added optional input field: "Notes / Vehicle Info (optional)" with placeholder "e.g. Vios ABC-123 blocking slot 2" across Quick Walk-in, New Booking, and Log Visit modals.
+  - In `LogVisitModal`, initialized notes from `initialBooking?.notes` and synchronized when selecting an open booking.
+- **Bookings Table Display (`components/booking-browser.tsx`)**:
+  - In the CLIENT column across tabs (Upcoming, Check-in, Check-out), render gold note badge `<div className="mt-1 flex items-center gap-1 text-[11px] text-accent-gold/90 bg-accent-gold/10 border border-accent-gold/20 rounded px-1.5 py-0.5 max-w-fit">🚗 {row.notes}</div>` underneath the client name when `row.notes && row.notes.trim() !== ''`.
+  - When notes are empty, null, or undefined, strictly renders nothing to preserve compact row height.
 - `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
 
 ## Known simplifications (not gaps — deliberate for this phase's scope)

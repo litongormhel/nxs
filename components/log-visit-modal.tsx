@@ -27,6 +27,7 @@ type BookingOption = {
   start_time: string;
   promo_id: string | null;
   status: Database["public"]["Enums"]["booking_status"];
+  notes?: string | null;
 };
 
 function todayIso(): string {
@@ -154,6 +155,7 @@ export function LogVisitModal({
 
   const [addonIds, setAddonIds] = useState<string[]>([]);
   const [promoId, setPromoId] = useState<string>(initialBooking?.promo_id ?? "none");
+  const [notes, setNotes] = useState<string>(initialBooking?.notes ?? "");
   const [clientPointsBalance, setClientPointsBalance] = useState<number | null>(null);
 
   useEffect(() => {
@@ -204,14 +206,14 @@ export function LogVisitModal({
   // Fetch open bookings, occupied lockers, out-of-order lockers, and loyalty settings on mount
   useEffect(() => {
     const supabase = createClient();
-    supabase
-      .from("bookings")
+    (supabase
+      .from("bookings") as any)
       .select(
-        "id, client_id, guest_label, service_id, therapist_id, room_number, booking_date, start_time, promo_id, status"
+        "id, client_id, guest_label, service_id, therapist_id, room_number, booking_date, start_time, promo_id, status, notes"
       )
       .in("status", ["Booked", "Needs Reassignment"])
       .order("booking_date", { ascending: true })
-      .then(({ data }) => setOpenBookings((data as BookingOption[]) ?? []));
+      .then(({ data }: any) => setOpenBookings((data as BookingOption[]) ?? []));
 
     supabase
       .from("lockers")
@@ -311,6 +313,7 @@ export function LogVisitModal({
     setTherapistId(b.therapist_id ?? "");
     setDate(b.booking_date);
     if (b.promo_id) setPromoId(b.promo_id);
+    if (b.notes) setNotes(b.notes);
     const existingOcc = activeOccupancies.find((o) => o.booking_id === b.id);
     if (existingOcc) {
       setLockerNumber(existingOcc.locker_number);
@@ -546,6 +549,7 @@ export function LogVisitModal({
         upgradeTo: isUpgraded ? upgradeTo : null,
         upgradeCash: isUpgraded ? upgradeCash : null,
         staffId,
+        notes: notes.trim() || undefined,
       });
 
       if (!result.ok) {
@@ -1259,6 +1263,21 @@ export function LogVisitModal({
               />
             </div>
           )}
+
+          {/* Notes / Vehicle Info */}
+          <div>
+            <label className="text-xs text-muted" htmlFor="fNotes">
+              Notes / Vehicle Info <span className="opacity-70">(optional)</span>
+            </label>
+            <input
+              id="fNotes"
+              type="text"
+              placeholder="e.g. Vios ABC-123 blocking slot 2"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-stone-500 focus:border-gold outline-none"
+            />
+          </div>
 
           {/* Error Message */}
           {error && (

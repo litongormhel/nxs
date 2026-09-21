@@ -55,6 +55,7 @@ export type CreateBookingInput = {
   paxCount: number | null;
   promoId: string | null;
   createdBy: string;
+  notes?: string | null;
 };
 
 export type CreateBookingResult =
@@ -143,7 +144,8 @@ export async function createBooking(
       pax_count: input.paxCount,
       promo_id: input.promoId,
       created_by: input.createdBy,
-    })
+      notes: input.notes?.trim() || null,
+    } as any)
     .select("id")
     .single();
 
@@ -205,6 +207,7 @@ export type QuickWalkinInput = {
   paymentRef: string | null;
   staffId: string;
   isRedemption?: boolean;
+  notes?: string | null;
 };
 
 export type QuickWalkinResult =
@@ -425,7 +428,8 @@ export async function quickWalkin(
       start_time: input.startTime,
       status: "Completed",
       created_by: input.staffId,
-    });
+      notes: input.notes?.trim() || null,
+    } as any);
 
     if (bookingErr) {
       const unavailable = therapistUnavailableError(bookingErr.message);
@@ -608,7 +612,8 @@ export async function quickWalkin(
     p_payment_ref: isSplit ? (method1 !== "Cash" ? input.paymentRef : null) : (input.paymentMethod !== "Cash" ? input.paymentRef : null),
     p_staff_id: input.staffId,
     p_points_earned: input.isRedemption ? null : pointsAwarded,
-  });
+    p_notes: input.notes?.trim() || null,
+  } as any);
 
   if (error) {
     const unavailable = therapistUnavailableError(error.message);
@@ -648,6 +653,12 @@ export async function quickWalkin(
   const saleId = data?.[0]?.sale_id;
   if (!bookingId) {
     return { ok: false, error: "Quick walk-in did not return a booking id." };
+  }
+
+  if (input.notes?.trim()) {
+    await (supabase.from("bookings") as any)
+      .update({ notes: input.notes.trim() })
+      .eq("id", bookingId);
   }
 
   if (input.clientId && input.isRedemption) {
@@ -1262,6 +1273,7 @@ export type LogVisitBookingInput = {
   upgradeTo?: string | null;
   upgradeCash?: number | null;
   staffId: string;
+  notes?: string | null;
 };
 
 export type LogVisitBookingResult =
@@ -1296,6 +1308,7 @@ export async function logVisitBooking(
       paymentRef: input.paymentRef,
       staffId: input.staffId,
       isRedemption: input.isRedemption,
+      notes: input.notes,
     });
     if (!res.ok) {
       return { ok: false, error: res.error, field: res.field };
@@ -1457,14 +1470,18 @@ export async function logVisitBooking(
   }
 
   // 3. Update booking status to Completed
-  const { error: bookingErr } = await supabase
-    .from("bookings")
-    .update({
-      status: "Completed",
-      service_id: input.serviceId,
-      therapist_id: input.therapistId,
-      room_number: input.roomNumber,
-    })
+  const bookingUpdatePayload: Record<string, any> = {
+    status: "Completed",
+    service_id: input.serviceId,
+    therapist_id: input.therapistId,
+    room_number: input.roomNumber,
+  };
+  if (input.notes !== undefined) {
+    bookingUpdatePayload.notes = input.notes?.trim() || null;
+  }
+
+  const { error: bookingErr } = await (supabase.from("bookings") as any)
+    .update(bookingUpdatePayload)
     .eq("id", input.bookingId);
 
   if (bookingErr) {

@@ -72,19 +72,19 @@ export default async function BookingsPage() {
       .order("number", { ascending: true }),
     supabase.from("weekend_slots").select("slot_time"),
     supabase.from("client_portal_accounts").select("client_id"),
-    supabase
-      .from("bookings")
+    (supabase
+      .from("bookings") as any)
       .select(
-        "id, booking_date, start_time, duration_minutes, room_number, therapist_id, status, therapists(name, archived), services(name), clients(codename), guest_label"
+        "id, booking_date, start_time, duration_minutes, room_number, therapist_id, status, therapists(name, archived), services(name), clients(codename), guest_label, notes"
       )
       .eq("status", "Needs Reassignment")
       .gte("booking_date", currentSpaDate)
       .order("booking_date", { ascending: true })
       .order("start_time", { ascending: true }),
-    supabase
-      .from("bookings")
+    (supabase
+      .from("bookings") as any)
       .select(
-        "id, booking_date, start_time, duration_minutes, room_number, therapist_id, status, therapists(name, archived), services(name), clients(codename), guest_label, locker_occupancy(id, checked_in_at, checked_out_at)"
+        "id, booking_date, start_time, duration_minutes, room_number, therapist_id, status, therapists(name, archived), services(name), clients(codename), guest_label, notes, locker_occupancy(id, checked_in_at, checked_out_at)"
       )
       .gte("booking_date", currentSpaDate)
       .not("therapist_id", "is", null)
@@ -130,6 +130,7 @@ export default async function BookingsPage() {
     services: { name: string } | null;
     clients: { codename: string } | null;
     guest_label: string | null;
+    notes?: string | null;
     locker_occupancy?: { id: string; checked_in_at: string; checked_out_at: string | null }[] | null;
   };
 
@@ -235,7 +236,7 @@ export default async function BookingsPage() {
         daysOff={dbDaysOff ?? []}
         absences={dbAbsences ?? []}
         leaves={dbLeaves ?? []}
-        allBookings={(dbActiveBookings ?? []).map((b) => ({
+        allBookings={((dbActiveBookings as FlaggedRow[]) ?? []).map((b) => ({
           id: b.id,
           therapist_id: b.therapist_id,
           booking_date: b.booking_date,
