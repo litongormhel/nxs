@@ -28,6 +28,7 @@ export const SMS_TEMPLATE_VARIABLES: SmsTemplateVariable[] = [
   { key: "{therapist_name}", label: "{therapist_name}", description: "Assigned therapist name" },
   { key: "{service_name}", label: "{service_name}", description: "Booked service (optional)", isOptional: true },
   { key: "{amount}", label: "{amount}", description: "Service price (optional)", isOptional: true },
+  { key: "{room_number}", label: "{room_number}", description: "Room number (e.g. Room 1 or None)", isOptional: true },
 ];
 
 export type SmsInterpolationData = {
@@ -37,6 +38,7 @@ export type SmsInterpolationData = {
   therapist_name?: string | null;
   service_name?: string | null;
   amount?: number | string | null;
+  room_number?: number | string | null;
 };
 
 const MONTH_NAMES = [
@@ -94,6 +96,18 @@ export function interpolateSmsTemplate(
 
   const formattedDate = formatSmsDate(data.booking_date);
 
+  let roomStr = "None";
+  if (data.room_number != null && data.room_number !== "") {
+    const rawRoom = String(data.room_number).trim();
+    if (/^none$/i.test(rawRoom)) {
+      roomStr = "None";
+    } else if (/^room\s+/i.test(rawRoom)) {
+      roomStr = rawRoom;
+    } else if (rawRoom) {
+      roomStr = `Room ${rawRoom}`;
+    }
+  }
+
   const replacements: Record<string, string> = {
     "{booking_date}": formattedDate,
     "{client_name}": data.client_name || "",
@@ -101,6 +115,8 @@ export function interpolateSmsTemplate(
     "{therapist_name}": data.therapist_name || "—",
     "{service_name}": data.service_name || "",
     "{amount}": amountStr,
+    "{room_number}": roomStr,
+    "{room}": roomStr,
   };
 
   let result = template;

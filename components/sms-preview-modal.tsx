@@ -16,6 +16,7 @@ export function SmsPreviewModal({
     date: string;
     startTime: string;
     therapistName?: string | null;
+    roomNumber?: number | string | null;
   };
   initialMessage?: string;
   onClose: () => void;
@@ -30,6 +31,7 @@ export function SmsPreviewModal({
       therapist_name: booking.therapistName ?? "—",
       service_name: booking.serviceName,
       amount: booking.price,
+      room_number: booking.roomNumber,
     });
   });
   const [copied, setCopied] = useState(false);

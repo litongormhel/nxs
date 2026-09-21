@@ -172,7 +172,7 @@
   (or default official Nexus Spa copy: `DEFAULT_SMS_TEMPLATE` from
   `lib/bookings/sms.ts`, `ohm#4f8e1b2d`) interpolated dynamically with
   `{booking_date}` (formatted as `"MMM D, YYYY"`, e.g. `"Sep 21, 2026"`, via `formatSmsDate` preventing UTC timezone shifting), `{client_name}`, `{slot_time}`, `{therapist_name}`,
-  `{service_name}`, and `{amount}`. No SMS gateway is wired into this
+  `{service_name}`, `{amount}`, and `{room_number}` (with `{room}` alias, fallback `"Room X"` or `"None"`). No SMS gateway is wired into this
   repo — this is a compose/preview + copy-to-clipboard step only, not a
   real send. Staff retain full textarea editability before copying.
   The modal stays firmly open (`stopPropagation` on backdrop and container)
@@ -620,6 +620,19 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Updated `SMS_TEMPLATE_VARIABLES` metadata for `{booking_date}` to reflect `"Booking date (e.g. Sep 21, 2026)"`.
   - Updated `BookingFormModal` (`components/booking-form-modal.tsx`) in `handleSubmit` to format `date` with `formatSmsDate(date)` before passing to `interpolateSmsTemplate` and initializing `smsBooking.date`.
   - Verified that the SMS Preview modal displays `Date: Sep 21, 2026` instead of raw ISO `Date: 2026-09-21`.
+- `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
+
+**Correction, `ohm#7d3e2a8f` (2026-09-21)** — Fix SMS Template Save Error and Add Optional Room Variable.
+
+- **Error Serialization & Permissions Fix (`app/(staff)/settings/actions.ts`, `components/settings-browser.tsx`)**:
+  - Resolved `[object Object]` error serialization in `fail()` by extracting `message`, `error`, `details`, or `hint` from Postgrest error objects.
+  - Updated `updateSmsTemplate` and `resetSmsTemplate` server actions to use `createServiceClient()` with fallback to authenticated client (`createClient()`), resolving Supabase RLS / permission failures on `app_settings` updates.
+  - Added defensive error unwrapping in `components/settings-browser.tsx` (`handleSaveSmsTemplate` and `handleResetSmsTemplate`) to ensure toasts display clear error descriptions.
+- **Optional Room Variable Support (`lib/bookings/sms.ts`, `components/settings-browser.tsx`, `components/booking-form-modal.tsx`, `components/sms-preview-modal.tsx`)**:
+  - Added `{room_number}` (with `{room}` alias) to `SMS_TEMPLATE_VARIABLES` with description `"Room number (e.g. Room 1 or None)"` and `isOptional: true`, dynamically rendering the clickable insertion chip in Settings template editor.
+  - Updated `interpolateSmsTemplate` to resolve `{room_number}`: formats as `"Room X"` if a room number is provided, or cleanly falls back to `"None"` if null, undefined, empty, or for Wet Area bookings without rooms.
+  - Updated `BookingFormModal` (`components/booking-form-modal.tsx`) to pass `room_number: isMassageService && roomNumber ? roomNumber : null` to `interpolateSmsTemplate` and state.
+  - Updated `SmsPreviewModal` (`components/sms-preview-modal.tsx`) to accept `roomNumber?: number | string | null` and pass it to fallback interpolation.
 - `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
 
 ## Known simplifications (not gaps — deliberate for this phase's scope)

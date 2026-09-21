@@ -165,6 +165,7 @@ export function BookingFormModal({
     date: string;
     startTime: string;
     therapistName?: string | null;
+    roomNumber?: number | string | null;
     message?: string;
   } | null>(null);
   const [pendingSuccessToast, setPendingSuccessToast] = useState<{
@@ -551,6 +552,7 @@ export function BookingFormModal({
       const servicePrice = selectedService?.price ?? 0;
       const serviceName = selectedService?.name ?? "Service";
       const formattedBookingDate = formatSmsDate(date);
+      const resolvedRoomNumber = isMassageService && roomNumber ? roomNumber : null;
 
       setPendingSuccessToast(successToastData);
       const interpolated = interpolateSmsTemplate(activeSmsTemplate, {
@@ -560,6 +562,7 @@ export function BookingFormModal({
         therapist_name: resolvedTherapistName ?? "—",
         service_name: serviceName,
         amount: servicePrice,
+        room_number: resolvedRoomNumber,
       });
 
       setSmsBooking({
@@ -569,6 +572,7 @@ export function BookingFormModal({
         date: formattedBookingDate,
         startTime: formattedSlot || time,
         therapistName: resolvedTherapistName,
+        roomNumber: resolvedRoomNumber,
         message: interpolated,
       });
       setShowSmsPreview(true);

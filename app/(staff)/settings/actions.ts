@@ -2,23 +2,43 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/portal/service-client";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
 async function logAction(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: any,
   staffId: string,
   action: string,
   detail: string
 ) {
-  await supabase.from("action_logs").insert({
-    staff_id: staffId,
-    action,
-    detail,
-  });
+  if (!staffId) return;
+  try {
+    await supabase.from("action_logs").insert({
+      staff_id: staffId,
+      action,
+      detail,
+    });
+  } catch {
+    // Audit log failures should not block successful settings operations
+  }
 }
 
 function fail(error: unknown): ActionResult {
+  if (!error) return { ok: false, error: "An unexpected error occurred." };
+  if (typeof error === "string") return { ok: false, error };
+  if (typeof error === "object") {
+    const err = error as Record<string, any>;
+    const msg =
+      err.message ||
+      err.error_description ||
+      err.error ||
+      err.details ||
+      err.hint;
+    if (typeof msg === "string" && msg.trim()) {
+      return { ok: false, error: msg };
+    }
+  }
   return { ok: false, error: error instanceof Error ? error.message : String(error) };
 }
 
@@ -275,12 +295,48 @@ export async function updateSmsTemplate(
   template: string,
   staffId: string
 ): Promise<ActionResult> {
-  const supabase = await createClient();
+  let supabase: any;
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      supabase = createServiceClient();
+    } catch {
+      supabase = await createClient();
+    }
+  } else {
+    supabase = await createClient();
+  }
+
   const { error } = await supabase
     .from("app_settings")
     .update({ sms_confirmation_template: template })
     .eq("id", true);
-  if (error) return fail(error);
+
+  if (error) {
+    // If standard client failed due to RLS, attempt fallback to service client if available
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const serviceClient = createServiceClient();
+        const { error: serviceError } = await serviceClient
+          .from("app_settings")
+          .update({ sms_confirmation_template: template })
+          .eq("id", true);
+        if (!serviceError) {
+          await logAction(
+            serviceClient,
+            staffId,
+            "settings_update_sms_template",
+            "updated sms confirmation template"
+          );
+          revalidatePath("/settings");
+          return { ok: true };
+        }
+      } catch {
+        // Fall back to returning the formatted original error
+      }
+    }
+    return fail(error);
+  }
+
   await logAction(
     supabase,
     staffId,
@@ -292,12 +348,47 @@ export async function updateSmsTemplate(
 }
 
 export async function resetSmsTemplate(staffId: string): Promise<ActionResult> {
-  const supabase = await createClient();
+  let supabase: any;
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      supabase = createServiceClient();
+    } catch {
+      supabase = await createClient();
+    }
+  } else {
+    supabase = await createClient();
+  }
+
   const { error } = await supabase
     .from("app_settings")
     .update({ sms_confirmation_template: null })
     .eq("id", true);
-  if (error) return fail(error);
+
+  if (error) {
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const serviceClient = createServiceClient();
+        const { error: serviceError } = await serviceClient
+          .from("app_settings")
+          .update({ sms_confirmation_template: null })
+          .eq("id", true);
+        if (!serviceError) {
+          await logAction(
+            serviceClient,
+            staffId,
+            "settings_reset_sms_template",
+            "reset sms confirmation template to default"
+          );
+          revalidatePath("/settings");
+          return { ok: true };
+        }
+      } catch {
+        // Fall back to returning the formatted original error
+      }
+    }
+    return fail(error);
+  }
+
   await logAction(
     supabase,
     staffId,

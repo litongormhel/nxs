@@ -555,7 +555,11 @@ export function SettingsBrowser({
     const res = await updateSmsTemplate(smsTemplate, selectedStaffId);
     setIsSavingSms(false);
     if (!res.ok) {
-      showToast(`Failed to save SMS template: ${res.error}`);
+      const errorMsg =
+        typeof res.error === "string"
+          ? res.error
+          : (res.error as any)?.message || JSON.stringify(res.error) || "Unknown error";
+      showToast(`Failed to save SMS template: ${errorMsg}`);
       return;
     }
     setSavedSmsTemplate(smsTemplate);
@@ -568,7 +572,11 @@ export function SettingsBrowser({
     const res = await resetSmsTemplate(selectedStaffId);
     setIsSavingSms(false);
     if (!res.ok) {
-      showToast(`Failed to reset SMS template: ${res.error}`);
+      const errorMsg =
+        typeof res.error === "string"
+          ? res.error
+          : (res.error as any)?.message || JSON.stringify(res.error) || "Unknown error";
+      showToast(`Failed to reset SMS template: ${errorMsg}`);
       return;
     }
     setSmsTemplate(DEFAULT_SMS_TEMPLATE);

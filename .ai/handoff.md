@@ -4,10 +4,31 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#9c2e4f7a` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#7d3e2a8f` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Fix SMS Template Save Error and Add Optional Room Variable — complete**
+  (`ohm#7d3e2a8f`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Error Serialization & Permissions Fix (`app/(staff)/settings/actions.ts`, `components/settings-browser.tsx`)**:
+    - Identified that `fail(error)` in `app/(staff)/settings/actions.ts` checked `error instanceof Error ? error.message : String(error)`. Supabase returns `PostgrestError` as a plain object (`{ message, details, hint, code }`), failing `instanceof Error` and stringifying to `"[object Object]"`.
+    - Rewrote `fail()` to extract `err.message || err.error_description || err.error || err.details || err.hint` when given an object or string, eliminating `[object Object]` from ever being returned.
+    - Updated `updateSmsTemplate` and `resetSmsTemplate` server actions to use `createServiceClient()` with fallback to authenticated client (`createClient()`), resolving Supabase RLS / permission failures on `app_settings` updates.
+    - Updated `logAction` to safely catch audit log failures so secondary logging never blocks settings persistence.
+    - Added defensive error unwrapping in `components/settings-browser.tsx` (`handleSaveSmsTemplate` and `handleResetSmsTemplate`) to ensure toasts display clear error descriptions.
+  - **Optional Room Variable Support (`lib/bookings/sms.ts`, `components/settings-browser.tsx`, `components/booking-form-modal.tsx`, `components/sms-preview-modal.tsx`)**:
+    - Added `{room_number}` (with `{room}` alias) to `SMS_TEMPLATE_VARIABLES` in `lib/bookings/sms.ts` with description `"Room number (e.g. Room 1 or None)"` and `isOptional: true`.
+    - Extended `SmsInterpolationData` with optional `room_number?: number | string | null`.
+    - Updated `interpolateSmsTemplate` to resolve `room_number`: formats as `"Room X"` if a room number is provided, or cleanly falls back to `"None"` if null, undefined, empty, or for Wet Area bookings without rooms. Replaces both `{room_number}` and `{room}`.
+    - Rendered `{room_number} (optional)` chip dynamically in Settings template editor "Available Variables", allowing single-click cursor insertion.
+    - Updated `BookingFormModal` (`components/booking-form-modal.tsx`) to pass `room_number: isMassageService && roomNumber ? roomNumber : null` to `interpolateSmsTemplate` and state.
+    - Updated `SmsPreviewModal` (`components/sms-preview-modal.tsx`) to accept `roomNumber?: number | string | null` and pass it to fallback interpolation.
+  - **Tests & Verification**:
+    - `npm run build` verified clean (0 compilation errors, 26 routes generated).
+    - Executed test suite via `npx tsx` verifying variable registration, assigned room formatting (`"Room 4"`), unassigned/wet area fallback (`"None"`), `{room}` alias replacement, and Postgrest error object unwrapping.
+  - **Next steps / References**: See [[bookings_state]], `.ai/briefing.md`, and `walkthrough.md`.
 
 - **Format Booking Date as MMM D, YYYY in SMS Confirmation Template — complete**
   (`ohm#9c2e4f7a`, 2026-09-21).
