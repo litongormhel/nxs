@@ -549,6 +549,20 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Preserved inline error state, warnings, and `errorRef` scrolling.
   - Retained single server revalidation path via `onCreated()` (`router.refresh()`), preventing duplicate network calls.
 
+**Correction, `ohm#7d2e4f1a` (2026-09-21)** — Fix Client Selection and Portal Account Warning Handling in Quick Walkin Modal.
+
+- **Non-blocking Portal Account Advisory (`components/quick-walkin-modal.tsx`)**:
+  - Added non-blocking amber advisory notice when selecting a registered client without an online portal account (`has_portal_account: false`): *"Client has no online portal account — walk-in booking can be confirmed normally, but loyalty points cannot be earned or redeemed for this visit."*
+  - Added subtle `No Portal Account` badge in the client search typeahead suggestion list to give immediate visual indication without disrupting typing.
+  - Updated fallback client query (`!propClients`) to fetch `client_portal_accounts` alongside `clients` via `Promise.all` so `has_portal_account` evaluates accurately when `propClients` is omitted.
+  - Retained full form operability: "Confirm" button remains enabled and clickable.
+- **Graceful Server Action Handling (`app/(staff)/bookings/actions.ts`)**:
+  - In `quickWalkin`: checks `client_portal_accounts` for `input.clientId`.
+  - When no portal account exists, sets `pointsAwarded: null` and returns `pointsReason: "no_portal_account"`, omitting points from `quick_walkin` RPC (`p_points_earned: null`).
+  - Completely prevents trigger `trg_require_portal_account_for_earn_redeem` violation (`"Client ... has no client_portal_accounts row — cannot EARN or REDEEM points"`), allowing the walk-in booking, sale, and locker occupancy to be created cleanly with the selected `client_id`.
+  - In `QuickWalkinModal`: when `pointsReason === "no_portal_account"`, bypasses the unconfigured formula warning dialog, immediately displaying the context-rich success toast and closing the modal.
+- `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - The New Booking conflict-greying query re-fetches on every date change

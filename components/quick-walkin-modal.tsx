@@ -167,23 +167,26 @@ export function QuickWalkinModal({
   useEffect(() => {
     const supabase = createClient();
     if (!propClients) {
-      supabase
-        .from("clients")
-        .select("id, codename, username, member_code")
-        .order("codename")
-        .then(({ data }) => {
-          if (data) {
-            setClients(
-              data.map((c) => ({
-                id: c.id,
-                codename: c.codename,
-                username: c.username,
-                member_code: c.member_code ?? undefined,
-                has_portal_account: false,
-              }))
-            );
-          }
-        });
+      Promise.all([
+        supabase
+          .from("clients")
+          .select("id, codename, username, member_code")
+          .order("codename"),
+        supabase.from("client_portal_accounts").select("client_id"),
+      ]).then(([{ data: clientsData }, { data: portalData }]) => {
+        if (clientsData) {
+          const portalSet = new Set((portalData ?? []).map((p) => p.client_id));
+          setClients(
+            clientsData.map((c) => ({
+              id: c.id,
+              codename: c.codename,
+              username: c.username,
+              member_code: c.member_code ?? undefined,
+              has_portal_account: portalSet.has(c.id),
+            }))
+          );
+        }
+      });
     }
     if (!propServices) {
       supabase
@@ -890,7 +893,7 @@ export function QuickWalkinModal({
         description: toastSubtitle,
       };
 
-      if (clientId && result.pointsAwarded === null) {
+      if (clientId && result.pointsReason === "unconfigured_formula") {
         setPendingSuccessToast(successToastData);
         setPointsWarning(
           "Walk-in logged, pero WALANG POINTS na-award — hindi pa naka-configure ang loyalty formula sa Settings."
@@ -942,21 +945,34 @@ export function QuickWalkinModal({
               Client <span className="opacity-70">(search if they already have an account)</span>
             </label>
             {clientLocked ? (
-              <div className="mt-1 flex items-center justify-between gap-2 rounded-md border border-gold/50 bg-gold/5 px-3 py-2">
-                <span className="text-sm font-medium text-foreground">
-                  {selectedClient?.codename} <span className="text-muted">@{selectedClient?.username}</span>
-                  <span className="ml-2 text-[10px] uppercase tracking-wide text-gold">Scanned</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setClientLocked(false);
-                    setClientId(null);
-                  }}
-                  className="shrink-0 text-xs text-muted underline hover:text-foreground"
-                >
-                  Change client
-                </button>
+              <div className="space-y-2">
+                <div className="mt-1 flex items-center justify-between gap-2 rounded-md border border-gold/50 bg-gold/5 px-3 py-2">
+                  <span className="text-sm font-medium text-foreground">
+                    {selectedClient?.codename} <span className="text-muted">@{selectedClient?.username}</span>
+                    <span className="ml-2 text-[10px] uppercase tracking-wide text-gold">Scanned</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setClientLocked(false);
+                      setClientId(null);
+                    }}
+                    className="shrink-0 text-xs text-muted underline hover:text-foreground"
+                  >
+                    Change client
+                  </button>
+                </div>
+                {selectedClient && !selectedClient.has_portal_account && (
+                  <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
+                    <span className="shrink-0 text-sm leading-none text-amber-400">ℹ</span>
+                    <div className="space-y-0.5">
+                      <p className="font-medium text-amber-300">No Portal Account</p>
+                      <p className="text-amber-200/90 leading-relaxed">
+                        Client has no online portal account — walk-in booking can be confirmed normally, but loyalty points cannot be earned or redeemed for this visit.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <>
@@ -964,7 +980,7 @@ export function QuickWalkinModal({
                   id="wk-client-search"
                   type="text"
                   placeholder="Search by name or username…"
-                  value={clientId ? `${selectedClient?.codename}` : clientQuery}
+                  value={clientId ? (selectedClient?.codename ?? "") : clientQuery}
                   onChange={(e) => {
                     setClientId(null);
                     setClientQuery(e.target.value);
@@ -986,9 +1002,16 @@ export function QuickWalkinModal({
                               setGuestName("");
                               setClientQuery("");
                             }}
-                            className="block min-h-[44px] sm:min-h-0 w-full px-3 py-2 text-left text-sm text-foreground hover:bg-gold/10"
+                            className="flex items-center justify-between min-h-[44px] sm:min-h-0 w-full px-3 py-2 text-left text-sm text-foreground hover:bg-gold/10"
                           >
-                            {c.codename} <span className="text-muted">@{c.username}</span>
+                            <span>
+                              {c.codename} <span className="text-muted">@{c.username}</span>
+                            </span>
+                            {!c.has_portal_account && (
+                              <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 border border-amber-500/30">
+                                No Portal Account
+                              </span>
+                            )}
                           </button>
                         ))}
                         {filteredActiveWalkins.map((w) => (
@@ -1013,13 +1036,29 @@ export function QuickWalkinModal({
                   </div>
                 )}
                 {clientId && (
-                  <button
-                    type="button"
-                    onClick={() => setClientId(null)}
-                    className="mt-1 text-xs text-muted underline hover:text-foreground"
-                  >
-                    Clear
-                  </button>
+                  <div className="mt-1 space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClientId(null);
+                        setClientQuery("");
+                      }}
+                      className="text-xs text-muted underline hover:text-foreground"
+                    >
+                      Clear
+                    </button>
+                    {selectedClient && !selectedClient.has_portal_account && (
+                      <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
+                        <span className="shrink-0 text-sm leading-none text-amber-400">ℹ</span>
+                        <div className="space-y-0.5">
+                          <p className="font-medium text-amber-300">No Portal Account</p>
+                          <p className="text-amber-200/90 leading-relaxed">
+                            Client has no online portal account — walk-in booking can be confirmed normally, but loyalty points cannot be earned or redeemed for this visit.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </>
             )}

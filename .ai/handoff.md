@@ -4,10 +4,30 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#3f7a1b9e` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#7d2e4f1a` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Fix Client Selection and Portal Account Warning Handling in Quick Walkin Modal — complete**
+  (`ohm#7d2e4f1a`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Root Cause & Database Trigger Resolution**:
+    - Trigger `trg_require_portal_account_for_earn_redeem` on `point_transactions` raises an exception when inserting `EARN` entries for clients who have no matching row in `client_portal_accounts`.
+    - `quickWalkin` previously calculated `pointsAwarded` and passed `p_points_earned: pointsAwarded` unconditionally for any `input.clientId`, causing `quick_walkin` RPC to fail and rollback the entire visit check-in.
+  - **Backend Server Action Handling (`app/(staff)/bookings/actions.ts`)**:
+    - Extended `QuickWalkinResult` with optional `pointsReason?: "unconfigured_formula" | "no_portal_account" | null`.
+    - Added lookup on `client_portal_accounts` for `input.clientId`. If found, calculates points via `resolveEarnedPoints(...)`; if missing, sets `pointsAwarded = null` and `pointsReason = "no_portal_account"`.
+    - Passing `p_points_earned: null` to `quick_walkin` RPC completely prevents the trigger violation, allowing walk-in bookings for registered clients without portal accounts to succeed cleanly while correctly recording their `client_id`, sale, locker occupancy, and audit log.
+  - **Frontend UI & Non-blocking Advisory (`components/quick-walkin-modal.tsx`)**:
+    - Added subtle `No Portal Account` badge in the client search typeahead suggestion list to give immediate visual indication without interrupting selection.
+    - Added non-blocking amber advisory notice under client selection when `selectedClient && !selectedClient.has_portal_account`:
+      *"Client has no online portal account — walk-in booking can be confirmed normally, but loyalty points cannot be earned or redeemed for this visit."*
+    - The "Confirm" button and form fields remain completely operable.
+    - Updated fallback client fetch (`!propClients`) to query `client_portal_accounts` alongside `clients` via `Promise.all` so `has_portal_account` is accurately set regardless of parent prop provisioning.
+    - In `handleSubmit`, checked `result.pointsReason`: when points are skipped due to `"no_portal_account"`, bypasses the unconfigured formula warning dialog, immediately displaying the context-rich success toast (`"Walk-in logged successfully!"`) and closing the modal via `onCreated()`.
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors, 26 routes generated in 1276ms).
+  - **Next steps / References**: See [[bookings_state]] and `.ai/briefing.md`.
 
 - **Make Date Picker Calendar Indicator Visible and White on Dark Backgrounds — complete**
   (`ohm#3f7a1b9e`, 2026-09-21).

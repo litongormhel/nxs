@@ -207,7 +207,12 @@ export type QuickWalkinInput = {
 };
 
 export type QuickWalkinResult =
-  | { ok: true; bookingId: string; pointsAwarded: number | null }
+  | {
+      ok: true;
+      bookingId: string;
+      pointsAwarded: number | null;
+      pointsReason?: "unconfigured_formula" | "no_portal_account" | null;
+    }
   | { ok: false; error: string; field?: "room" | "therapist" | "locker" };
 
 const UNIQUE_VIOLATION = "23505";
@@ -253,22 +258,41 @@ export async function quickWalkin(
   }
 
   let pointsAwarded: number | null = null;
+  let pointsReason: "unconfigured_formula" | "no_portal_account" | null = null;
+
   if (input.clientId) {
-    const { data: service, error: svcErr } = await supabase
-      .from("services")
-      .select("name, price, points_earned")
-      .eq("id", input.serviceId)
-      .single();
-    if (svcErr || !service) {
-      return { ok: false, error: svcErr?.message ?? "Service not found." };
+    // Only attempt to award points if the client has a registered client_portal_accounts row.
+    // The DB trigger trg_require_portal_account_for_earn_redeem strictly blocks point_transactions
+    // insertions for clients without portal accounts. Skipping points allows walk-in creation to succeed cleanly.
+    const { data: portalAccount } = await supabase
+      .from("client_portal_accounts")
+      .select("client_id")
+      .eq("client_id", input.clientId)
+      .maybeSingle();
+
+    if (portalAccount) {
+      const { data: service, error: svcErr } = await supabase
+        .from("services")
+        .select("name, price, points_earned")
+        .eq("id", input.serviceId)
+        .single();
+      if (svcErr || !service) {
+        return { ok: false, error: svcErr?.message ?? "Service not found." };
+      }
+      pointsAwarded = await resolveEarnedPoints(
+        supabase,
+        service.name,
+        input.servicePaidAmount,
+        service.price,
+        service.points_earned
+      );
+      if (pointsAwarded === null) {
+        pointsReason = "unconfigured_formula";
+      }
+    } else {
+      pointsAwarded = null;
+      pointsReason = "no_portal_account";
     }
-    pointsAwarded = await resolveEarnedPoints(
-      supabase,
-      service.name,
-      input.servicePaidAmount,
-      service.price,
-      service.points_earned
-    );
   }
 
   const isSplit = input.isSplitPayment || input.paymentMethod === "Split (Cash + GCash)";
@@ -363,7 +387,7 @@ export async function quickWalkin(
   revalidatePath("/dashboard");
   revalidatePath("/sales");
 
-  return { ok: true, bookingId, pointsAwarded };
+  return { ok: true, bookingId, pointsAwarded, pointsReason };
 }
 
 export async function updateBookingStatus(
