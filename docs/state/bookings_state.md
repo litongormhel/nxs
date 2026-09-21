@@ -729,6 +729,23 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Ensures `<ReassignmentPanel />` and `<BookingBrowser />` receive full booking lists without crashing or dropping rows.
 - `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
 
+**Correction, `ohm#9a4c2e1f` (2026-09-21)** — Fix Date Navigator Chevron Jumping and Align Status Tabs Beside Date Picker.
+
+- **Date Chevron Fix (`components/booking-browser.tsx`)**:
+  - Root cause: both `<` and `>` chevron `onClick` handlers used `new Date(\`${date}T00:00:00\`)` (correct, local midnight) for construction but then called `.toISOString().slice(0, 10)` for the output string, converting back to UTC. In UTC+8, that UTC conversion can yield a date string one calendar day behind the intended local date (e.g. 21st → 19th instead of 20th), and makes the right chevron appear unresponsive on the same day depending on click timing.
+  - Fix: replaced `.toISOString()` output with strict local date arithmetic — `const [y, m, d] = date.split('-').map(Number); const dt = new Date(y, m - 1, d); dt.setDate(dt.getDate() ± 1);` — and formats the result using local `getFullYear()`/`getMonth()`/`getDate()` getters (`\`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}\``). No UTC conversion at any stage.
+  - Left chevron now decrements by exactly 1 calendar day per click (21→20→19).
+  - Right chevron now increments by exactly 1 calendar day per click (19→20→21).
+- **Single-Row Header Layout (`components/booking-browser.tsx`)**:
+  - Removed standalone `<div className="flex gap-2 border-b border-border">` tab row that previously sat below the date navigator, consuming a full row of vertical viewport space.
+  - Merged date stepper, status tabs, and action buttons into a single `flex flex-wrap items-center gap-x-3 gap-y-2` row.
+  - A `hidden sm:block h-6 w-px bg-border` vertical divider (`aria-hidden`) separates the date stepper from the tabs on ≥sm viewports.
+  - `UPCOMING (N) | CHECK-IN (N) | CHECK-OUT (N)` tabs sit inline to the right of the divider with identical `border-b-2 -mb-px` active gold underline indicator as before. Tab counts and `setTab()` logic are untouched.
+  - `Scan Member QR`, `Quick Walk-in`, and `New Booking` action buttons use `sm:ml-auto` to push to the far right of the row.
+  - On narrow viewports the entire row wraps cleanly via `flex-wrap` with `gap-y-2`.
+- **No changes to `app/(staff)/bookings/page.tsx`** — all fixes are client component only.
+- `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - The New Booking conflict-greying query re-fetches on every date change

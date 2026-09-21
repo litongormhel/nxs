@@ -531,14 +531,19 @@ export function BookingBrowser({
 
   return (
     <div className="mt-6 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Single-row header: date stepper | divider | status tabs | action buttons */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {/* Date Stepper */}
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => {
-              const d = new Date(`${date}T00:00:00`);
-              d.setDate(d.getDate() - 1);
-              setDate(d.toISOString().slice(0, 10));
+              const [y, m, d] = date.split("-").map(Number);
+              const dt = new Date(y, m - 1, d);
+              dt.setDate(dt.getDate() - 1);
+              setDate(
+                `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`
+              );
             }}
             className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface-2 text-sm text-muted hover:border-gold hover:text-foreground transition-all"
             title="Previous day"
@@ -555,9 +560,12 @@ export function BookingBrowser({
           <button
             type="button"
             onClick={() => {
-              const d = new Date(`${date}T00:00:00`);
-              d.setDate(d.getDate() + 1);
-              setDate(d.toISOString().slice(0, 10));
+              const [y, m, d] = date.split("-").map(Number);
+              const dt = new Date(y, m - 1, d);
+              dt.setDate(dt.getDate() + 1);
+              setDate(
+                `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`
+              );
             }}
             className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface-2 text-sm text-muted hover:border-gold hover:text-foreground transition-all"
             title="Next day"
@@ -565,7 +573,35 @@ export function BookingBrowser({
             ›
           </button>
         </div>
-        <div className="flex gap-3">
+
+        {/* Divider */}
+        <div className="hidden sm:block h-6 w-px bg-border" aria-hidden />
+
+        {/* Status Tabs — inline beside date picker */}
+        <div className="flex items-end gap-0.5 border-b border-border self-end">
+          {TABS.map((t) => {
+            const count =
+              t.key === "upcoming" ? upcomingRows.length : t.key === "checkin" ? checkinRows.length : checkoutRows.length;
+            const active = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={`px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 -mb-px ${
+                  active
+                    ? "border-gold text-accent-gold"
+                    : "border-transparent text-muted hover:text-foreground"
+                }`}
+              >
+                {t.label} ({count})
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Action Buttons — pushed to the far right */}
+        <div className="flex gap-2 sm:ml-auto flex-wrap">
           <button
             type="button"
             onClick={() => setShowScanQr(true)}
@@ -594,28 +630,6 @@ export function BookingBrowser({
             New Booking
           </button>
         </div>
-      </div>
-
-      <div className="flex gap-2 border-b border-border">
-        {TABS.map((t) => {
-          const count =
-            t.key === "upcoming" ? upcomingRows.length : t.key === "checkin" ? checkinRows.length : checkoutRows.length;
-          const active = tab === t.key;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
-              className={`px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 -mb-px ${
-                active
-                  ? "border-gold text-accent-gold"
-                  : "border-transparent text-muted hover:text-foreground"
-              }`}
-            >
-              {t.label} ({count})
-            </button>
-          );
-        })}
       </div>
 
       {/* Filter Bar Controls */}

@@ -9,7 +9,27 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
-- **Prevent Owner and Current Staff from Archiving Themselves — complete**
+- **Fix Date Navigator Chevron Jumping and Align Status Tabs Beside Date Picker — complete**
+  (`ohm#9a4c2e1f`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Date Chevron Fix (`components/booking-browser.tsx`)**:
+    - Root cause: both `<` and `>` chevron handlers constructed the local date correctly with `new Date(\`${date}T00:00:00\`)` but then called `.toISOString().slice(0, 10)` for output, which converts back to UTC and shifts one calendar day behind in UTC+8 timezone.
+    - Fix: replaced `.toISOString()` output with strict local date arithmetic: `const [y, m, d] = date.split('-').map(Number); const dt = new Date(y, m - 1, d); dt.setDate(dt.getDate() ± 1); setDate(\`${dt.getFullYear()}-${...}-${...}\`)`. Uses local `getFullYear()`/`getMonth()`/`getDate()` getters — no UTC conversion.
+    - Left chevron: now decrements by exactly 1 calendar day every click (21→20→19).
+    - Right chevron: now increments by exactly 1 calendar day every click (19→20→21).
+  - **Single-Row Header Layout (`components/booking-browser.tsx`)**:
+    - Removed the standalone `<div className="flex gap-2 border-b border-border">` tab row below the date navigator.
+    - Merged date stepper, status tabs, and action buttons into a single `flex flex-wrap items-center gap-x-3 gap-y-2` row.
+    - Date stepper `[ < ] [ DATE PICKER ] [ > ]` remains leftmost.
+    - A `hidden sm:block h-6 w-px bg-border` vertical divider separates the stepper from the tabs.
+    - `UPCOMING (N) | CHECK-IN (N) | CHECK-OUT (N)` tabs sit inline to the right with the same `border-b-2 -mb-px` active indicator style as before.
+    - Action buttons (`Scan Member QR`, `Quick Walk-in`, `New Booking`) use `sm:ml-auto` to push to the far right.
+    - Row wraps cleanly on narrow viewports via `flex-wrap`.
+    - Tab counts, active indicator, and filtering behavior are fully preserved — no logic changes.
+  - **No changes to `app/(staff)/bookings/page.tsx`**.
+  - **Verification**:
+    - `npm run build` clean (0 errors, 26 routes generated).
+
   (`ohm#8e1a4f2c`, 2026-09-21).
   - Implementation plan presented and approved before code execution.
   - **Server Action Validation (`app/(staff)/staff/actions.ts`)**:
