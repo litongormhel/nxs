@@ -4,10 +4,30 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#7d2a9b4c` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#5e9a2b7c` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Add sms_confirmation_template Column to app_settings and Fix Variable Typo — complete**
+  (`ohm#5e9a2b7c`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Database Migration & Schema Reload (`supabase/migrations/20260921150000_add_sms_confirmation_template.sql`)**:
+    - Adds nullable `sms_confirmation_template text` column to `public.app_settings` (`if not exists`).
+    - Ensures `app_settings_update` RLS policy is configured for `is_supervisor_or_above()`.
+    - Dispatches `NOTIFY pgrst, 'reload schema';` to ensure PostgREST schema cache is reloaded and recognizes `sms_confirmation_template`.
+  - **Server Actions (`app/(staff)/settings/actions.ts`)**:
+    - Updated `updateSmsTemplate` (and exported alias `saveSmsTemplate`) and `resetSmsTemplate` to initialize Supabase client via `createServiceClient()` with fallback to authenticated `createClient()`.
+    - Added service client retry fallback if client update encounters RLS/permission errors.
+    - Added graceful interception for column absence / schema cache errors (`42703`, `PGRST204`, or schema cache errors), warning in server logs and returning actionable instructions rather than raw error objects or unhandled exceptions.
+  - **Settings UI (`components/settings-browser.tsx`)**:
+    - Added `normalizeSmsVariables` helper replacing any `{room_numner}` typos with `{room_number}`.
+    - Sanitized template state initialization from `initialSmsTemplate` and default template copy.
+    - Sanitized draft template text prior to dispatching `updateSmsTemplate` in `handleSaveSmsTemplate`.
+    - Normalized variable insertion tokens in `handleInsertVariable` so that clicking `{room_number}` pill cleanly inserts `{room_number}`.
+    - Updated `handleResetSmsTemplate` to restore clean `{room_number}` formatting.
+  - **Tests & Verification**:
+    - `npm run build` passed clean (0 compilation errors, 26 routes generated).
 
 - **Fix Empty Bookings Table After Adding Notes Column — complete**
   (`ohm#7d2a9b4c`, 2026-09-21).

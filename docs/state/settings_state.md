@@ -67,14 +67,17 @@ just local React state.
   user view/act as a different role) was removed once RLS made it
   redundant — it granted UI affordances only, never real DB access, once
   6C-2 landed.
-- **SMS Confirmation Template** (`ohm#4f8e1b2d`, 2026-09-21): configurable SMS
+- **SMS Confirmation Template** (`ohm#4f8e1b2d`, updated `ohm#5e9a2b7c`, 2026-09-21): configurable SMS
   confirmation message template stored in `app_settings.sms_confirmation_template`
-  (defaults to `DEFAULT_SMS_TEMPLATE` from `lib/bookings/sms.ts` if null).
-  Supports clickable variable chips (`{booking_date}`, `{client_name}`,
-  `{slot_time}`, `{therapist_name}`, `{service_name}`, `{amount}`) inserting at
-  cursor position, "Save Template" (`updateSmsTemplate`) and "Reset to Default"
-  (`resetSmsTemplate`). Editable by Supervisor and Owner roles (`canEditCatalog`),
-  read-only for Front Desk. Writes audit log entries to `action_logs`.
+  (migration `supabase/migrations/20260921150000_add_sms_confirmation_template.sql`,
+  reloads PostgREST schema cache). Defaults to `DEFAULT_SMS_TEMPLATE` from `lib/bookings/sms.ts` if null.
+  Supports clickable variable chips (`{booking_date}`, `{client_name}`, `{slot_time}`,
+  `{therapist_name}`, `{service_name}`, `{amount}`, `{room_number}`) inserting at
+  cursor position (normalized to ensure any `{room_numner}` typos are corrected to `{room_number}`).
+  "Save Template" (`updateSmsTemplate`, aliased as `saveSmsTemplate`) and "Reset to Default"
+  (`resetSmsTemplate`) use `createServiceClient()` with fallback, catch missing column errors
+  gracefully, and write audit log entries to `action_logs`. Editable by Supervisor and Owner
+  roles (`canEditCatalog`), read-only for Front Desk.
 - **Services & Pricing**: editable points/price per service (locked for
   Front Desk) → `updateServicePrice`/`updateServicePoints`. `+ Add Service`
   → `addService`. Delete → `deleteService` (**soft delete**, sets

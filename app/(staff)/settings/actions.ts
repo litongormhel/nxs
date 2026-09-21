@@ -295,108 +295,143 @@ export async function updateSmsTemplate(
   template: string,
   staffId: string
 ): Promise<ActionResult> {
-  let supabase: any;
-  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    try {
-      supabase = createServiceClient();
-    } catch {
-      supabase = await createClient();
-    }
-  } else {
-    supabase = await createClient();
-  }
-
-  const { error } = await supabase
-    .from("app_settings")
-    .update({ sms_confirmation_template: template })
-    .eq("id", true);
-
-  if (error) {
-    // If standard client failed due to RLS, attempt fallback to service client if available
+  try {
+    let supabase: any;
     if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
       try {
-        const serviceClient = createServiceClient();
-        const { error: serviceError } = await serviceClient
-          .from("app_settings")
-          .update({ sms_confirmation_template: template })
-          .eq("id", true);
-        if (!serviceError) {
-          await logAction(
-            serviceClient,
-            staffId,
-            "settings_update_sms_template",
-            "updated sms confirmation template"
-          );
-          revalidatePath("/settings");
-          return { ok: true };
-        }
+        supabase = createServiceClient();
       } catch {
-        // Fall back to returning the formatted original error
+        supabase = await createClient();
+      }
+    } else {
+      supabase = await createClient();
+    }
+
+    let { error } = await supabase
+      .from("app_settings")
+      .update({ sms_confirmation_template: template })
+      .eq("id", true);
+
+    if (error) {
+      // If standard client failed due to RLS, attempt fallback to service client if available
+      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        try {
+          const serviceClient = createServiceClient();
+          const { error: serviceError } = await serviceClient
+            .from("app_settings")
+            .update({ sms_confirmation_template: template })
+            .eq("id", true);
+          if (!serviceError) {
+            error = null;
+            supabase = serviceClient;
+          } else {
+            error = serviceError;
+          }
+        } catch {
+          // Fall back to returning the formatted original error
+        }
       }
     }
-    return fail(error);
-  }
 
-  await logAction(
-    supabase,
-    staffId,
-    "settings_update_sms_template",
-    "updated sms confirmation template"
-  );
-  revalidatePath("/settings");
-  return { ok: true };
+    if (error) {
+      // Gracefully handle column absence / schema cache missing column error
+      if (
+        error.code === "42703" ||
+        error.code === "PGRST204" ||
+        error.message?.includes("sms_confirmation_template") ||
+        error.message?.includes("schema cache")
+      ) {
+        console.warn(
+          `[updateSmsTemplate] 'sms_confirmation_template' missing in schema cache: ${error.message}`
+        );
+        return fail(
+          `Could not find the 'sms_confirmation_template' column of 'app_settings' in the schema cache. Please ensure migration 20260921150000_add_sms_confirmation_template.sql is applied and schema cache is reloaded.`
+        );
+      }
+      return fail(error);
+    }
+
+    await logAction(
+      supabase,
+      staffId,
+      "settings_update_sms_template",
+      "updated sms confirmation template"
+    );
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (err: unknown) {
+    return fail(err);
+  }
 }
 
+export const saveSmsTemplate = updateSmsTemplate;
+
 export async function resetSmsTemplate(staffId: string): Promise<ActionResult> {
-  let supabase: any;
-  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    try {
-      supabase = createServiceClient();
-    } catch {
-      supabase = await createClient();
-    }
-  } else {
-    supabase = await createClient();
-  }
-
-  const { error } = await supabase
-    .from("app_settings")
-    .update({ sms_confirmation_template: null })
-    .eq("id", true);
-
-  if (error) {
+  try {
+    let supabase: any;
     if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
       try {
-        const serviceClient = createServiceClient();
-        const { error: serviceError } = await serviceClient
-          .from("app_settings")
-          .update({ sms_confirmation_template: null })
-          .eq("id", true);
-        if (!serviceError) {
-          await logAction(
-            serviceClient,
-            staffId,
-            "settings_reset_sms_template",
-            "reset sms confirmation template to default"
-          );
-          revalidatePath("/settings");
-          return { ok: true };
-        }
+        supabase = createServiceClient();
       } catch {
-        // Fall back to returning the formatted original error
+        supabase = await createClient();
+      }
+    } else {
+      supabase = await createClient();
+    }
+
+    let { error } = await supabase
+      .from("app_settings")
+      .update({ sms_confirmation_template: null })
+      .eq("id", true);
+
+    if (error) {
+      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        try {
+          const serviceClient = createServiceClient();
+          const { error: serviceError } = await serviceClient
+            .from("app_settings")
+            .update({ sms_confirmation_template: null })
+            .eq("id", true);
+          if (!serviceError) {
+            error = null;
+            supabase = serviceClient;
+          } else {
+            error = serviceError;
+          }
+        } catch {
+          // Fall back to returning the formatted original error
+        }
       }
     }
-    return fail(error);
-  }
 
-  await logAction(
-    supabase,
-    staffId,
-    "settings_reset_sms_template",
-    "reset sms confirmation template to default"
-  );
-  revalidatePath("/settings");
-  return { ok: true };
+    if (error) {
+      if (
+        error.code === "42703" ||
+        error.code === "PGRST204" ||
+        error.message?.includes("sms_confirmation_template") ||
+        error.message?.includes("schema cache")
+      ) {
+        console.warn(
+          `[resetSmsTemplate] 'sms_confirmation_template' missing in schema cache: ${error.message}`
+        );
+        return fail(
+          `Could not find the 'sms_confirmation_template' column of 'app_settings' in the schema cache. Please ensure migration 20260921150000_add_sms_confirmation_template.sql is applied and schema cache is reloaded.`
+        );
+      }
+      return fail(error);
+    }
+
+    await logAction(
+      supabase,
+      staffId,
+      "settings_reset_sms_template",
+      "reset sms confirmation template to default"
+    );
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (err: unknown) {
+    return fail(err);
+  }
 }
 
 // ---------- Void Authorization Code ----------
