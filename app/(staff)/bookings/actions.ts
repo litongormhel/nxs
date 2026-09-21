@@ -594,7 +594,7 @@ export async function quickWalkin(
     return { ok: true, bookingId, pointsAwarded, pointsReason };
   }
 
-  const { data, error } = await supabase.rpc("quick_walkin", {
+  const rpcPayload: Record<string, any> = {
     p_client_id: input.clientId,
     p_guest_label: input.guestLabel,
     p_service_id: input.serviceId,
@@ -613,7 +613,28 @@ export async function quickWalkin(
     p_staff_id: input.staffId,
     p_points_earned: input.isRedemption ? null : pointsAwarded,
     p_notes: input.notes?.trim() || null,
-  } as any);
+  };
+
+  let { data, error } = await supabase.rpc("quick_walkin", rpcPayload as any);
+
+  // Resilient fallback if the live database function signature does not yet include p_notes
+  if (
+    error &&
+    (error.code === "PGRST202" ||
+      error.message?.includes("p_notes") ||
+      (error.message?.includes("Could not find the function") &&
+        error.message?.includes("quick_walkin")) ||
+      error.message?.includes("schema cache"))
+  ) {
+    console.warn(
+      "[quickWalkin] quick_walkin RPC schema cache / parameter mismatch on p_notes. Falling back to signature without p_notes:",
+      error.message
+    );
+    const { p_notes: _ignored, ...fallbackPayload } = rpcPayload;
+    const fallbackRes = await supabase.rpc("quick_walkin", fallbackPayload as any);
+    data = fallbackRes.data;
+    error = fallbackRes.error;
+  }
 
   if (error) {
     const unavailable = therapistUnavailableError(error.message);
@@ -656,9 +677,16 @@ export async function quickWalkin(
   }
 
   if (input.notes?.trim()) {
-    await (supabase.from("bookings") as any)
-      .update({ notes: input.notes.trim() })
-      .eq("id", bookingId);
+    try {
+      const { error: notesErr } = await (supabase.from("bookings") as any)
+        .update({ notes: input.notes.trim() })
+        .eq("id", bookingId);
+      if (notesErr) {
+        console.warn("[quickWalkin] Non-blocking note update warning:", notesErr.message);
+      }
+    } catch (notesCatchErr) {
+      console.warn("[quickWalkin] Safe notes update non-blocking exception:", notesCatchErr);
+    }
   }
 
   if (input.clientId && input.isRedemption) {

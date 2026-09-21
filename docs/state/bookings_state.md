@@ -187,8 +187,12 @@
   `23P01` (exclusion violation) into a specific "that room/therapist is
   already booked" message the same way; `quickWalkin` additionally parses
   `23505` (unique violation) into a locker- or room-occupancy conflict
-  message. Any other error passes through the raw Postgres message. Both
-  revalidate `/bookings` and `/dashboard` on success.
+  message. **(`ohm#1c4e9a7b`, 2026-09-21) Resilient Fallback for `p_notes` signature**:
+  `quickWalkin` wraps `supabase.rpc('quick_walkin', ...)` in an adaptive retry block
+  intercepting `PGRST202` / schema cache parameter mismatch on `p_notes`. If the live DB
+  function signature lacks `p_notes`, it retries calling `quick_walkin` without `p_notes`,
+  and performs a separate defensive `.update({ notes })` post-creation wrapped in safe try/catch.
+  Both revalidate `/bookings` and `/dashboard` on success.
 
 **Correction, `ohm#7k2m9xq4` (2026-08-29)** — adds a Change Therapist
 action for reassigning an existing booking's therapist without touching

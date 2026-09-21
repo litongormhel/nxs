@@ -4,10 +4,25 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#5e9a2b7c` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#1c4e9a7b` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Add Resilient Fallback for quick_walkin RPC Parameter Signature — complete**
+  (`ohm#1c4e9a7b`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Diagnostic Findings & Context**:
+    - Quick Walk-in was throwing PostgREST schema cache error: `"Could not find the function public.quick_walkin(..., p_notes, ...) in the schema cache"` (code `PGRST202`).
+    - The live database function signature had not yet been updated with `p_notes`, causing quick walk-in attempts to fail at the counter.
+  - **Adaptive RPC Signature Fallback (`app/(staff)/bookings/actions.ts`)**:
+    - In `quickWalkin`, prepared RPC payload and invoked `supabase.rpc("quick_walkin", rpcPayload)`.
+    - If `error` occurs with code `PGRST202` or error message matching `p_notes` / `Could not find the function` / `schema cache`, gracefully intercepts the error, logs a console warning, and executes a fallback RPC call omitting `p_notes`.
+  - **Defensive Post-Creation Notes Update (`app/(staff)/bookings/actions.ts`)**:
+    - Once `bookingId` is returned, if `input.notes` is non-empty, executes `.update({ notes: input.notes.trim() }).eq("id", bookingId)`.
+    - Wrapped in safe `try...catch` and logged non-blocking warnings so missing columns or schema cache delay on `bookings.notes` will not fail or block walk-in check-in.
+  - **Tests & Verification**:
+    - `npm run build` passed clean (0 compilation errors, 26 routes generated).
 
 - **Add sms_confirmation_template Column to app_settings and Fix Variable Typo — complete**
   (`ohm#5e9a2b7c`, 2026-09-21).
