@@ -22,7 +22,7 @@ export type SmsTemplateVariable = {
 };
 
 export const SMS_TEMPLATE_VARIABLES: SmsTemplateVariable[] = [
-  { key: "{booking_date}", label: "{booking_date}", description: "Booking date (e.g. 2026-09-21)" },
+  { key: "{booking_date}", label: "{booking_date}", description: "Booking date (e.g. Sep 21, 2026)" },
   { key: "{client_name}", label: "{client_name}", description: "Client codename or guest name" },
   { key: "{slot_time}", label: "{slot_time}", description: "Scheduled time (e.g. 4:00 PM)" },
   { key: "{therapist_name}", label: "{therapist_name}", description: "Assigned therapist name" },
@@ -39,6 +39,45 @@ export type SmsInterpolationData = {
   amount?: number | string | null;
 };
 
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+];
+
+/**
+ * Formats a booking date string into "MMM D, YYYY" (e.g. "Sep 21, 2026").
+ * Parses YYYY-MM-DD components directly to prevent UTC timezone shifting.
+ * Safely falls back to current date or raw value if missing or non-standard.
+ */
+export function formatSmsDate(dateStr?: string | null): string {
+  if (!dateStr || typeof dateStr !== "string") {
+    const now = new Date();
+    return `${MONTH_NAMES[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+  }
+
+  const trimmed = dateStr.trim();
+  if (/^[A-Za-z]{3}\s+\d{1,2},\s+\d{4}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const match = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (match) {
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const day = parseInt(match[3], 10);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${MONTH_NAMES[month - 1]} ${day}, ${year}`;
+    }
+  }
+
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return `${MONTH_NAMES[parsed.getMonth()]} ${parsed.getDate()}, ${parsed.getFullYear()}`;
+  }
+
+  return dateStr;
+}
+
 /**
  * Interpolates placeholders in an SMS template with real booking values.
  */
@@ -53,8 +92,10 @@ export function interpolateSmsTemplate(
       ? String(data.amount)
       : "";
 
+  const formattedDate = formatSmsDate(data.booking_date);
+
   const replacements: Record<string, string> = {
-    "{booking_date}": data.booking_date || "",
+    "{booking_date}": formattedDate,
     "{client_name}": data.client_name || "",
     "{slot_time}": data.slot_time || "",
     "{therapist_name}": data.therapist_name || "—",

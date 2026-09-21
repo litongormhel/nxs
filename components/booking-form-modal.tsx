@@ -8,7 +8,7 @@ import { slotsOverlap, isSlotPastGracePeriod } from "@/lib/bookings/slots";
 import { spaDayNow } from "@/lib/analytics/spa-day";
 import { SmsPreviewModal } from "@/components/sms-preview-modal";
 import { ClientCombobox } from "@/components/client-combobox";
-import { DEFAULT_SMS_TEMPLATE, interpolateSmsTemplate } from "@/lib/bookings/sms";
+import { DEFAULT_SMS_TEMPLATE, interpolateSmsTemplate, formatSmsDate } from "@/lib/bookings/sms";
 import type { Client, Service, Staff, Therapist } from "@/components/booking-browser";
 import type { Database } from "@/lib/types/database";
 
@@ -550,10 +550,11 @@ export function BookingFormModal({
 
       const servicePrice = selectedService?.price ?? 0;
       const serviceName = selectedService?.name ?? "Service";
+      const formattedBookingDate = formatSmsDate(date);
 
       setPendingSuccessToast(successToastData);
       const interpolated = interpolateSmsTemplate(activeSmsTemplate, {
-        booking_date: date,
+        booking_date: formattedBookingDate,
         client_name: resolvedClientName,
         slot_time: formattedSlot || time,
         therapist_name: resolvedTherapistName ?? "—",
@@ -565,7 +566,7 @@ export function BookingFormModal({
         codename: resolvedClientName,
         price: servicePrice,
         serviceName: serviceName,
-        date,
+        date: formattedBookingDate,
         startTime: formattedSlot || time,
         therapistName: resolvedTherapistName,
         message: interpolated,

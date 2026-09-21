@@ -171,7 +171,7 @@
   textarea pre-filled with the active customized SMS template from Settings
   (or default official Nexus Spa copy: `DEFAULT_SMS_TEMPLATE` from
   `lib/bookings/sms.ts`, `ohm#4f8e1b2d`) interpolated dynamically with
-  `{booking_date}`, `{client_name}`, `{slot_time}`, `{therapist_name}`,
+  `{booking_date}` (formatted as `"MMM D, YYYY"`, e.g. `"Sep 21, 2026"`, via `formatSmsDate` preventing UTC timezone shifting), `{client_name}`, `{slot_time}`, `{therapist_name}`,
   `{service_name}`, and `{amount}`. No SMS gateway is wired into this
   repo — this is a compose/preview + copy-to-clipboard step only, not a
   real send. Staff retain full textarea editability before copying.
@@ -606,6 +606,20 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Portaled `SmsPreviewModal` directly to `document.body` via React's `createPortal` with client mount hydration guard and `z-[60]` layer, ensuring clean unobstructed visibility over parent modals and backdrop layers.
   - Rendered `<SmsPreviewModal />` alongside `BookingFormModal` without early return unmounts.
   - Postponed parent `onCreated()` and `showBookingToast` triggers until the receptionist clicks "Done" in the SMS Preview modal.
+- `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
+
+**Correction, `ohm#9c2e4f7a` (2026-09-21)** — Format Booking Date as MMM D, YYYY in SMS Confirmation Template.
+
+- **Date Formatter Utility (`lib/bookings/sms.ts`)**:
+  - Exported `formatSmsDate(dateStr?: string | null): string`.
+  - Directly extracts `YYYY-MM-DD` component substrings via regex without passing through JS UTC `Date` parsing, preventing timezone shifts (e.g. `"2026-09-21"` never shifts to `"Sep 20, 2026"`).
+  - Formats day with unpadded single/double digits `D` and month abbreviation `MMM` (e.g., `"Sep 21, 2026"`).
+  - Implemented safe fallbacks for missing/empty date strings (defaults to current date in local time) or non-standard formats (falls back to local Date parsing or raw input).
+- **Template Interpolation & Modal Integration (`lib/bookings/sms.ts`, `components/booking-form-modal.tsx`)**:
+  - Updated `interpolateSmsTemplate` in `lib/bookings/sms.ts` to pass `data.booking_date` through `formatSmsDate()`.
+  - Updated `SMS_TEMPLATE_VARIABLES` metadata for `{booking_date}` to reflect `"Booking date (e.g. Sep 21, 2026)"`.
+  - Updated `BookingFormModal` (`components/booking-form-modal.tsx`) in `handleSubmit` to format `date` with `formatSmsDate(date)` before passing to `interpolateSmsTemplate` and initializing `smsBooking.date`.
+  - Verified that the SMS Preview modal displays `Date: Sep 21, 2026` instead of raw ISO `Date: 2026-09-21`.
 - `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
 
 ## Known simplifications (not gaps — deliberate for this phase's scope)

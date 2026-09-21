@@ -4,10 +4,28 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#1f4c7a9b` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#9c2e4f7a` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Format Booking Date as MMM D, YYYY in SMS Confirmation Template — complete**
+  (`ohm#9c2e4f7a`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Date Formatter Utility (`lib/bookings/sms.ts`)**:
+    - Created and exported `formatSmsDate(dateStr?: string | null): string`.
+    - Parses `YYYY-MM-DD` components directly using regex matching on year, month, and day integers.
+    - Bypasses JS `new Date("YYYY-MM-DD")` UTC instantiation, eliminating timezone shifting bugs so that dates like `"2026-09-21"` never shift to `"Sep 20, 2026"` in local/client environments.
+    - Implemented clean fallbacks: if `dateStr` is missing/empty, safely defaults to the current formatted date in local time; if already formatted (e.g. `"Sep 21, 2026"`), returns cleanly; if non-standard, attempts local Date parsing or returns the raw value.
+  - **Template Interpolation & Modal Integration (`lib/bookings/sms.ts`, `components/booking-form-modal.tsx`)**:
+    - Updated `interpolateSmsTemplate` in `lib/bookings/sms.ts` to format `{booking_date}` using `formatSmsDate(data.booking_date)`.
+    - Updated `SMS_TEMPLATE_VARIABLES` metadata for `{booking_date}` to `"Booking date (e.g. Sep 21, 2026)"`.
+    - Updated `BookingFormModal` (`components/booking-form-modal.tsx`) in `handleSubmit` to format `date` with `formatSmsDate(date)` before passing to `interpolateSmsTemplate` and initializing `smsBooking.date`.
+    - Verified that the SMS Preview modal displays `Date: Sep 21, 2026` instead of raw ISO format `Date: 2026-09-21`.
+  - **Tests & Verification**:
+    - `npm run build` verified clean (0 compilation errors, 26 routes generated).
+    - Executed test suite via `npx tsx` verifying ISO string (`"2026-09-21"` -> `"Sep 21, 2026"`), single-digit day (`"2026-01-05"` -> `"Jan 5, 2026"`), null date fallback, and template interpolation.
+  - **Next steps / References**: See [[bookings_state]], `.ai/briefing.md`, and `walkthrough.md`.
 
 - **Fix SMS Confirmation Modal Not Appearing in New Booking Flow — complete**
   (`ohm#1f4c7a9b`, 2026-09-21).
