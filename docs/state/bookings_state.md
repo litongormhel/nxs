@@ -510,6 +510,19 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Added `isPastSlot` and `isBookedSlot` validation guards to `canSubmit` and `handleSubmit`.
   - Quick Walk-in modal date initialized with canonical `spaDayNow()`.
 
+**Correction, `ohm#5c1a8d2e` (2026-09-21)** — Filter Service Dropdown in Quick Walk-in and New Booking Modals by Therapist Services Offered.
+
+- **Bidirectional Service Filtering (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`)**:
+  - Derived and stored `therapistServicesMap: Map<string, Set<string>>` (`therapist_id -> Set<service_id>`) populated from the `therapist_services` query.
+  - Derived `availableServices` options for the Service `<select>`:
+    - If a `therapistId` is selected, filters `services` strictly to those offered by that therapist in `therapistServicesMap.get(therapistId)`.
+    - If no `therapistId` is selected yet (`!therapistId`), displays all active services (retaining the existing behavior where picking a service filters therapists).
+  - Added bidirectional synchronization effect in both modals: if a therapist is selected and the active `serviceId` is not in their offered services (e.g. on therapist change or pre-fill), automatically resets/defaults `serviceId` to the therapist's first qualified service.
+  - Updated therapist dropdown `onChange` in both modals: selecting a therapist automatically switches `serviceId` to their first qualified service if the current service is not offered by them.
+  - Extended `BookingFormModal` with optional `initialTherapistId` prop and name/id resolution matching `QuickWalkinModal`.
+  - Added fallback empty option `— no services available —` when a therapist has no offered services.
+  - Recalculations: `amount`, duration, room availability calculations, and split payment auto-balancing recalculate seamlessly on dynamic service adjustments.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - The New Booking conflict-greying query re-fetches on every date change

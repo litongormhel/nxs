@@ -4,10 +4,27 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#6e3a9c2d` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#5c1a8d2e` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Filter Service Dropdown in Quick Walk-in and Booking Modals by Therapist Services Offered — complete**
+  (`ohm#5c1a8d2e`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Bidirectional Service Filtering (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`)**:
+    - Stored `therapistServicesMap: Map<string, Set<string>>` (`therapist_id -> Set<service_id>`) populated from the `therapist_services` query.
+    - Derived `availableServices`: when `therapistId` is selected, filters `services` strictly to those present in `therapistServicesMap.get(therapistId)`. When no therapist is selected, returns all active services (retaining the ability to select a service first and filter therapists).
+    - Added bidirectional synchronization `useEffect` in both modals: if a therapist is selected and the active `serviceId` is not in their offered services, automatically resets/defaults `serviceId` to the therapist's first qualified service.
+    - Updated `onChange` for the Therapist `<select>` in both modals to immediately adjust `serviceId` to the newly selected therapist's qualified services if the current service is not offered.
+    - Added optional `initialTherapistId` prop support to `BookingFormModal` with defensive name/id matching resolution, aligning parity with `QuickWalkinModal`.
+    - Handled fallback empty option `— no services available —` when a selected therapist offers no services in the catalog.
+  - **Card-to-Modal Integration Parity**:
+    - Verified that pre-filling `initialTherapistId` from therapist cards (e.g. Leo) strictly restricts the Service dropdown to offered services (`Combi Massage`, `Signature Massage`), excluding unoffered services (`Scrub`, `Wet Area`).
+  - **Clean UI & Pricing Recalculations**:
+    - Confirmed `amount`, `servicePaidAmount`, split payment balance calculations, duration, and auto-assigned `roomNumber` recalculate seamlessly on dynamic service adjustments.
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors).
+  - **Next steps / References**: See [[bookings_state]] and `.ai/briefing.md`.
 
 - **Fix Locker Out of Order Persistence and Board State Refresh — complete**
   (`ohm#6e3a9c2d`, 2026-09-19).

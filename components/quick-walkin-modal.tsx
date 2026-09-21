@@ -281,12 +281,6 @@ export function QuickWalkinModal({
     }
   }, [initialTherapistId, therapists, therapistId]);
 
-  // Set default service once services load if none selected
-  useEffect(() => {
-    if (!serviceId && services.length > 0) {
-      setServiceId(services[0].id);
-    }
-  }, [services, serviceId]);
   const [lockerNumber, setLockerNumber] = useState<number | "">("");
   const [promoId, setPromoId] = useState<string>("none");
   const [manualDiscountOn, setManualDiscountOn] = useState(false);
@@ -305,7 +299,23 @@ export function QuickWalkinModal({
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [unavailableTherapists, setUnavailableTherapists] = useState<Map<string, string>>(new Map());
   const [serviceTherapistMap, setServiceTherapistMap] = useState<Map<string, Set<string>>>(new Map());
+  const [therapistServicesMap, setTherapistServicesMap] = useState<Map<string, Set<string>>>(new Map());
   const [servicesLoaded, setServicesLoaded] = useState(false);
+
+  // Set default service once services load if none selected
+  useEffect(() => {
+    if (!serviceId && services.length > 0) {
+      if (therapistId && servicesLoaded) {
+        const offered = therapistServicesMap.get(therapistId);
+        const qualified = services.find((s) => offered?.has(s.id));
+        if (qualified) {
+          setServiceId(qualified.id);
+          return;
+        }
+      }
+      setServiceId(services[0].id);
+    }
+  }, [services, serviceId, therapistId, servicesLoaded, therapistServicesMap]);
   const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
   const [maintenanceLockers, setMaintenanceLockers] = useState<Map<number, string | null>>(new Map());
   const [clientBookings, setClientBookings] = useState<
@@ -409,13 +419,20 @@ export function QuickWalkinModal({
       setUnavailableTherapists(map);
 
       const stMap = new Map<string, Set<string>>();
+      const tsMap = new Map<string, Set<string>>();
       for (const row of servicesOffered.data ?? []) {
         if (!stMap.has(row.service_id)) {
           stMap.set(row.service_id, new Set());
         }
         stMap.get(row.service_id)!.add(row.therapist_id);
+
+        if (!tsMap.has(row.therapist_id)) {
+          tsMap.set(row.therapist_id, new Set());
+        }
+        tsMap.get(row.therapist_id)!.add(row.service_id);
       }
       setServiceTherapistMap(stMap);
+      setTherapistServicesMap(tsMap);
       setServicesLoaded(true);
     });
   }, [date]);
@@ -494,6 +511,15 @@ export function QuickWalkinModal({
     if (!offeringSet) return [];
     return therapists.filter((t) => offeringSet.has(t.id));
   }, [serviceId, therapists, serviceTherapistMap, servicesLoaded]);
+
+  // Filter services strictly by therapist qualification if a therapist is selected
+  const availableServices = useMemo(() => {
+    if (!therapistId) return services;
+    if (!servicesLoaded) return services;
+    const offered = therapistServicesMap.get(therapistId);
+    if (!offered) return [];
+    return services.filter((s) => offered.has(s.id));
+  }, [therapistId, services, servicesLoaded, therapistServicesMap]);
 
   // Therapists with zero free slots anywhere in the day's slot grid
   const fullyBookedTherapists = useMemo(() => {
@@ -611,27 +637,18 @@ export function QuickWalkinModal({
     setManualDiscountOn(false);
   }
 
-  // Ensure therapist selection matches service qualification; if not, switch service to one the therapist offers
+  // Ensure service selection matches therapist qualification; if not, switch service to therapist's first qualified service
   useEffect(() => {
     if (!servicesLoaded || !therapistId) return;
-    const offeringSet = serviceId ? serviceTherapistMap.get(serviceId) : null;
-    if (!offeringSet || !offeringSet.has(therapistId)) {
-      // Find a massage service that this therapist offers
-      const qualifiedService =
-        services.find((s) => s.name !== "Wet Area" && serviceTherapistMap.get(s.id)?.has(therapistId)) ||
-        services.find((s) => serviceTherapistMap.get(s.id)?.has(therapistId));
-
+    const offered = therapistServicesMap.get(therapistId);
+    if (!offered || offered.size === 0) return;
+    if (!serviceId || !offered.has(serviceId)) {
+      const qualifiedService = services.find((s) => offered.has(s.id));
       if (qualifiedService) {
         setServiceId(qualifiedService.id);
-      } else if (serviceId) {
-        // Therapist truly offers no services in catalog
-        setTherapistId("");
-        setSlotTime("");
-        setUseCustomTime(false);
-        setRoomNumber("");
       }
     }
-  }, [servicesLoaded, serviceId, therapistId, serviceTherapistMap, services]);
+  }, [servicesLoaded, therapistId, serviceId, therapistServicesMap, services]);
 
   const amount = useMemo(() => {
     const base = selectedService?.price ?? 0;
@@ -954,11 +971,15 @@ export function QuickWalkinModal({
                 onChange={(e) => onServiceChange(e.target.value)}
                 className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
               >
-                {services.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} · {s.duration_minutes}min
-                  </option>
-                ))}
+                {availableServices.length === 0 ? (
+                  <option value="">— no services available —</option>
+                ) : (
+                  availableServices.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} · {s.duration_minutes}min
+                    </option>
+                  ))
+                )}
               </select>
             </div>
             {isMassageService && (
@@ -977,6 +998,14 @@ export function QuickWalkinModal({
                     if (!nextId) {
                       setSlotTime("");
                       setUseCustomTime(false);
+                    } else {
+                      const offered = therapistServicesMap.get(nextId);
+                      if (offered && !offered.has(serviceId)) {
+                        const firstQualified = services.find((s) => offered.has(s.id));
+                        if (firstQualified) {
+                          setServiceId(firstQualified.id);
+                        }
+                      }
                     }
                   }}
                   className={`mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ${

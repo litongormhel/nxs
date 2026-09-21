@@ -54,6 +54,7 @@ export function BookingFormModal({
   staff,
   timeSlots,
   defaultDate,
+  initialTherapistId,
   onClose,
   onCreated,
 }: {
@@ -64,13 +65,28 @@ export function BookingFormModal({
   staff: Staff[];
   timeSlots: string[];
   defaultDate: string;
+  initialTherapistId?: string;
   onClose: () => void;
   onCreated: () => void;
 }) {
   const [clientSelectValue, setClientSelectValue] = useState<string>("__walkin__");
   const [walkinName, setWalkinName] = useState("");
   const [serviceId, setServiceId] = useState(services[0]?.id ?? "");
-  const [therapistId, setTherapistId] = useState("");
+  const [therapistId, setTherapistId] = useState(initialTherapistId ?? "");
+
+  // Resolve therapist id if name was passed or therapists loaded after initial mount
+  useEffect(() => {
+    if (!initialTherapistId) return;
+    if (therapists.length > 0) {
+      const match = therapists.find(
+        (t) => t.id === initialTherapistId || t.name.toLowerCase() === initialTherapistId.toLowerCase()
+      );
+      if (match && therapistId !== match.id) {
+        setTherapistId(match.id);
+      }
+    }
+  }, [initialTherapistId, therapists, therapistId]);
+
   const [date, setDate] = useState(defaultDate || spaDayNow());
   const [slotTime, setSlotTime] = useState<string>("");
   const [currentTime, setCurrentTime] = useState(() => new Date());
@@ -90,6 +106,7 @@ export function BookingFormModal({
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [unavailableTherapists, setUnavailableTherapists] = useState<Map<string, string>>(new Map());
   const [serviceTherapistMap, setServiceTherapistMap] = useState<Map<string, Set<string>>>(new Map());
+  const [therapistServicesMap, setTherapistServicesMap] = useState<Map<string, Set<string>>>(new Map());
   const [servicesLoaded, setServicesLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [smsBooking, setSmsBooking] = useState<{
@@ -154,13 +171,20 @@ export function BookingFormModal({
       setUnavailableTherapists(map);
 
       const stMap = new Map<string, Set<string>>();
+      const tsMap = new Map<string, Set<string>>();
       for (const row of servicesOffered.data ?? []) {
         if (!stMap.has(row.service_id)) {
           stMap.set(row.service_id, new Set());
         }
         stMap.get(row.service_id)!.add(row.therapist_id);
+
+        if (!tsMap.has(row.therapist_id)) {
+          tsMap.set(row.therapist_id, new Set());
+        }
+        tsMap.get(row.therapist_id)!.add(row.service_id);
       }
       setServiceTherapistMap(stMap);
+      setTherapistServicesMap(tsMap);
       setServicesLoaded(true);
     });
   }, [date]);
@@ -257,6 +281,15 @@ export function BookingFormModal({
     return therapists.filter((t) => offeringSet.has(t.id));
   }, [serviceId, therapists, serviceTherapistMap, servicesLoaded]);
 
+  // Filter services strictly by therapist qualification if a therapist is selected
+  const availableServices = useMemo(() => {
+    if (!therapistId) return services;
+    if (!servicesLoaded) return services;
+    const offered = therapistServicesMap.get(therapistId);
+    if (!offered) return [];
+    return services.filter((s) => offered.has(s.id));
+  }, [therapistId, services, servicesLoaded, therapistServicesMap]);
+
   // Therapists with zero free slots anywhere in the day's slot grid
   const fullyBookedTherapists = useMemo(() => {
     const fullyBooked = new Set<string>();
@@ -296,16 +329,18 @@ export function BookingFormModal({
     }
   }
 
-  // Ensure therapist selection resets if newly loaded qualifications do not include current therapist
+  // Ensure service selection matches therapist qualification; if not, switch service to therapist's first qualified service
   useEffect(() => {
-    if (!servicesLoaded || !therapistId || !serviceId) return;
-    const offeringSet = serviceTherapistMap.get(serviceId);
-    if (!offeringSet || !offeringSet.has(therapistId)) {
-      setTherapistId("");
-      setSlotTime("");
-      setUseCustomTime(false);
+    if (!servicesLoaded || !therapistId) return;
+    const offered = therapistServicesMap.get(therapistId);
+    if (!offered || offered.size === 0) return;
+    if (!serviceId || !offered.has(serviceId)) {
+      const qualifiedService = services.find((s) => offered.has(s.id));
+      if (qualifiedService) {
+        setServiceId(qualifiedService.id);
+      }
     }
-  }, [servicesLoaded, serviceId, therapistId, serviceTherapistMap]);
+  }, [servicesLoaded, therapistId, serviceId, therapistServicesMap, services]);
 
   function onCustomTimeToggle(checked: boolean) {
     setUseCustomTime(checked);
@@ -504,11 +539,15 @@ export function BookingFormModal({
                 onChange={(e) => onServiceChange(e.target.value)}
                 className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
               >
-                {services.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} · {s.duration_minutes}min
-                  </option>
-                ))}
+                {availableServices.length === 0 ? (
+                  <option value="">— no services available —</option>
+                ) : (
+                  availableServices.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} · {s.duration_minutes}min
+                    </option>
+                  ))
+                )}
               </select>
             </div>
             {isMassageService && (
@@ -526,6 +565,14 @@ export function BookingFormModal({
                     if (!nextId) {
                       setSlotTime("");
                       setUseCustomTime(false);
+                    } else {
+                      const offered = therapistServicesMap.get(nextId);
+                      if (offered && !offered.has(serviceId)) {
+                        const firstQualified = services.find((s) => offered.has(s.id));
+                        if (firstQualified) {
+                          setServiceId(firstQualified.id);
+                        }
+                      }
                     }
                   }}
                   className={`mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none ${
