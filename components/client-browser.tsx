@@ -191,6 +191,7 @@ export function ClientBrowser({
 
   // Modal states for Members
   const [selectedMemberForProfile, setSelectedMemberForProfile] = useState<Client | null>(null);
+  const [copiedToken, setCopiedToken] = useState(false);
   const [selectedMemberForHistory, setSelectedMemberForHistory] = useState<{
     client: Client;
     visits: MemberVisit[];
@@ -1270,26 +1271,46 @@ export function ClientBrowser({
       {selectedMemberForProfile && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setSelectedMemberForProfile(null)}
+          onClick={() => {
+            setSelectedMemberForProfile(null);
+            setCopiedToken(false);
+          }}
         >
           <div
-            className="w-full max-w-sm rounded-xl border border-border bg-surface p-6 space-y-5"
+            className="w-full max-w-sm rounded-xl border border-border bg-surface p-5 space-y-4 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">
+            {/* Header Section */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-0.5 min-w-0">
+                {/* Line 1: Member codename/display name */}
+                <h2 className="text-lg font-bold text-foreground truncate">
                   {selectedMemberForProfile.codename}
                 </h2>
-                <p className="text-xs font-mono text-muted">
-                  @{selectedMemberForProfile.username}
+                {/* Line 2: Username handle and Mobile Number combined */}
+                <p className="text-xs font-mono text-muted flex items-center gap-1.5 flex-wrap">
+                  <span>@{selectedMemberForProfile.username}</span>
+                  {selectedMemberForProfile.phone && (
+                    <>
+                      <span className="text-muted/60">•</span>
+                      <span>{selectedMemberForProfile.phone}</span>
+                    </>
+                  )}
+                </p>
+                {/* Line 3: Member since formatted date */}
+                <p className="text-xs text-muted">
+                  Member since {formatDisplayDate(selectedMemberForProfile.since_date)}
                 </p>
               </div>
+              {/* Close [✕] button */}
               <button
                 type="button"
-                onClick={() => setSelectedMemberForProfile(null)}
-                className="rounded-md p-1 text-muted hover:text-foreground transition-colors cursor-pointer"
+                onClick={() => {
+                  setSelectedMemberForProfile(null);
+                  setCopiedToken(false);
+                }}
+                className="shrink-0 rounded-md p-1 text-muted hover:text-foreground hover:bg-surface-2 transition-colors cursor-pointer"
+                aria-label="Close"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1297,79 +1318,96 @@ export function ClientBrowser({
               </button>
             </div>
 
-            {/* Mobile number */}
-            <div className="rounded-lg border border-border bg-surface-2 px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted mb-1">
-                Mobile Number
-              </p>
-              <p className="text-sm font-mono text-foreground">
-                {selectedMemberForProfile.phone ?? (
-                  <span className="text-muted italic">Not on file</span>
-                )}
-              </p>
+            {/* Two-Column Stats Grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* Left Card: Available Points */}
+              <div className="rounded-lg border border-border bg-surface-2 p-3 flex flex-col justify-between">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                  Available Points
+                </p>
+                <p className="text-base font-bold text-gold mt-1">
+                  {selectedMemberForProfile.points_balance} pts
+                </p>
+              </div>
+
+              {/* Right Card: Current Status */}
+              <div className="rounded-lg border border-border bg-surface-2 p-3 flex flex-col justify-between">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                  Current Status
+                </p>
+                <div className="mt-1 flex items-center">
+                  {lockerMap[selectedMemberForProfile.id] !== undefined ? (
+                    <span className="inline-flex items-center rounded border border-gold/40 bg-gold/10 px-2 py-0.5 text-xs font-semibold text-gold">
+                      Locker {lockerMap[selectedMemberForProfile.id]}
+                    </span>
+                  ) : (
+                    <span className="text-xs font-medium text-muted">
+                      Not Checked In
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {/* Member Since (exact registration date) */}
-            <div className="rounded-lg border border-border bg-surface-2 px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted mb-1">
-                Member Since
-              </p>
-              <p className="text-sm text-foreground">
-                {formatDisplayDate(selectedMemberForProfile.since_date)}
-              </p>
-            </div>
-
-            {/* Points balance */}
-            <div className="rounded-lg border border-border bg-surface-2 px-4 py-3 flex items-center justify-between">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-                Available Points
-              </p>
-              <p className="text-sm font-bold text-gold">
-                {selectedMemberForProfile.points_balance} pts
-              </p>
-            </div>
-
-            {/* Member QR Code */}
-            <div className="rounded-lg border border-border bg-surface-2 p-4 flex flex-col items-center gap-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted self-start">
+            {/* Compact QR Code Container */}
+            <div className="rounded-lg border border-border bg-surface-2 p-3.5 flex flex-col items-center gap-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted self-start">
                 Digital Member QR
               </p>
               {selectedMemberForProfile.qr_token ? (
-                <QRImage value={selectedMemberForProfile.qr_token} size={160} />
+                <>
+                  <div className="p-2 bg-[#141210] rounded-lg border border-border/80 flex items-center justify-center">
+                    <QRImage value={selectedMemberForProfile.qr_token} size={130} />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (selectedMemberForProfile.qr_token) {
+                        try {
+                          await navigator.clipboard.writeText(selectedMemberForProfile.qr_token);
+                          setCopiedToken(true);
+                          setTimeout(() => setCopiedToken(false), 2000);
+                        } catch {
+                          // fallback
+                        }
+                      }
+                    }}
+                    title="Click to copy QR token"
+                    className="flex items-center justify-center gap-1.5 px-2.5 py-1 rounded border border-border/60 hover:border-gold/30 bg-surface/60 hover:bg-surface text-[11px] font-mono text-muted hover:text-foreground transition-all cursor-pointer w-full max-w-[240px]"
+                  >
+                    <span className="truncate">
+                      {selectedMemberForProfile.qr_token.length > 22
+                        ? `${selectedMemberForProfile.qr_token.slice(0, 10)}...${selectedMemberForProfile.qr_token.slice(-8)}`
+                        : selectedMemberForProfile.qr_token}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-gold font-sans font-medium">
+                      {copiedToken ? "✓ Copied" : "Copy"}
+                    </span>
+                  </button>
+                </>
               ) : (
-                <p className="text-xs text-muted italic">No QR token assigned</p>
-              )}
-              {selectedMemberForProfile.qr_token && (
-                <p className="text-[10px] font-mono text-muted text-center break-all">
-                  {selectedMemberForProfile.qr_token}
-                </p>
+                <p className="text-xs text-muted italic py-3">No QR token assigned</p>
               )}
             </div>
 
-            {/* Active Locker status */}
-            {lockerMap[selectedMemberForProfile.id] !== undefined && (
-              <div className="rounded-lg border border-gold/30 bg-gold/5 px-4 py-3 flex items-center justify-between">
-                <p className="text-xs text-muted">Currently checked in</p>
-                <span className="rounded border border-gold/50 bg-gold/10 px-2 py-0.5 text-[11px] font-semibold text-gold">
-                  Locker {lockerMap[selectedMemberForProfile.id]}
-                </span>
-              </div>
-            )}
-
-            {/* Action buttons */}
-            <div className="flex flex-col gap-2 pt-1">
+            {/* Action Group */}
+            <div className="flex flex-col gap-2 pt-0.5">
+              {/* Primary button: + Log Visit for Member */}
               <button
                 type="button"
                 onClick={() => {
                   setLogVisitClient(selectedMemberForProfile);
                   setShowLogVisit(true);
                   setSelectedMemberForProfile(null);
+                  setCopiedToken(false);
                 }}
                 disabled={services.length === 0 || staff.length === 0}
                 className="w-full flex items-center justify-center gap-1.5 rounded-md border border-gold bg-gold/10 px-4 py-2 text-xs font-semibold text-gold hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
               >
                 <span>+</span> Log Visit for Member
               </button>
+
+              {/* Secondary button: Claim Past Walk-in Visit */}
               {allowWalkinClaims ? (
                 <button
                   type="button"
@@ -1393,10 +1431,15 @@ export function ClientBrowser({
                   <span>🏷</span> Claim Past Walk-in Visit (Disabled by Owner)
                 </button>
               )}
+
+              {/* Tertiary button: Close */}
               <button
                 type="button"
-                onClick={() => setSelectedMemberForProfile(null)}
-                className="w-full rounded-md border border-border px-4 py-2 text-sm text-foreground hover:border-gold/30 transition-colors cursor-pointer"
+                onClick={() => {
+                  setSelectedMemberForProfile(null);
+                  setCopiedToken(false);
+                }}
+                className="w-full rounded-md border border-border px-4 py-2 text-xs font-medium text-muted hover:text-foreground hover:border-gold/30 transition-colors cursor-pointer"
               >
                 Close
               </button>

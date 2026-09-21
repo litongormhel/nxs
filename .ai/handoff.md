@@ -4,10 +4,31 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#4b8e2a1d` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#5c8e1a4f` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Redesign Member Profile Drawer with Streamlined Header and 2-Column Stats — complete**
+  (`ohm#5c8e1a4f`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Streamlined Header (`components/client-browser.tsx`)**:
+    - Line 1: Prominently renders member codename (`selectedMemberForProfile.codename`) with close `[✕]` button.
+    - Line 2: Combines username handle and phone on a single row (`@{username} • {phone}`), cleanly omitting the bullet separator if phone is not on file.
+    - Line 3: Places `Member since {formatted_date}` directly below the username row in subtle muted styling (`text-xs text-muted`).
+    - Completely removed the standalone full-width "MOBILE NUMBER" and "MEMBER SINCE" cards.
+  - **Two-Column Stats Grid (`components/client-browser.tsx`)**:
+    - Left Card: "AVAILABLE POINTS" with prominent gold accent value (`{points_balance} pts`).
+    - Right Card: "CURRENT STATUS" showing check-in badge (`Locker {locker}` in gold accent pill if currently checked in, or muted `Not Checked In`).
+  - **Compact QR Code Container (`components/client-browser.tsx`)**:
+    - Reduced QR code size to `130px` centered inside a neat dark container.
+    - Added compact truncated token string (`first10...last8`) with click-to-copy trigger and `✓ Copied` feedback.
+  - **Action Group (`components/client-browser.tsx`)**:
+    - Primary CTA: "+ Log Visit for Member" (accent gold).
+    - Secondary CTA: "Claim Past Walk-in Visit" (honoring disabled toggle and tooltip when `allowWalkinClaims` is `false`).
+    - Tertiary CTA: "Close" button.
+  - **Verification**:
+    - `npm run build` verified clean (0 compilation errors, 26 routes generated).
 
 - **Fix Persistence and State Binding for Walk-in Claims Settings Toggle — complete**
   (`ohm#4b8e2a1d`, 2026-09-21).

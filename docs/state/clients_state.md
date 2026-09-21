@@ -2,6 +2,18 @@
 
 ## Implemented
 
+- **Redesign Member Profile Drawer with Streamlined Header and 2-Column Stats (`ohm#5c8e1a4f`, 2026-09-21)**:
+  - **Header Section (`components/client-browser.tsx`)**: Replaced standalone "MOBILE NUMBER" and "MEMBER SINCE" full-width cards with a cohesive 3-line header:
+    1. Line 1: Member codename prominently displayed alongside close `[✕]` button.
+    2. Line 2: Combined handle and mobile number (`@{username} • {phone}`) with clean omission of bullet if phone is not on file.
+    3. Line 3: Direct `Member since {formatted_date}` in subtle muted text (`text-xs text-muted`).
+  - **2-Column Stats Grid (`components/client-browser.tsx`)**: Consolidated points balance and check-in status:
+    - Left Card: "AVAILABLE POINTS" with prominent gold accent value (`{points_balance} pts`).
+    - Right Card: "CURRENT STATUS" showing check-in badge (`Locker {locker}` in gold accent pill if currently checked in, or muted `Not Checked In`).
+  - **Compact QR Code Container (`components/client-browser.tsx`)**: Reduced QR size (`130px`) with centered padding and truncated token string with click-to-copy button and `✓ Copied` feedback.
+  - **Action Group (`components/client-browser.tsx`)**: Clean vertical stack for "+ Log Visit for Member" (accent gold), "Claim Past Walk-in Visit" (honoring disabled toggle state and tooltip), and "Close".
+  - `npm run build` verified clean (0 errors).
+
 - **Owner-Only Feature Toggle for Past Walk-in Visit Claims (`ohm#3d8a1c9e`, 2026-09-21)**:
   - **Server-Side Validation (`app/(staff)/clients/actions.ts`)**: In `requestWalkinClaim`, checks `app_settings.allow_walkin_claims`. If disabled (`false`), rejects claim creation immediately with `"Past walk-in claims are currently disabled."`. Existing pending claims processing (`approveWalkinClaim`, `approveAllWalkinClaims`, `rejectWalkinClaim`) remains untouched and fully actionable by Supervisors/Owners.
   - **Member Profile Drawer UI (`components/client-browser.tsx`, `app/(staff)/clients/page.tsx`)**: Queries `allow_walkin_claims` and passes `allowWalkinClaims` prop to `<ClientBrowser />`. When disabled (`false`), disables the "Claim Past Walk-in Visit" button in the Member Profile Drawer with clear tooltip `"Walk-in claiming is currently disabled by Owner"`. Guards `handleSubmitClaim` client-side.
