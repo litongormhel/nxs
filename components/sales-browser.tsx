@@ -478,12 +478,24 @@ export function SalesBrowser({
                 ₱{s.amount.toLocaleString()}
               </div>
               <div className="text-muted">
-                {s.payment_method}
+                {s.payment_method === "Points" ? (
+                  <span className="font-medium text-accent-gold">Points</span>
+                ) : (
+                  s.payment_method
+                )}
                 {s.payment_ref && (
                   <span className="ml-1 opacity-60 text-[9.5px]">Ref: {s.payment_ref}</span>
                 )}
               </div>
-              <div className="text-muted">{s.promo_label ?? "—"}</div>
+              <div className="text-muted">
+                {s.payment_method === "Points" ? (
+                  <span className="rounded bg-gold/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-accent-gold">
+                    Redeem
+                  </span>
+                ) : (
+                  s.promo_label ?? "—"
+                )}
+              </div>
               <div className="text-muted">{s.therapist_name ?? "—"}</div>
               <div className="flex flex-wrap items-center gap-1.5">
                 {!s.voided ? (

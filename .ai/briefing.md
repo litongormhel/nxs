@@ -81,7 +81,15 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-21 — Sort Call Sheet by Operating Shift Time (4:00 PM First, 1:00 AM Last)**
+1. **2026-09-21 — Display "Redeem" for Points Redemption Transactions in Sales Table**
+   (`ohm#7d2a1c4e`). Implementation plan presented and approved before code execution.
+   - **Promo Column (`components/sales-browser.tsx`)**: When `payment_method === 'Points'`, renders a gold `Redeem` badge (`bg-gold/15 text-accent-gold`, uppercase, matching the Voided badge style) instead of `—`. All non-Points rows continue to display `promo_label ?? "—"` — unaffected.
+   - **Payment Column (`components/sales-browser.tsx`)**: When `payment_method === 'Points'`, renders `Points` in `text-accent-gold font-medium` so it is visually distinct from `Cash` / `GCash` / `Card`. All other payment methods render as plain muted text — unaffected.
+   - **Signal used**: `payment_method = 'Points'` (DB-enforced check constraint on `sales`). No `points_redeemed` column exists in the schema.
+   - **`app/(staff)/sales/page.tsx`**: No changes — `payment_method` was already fetched and mapped.
+   - `npm run build` clean (0 errors). See [[sales_state]] and `.ai/handoff.md`.
+
+2. **2026-09-21 — Sort Call Sheet by Operating Shift Time (4:00 PM First, 1:00 AM Last)**
    (`ohm#3f8a2c1d`). Implementation plan presented and approved before code execution.
    - **Shift-Aware Sort (`components/call-sheet-browser.tsx`)**: Added `getOperatingMinutes(slotTime: string | null): number` helper that converts a `HH:MM` slot time to absolute minutes on the operating day. Post-midnight times (`h < 6`, e.g. `01:00`) are offset by `+24 h` so they rank after all PM slots. `null` slot_time returns `9999` (sinks to bottom). Updated the `useMemo` for `filtered` to spread-copy and `.sort()` with primary key = `getOperatingMinutes(slot_time)` ascending, secondary key = `locker_number` ascending. Filter pill buttons and the `availableSlots` array are completely untouched.
    - `npm run build` clean (0 errors). See [[operations_state]] and `.ai/handoff.md`.
@@ -104,13 +112,5 @@ Full invariant list: [[nxs-architecture-locks]].
    - **2-Column Stats Grid (`components/client-browser.tsx`)**: Unified key member metrics into a side-by-side 2-column card layout: Left Card "AVAILABLE POINTS" with bold gold accent value (`{points} pts`), Right Card "CURRENT STATUS" with active locker check-in badge (`Locker {locker}` in gold or muted `Not Checked In`).
    - **Compact QR Code Container & Actions (`components/client-browser.tsx`)**: Reduced QR code footprint (`130px`) with centered padding and truncated token string with click-to-copy button and `✓ Copied` feedback. Structured action buttons cleanly (+ Log Visit for Member, Claim Past Walk-in Visit honoring disabled toggle and tooltip, and Close).
    - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
-
-5. **2026-09-21 — Fix Persistence and State Binding for Walk-in Claims Settings Toggle**
-   (`ohm#4b8e2a1d`). Implementation plan presented and approved before code execution.
-   - **Settings Server Action (`app/(staff)/settings/actions.ts`)**: In `updateWalkinClaimsSetting`, resolved active singleton row using `.limit(1).maybeSingle()` instead of rigid `id = true` assumption. Added fallback to `createServiceClient()` when authenticated client encounters RLS or when 0 rows are updated. Updated return signature to `{ success: true, ok: true, enabled }` and error objects.
-   - **Settings Page Query (`app/(staff)/settings/page.tsx`)**: Replaced `.eq("id", true).single()` with `.limit(1).maybeSingle()`. Added fallback to `createServiceClient()` if authenticated client fails or returns null. Preserved actual `allow_walkin_claims` setting from database during schema cache fallback rather than unconditionally defaulting to `true`.
-   - **Settings UI State Binding (`components/settings-browser.tsx`)**: Updated `handleToggleWalkinClaims` to evaluate both `res.success` and `res.ok`, and set local state to `res.enabled`. Added `useEffect` hook listening to `initialAllowWalkinClaims` to keep client state synchronized upon server revalidation and page reload.
-   - `npm run build` clean (0 errors). See [[settings_state]] and `.ai/handoff.md`.
-
 
 

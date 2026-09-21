@@ -68,6 +68,7 @@
     - **Online / E-Wallet**: Sum of non-Cash payments (`GCash`, `Card`, `Points`, non-voided).
     - **Total Shift Sales**: Overall total shift sales for the selected Spa Day (non-voided).
   - **Table Presentation**: Transaction time formatted in PHT via `fmtPhtTime(created_at, selectedDate)` (e.g. `04:30 PM`, `01:15 AM (+1d)`). Displays `Time`, `Client` (`codename` / `guest_label`), `Service`, `Amount` (`font-mono text-gold`), `Payment` (+ Ref if GCash), `Promo`, `Therapist`, and `Actions`.
+    - **Points Redemption Display (`ohm#7d2a1c4e`, 2026-09-21)**: When `payment_method === 'Points'` (DB-enforced check constraint), the **Promo** column renders a gold `Redeem` badge instead of `—`, and the **Payment** column renders `Points` in `text-accent-gold` instead of plain muted text. All other payment methods (Cash/GCash/Card) and their associated promo labels are unaffected. Signal used: `payment_method` only — there is no `points_redeemed` integer column on `sales`.
   - `sales` is embedded-joined to `clients(codename)`, `services(name)`, `therapists(name)`, `promos(label)`; `processed_by`/`edited_by`/`voided_by` are resolved from a separately-fetched `staff` list mapped in app code.
   - **Walk-in/no-account distinction**: `client_id IS NULL` (with `guest_label` set) shows "No action — walk-in, no account" instead of Edit/Void.
 

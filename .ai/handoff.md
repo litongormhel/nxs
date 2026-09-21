@@ -9,7 +9,19 @@ This file tracks only what's in flight right now.
 
 ## In progress
 
-- **Sort Call Sheet by Operating Shift Time (4:00 PM First, 1:00 AM Last) — complete**
+- **Display "Redeem" for Points Redemption Transactions in Sales Table — complete**
+  (`ohm#7d2a1c4e`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Promo Column (`components/sales-browser.tsx`, line ~490)**:
+    - Replaced `{s.promo_label ?? "—"}` with a conditional: when `s.payment_method === "Points"`, renders a gold `Redeem` badge (`bg-gold/15 text-accent-gold` uppercase, matching the Voided badge style). All non-Points rows continue to display `promo_label ?? "—"` — unaffected.
+  - **Payment Column (`components/sales-browser.tsx`, line ~480)**:
+    - Wrapped `s.payment_method` text: when `=== "Points"`, renders `<span className="font-medium text-accent-gold">Points</span>` so it is visually distinct from `Cash` / `GCash` / `Card`. All other methods render as plain muted text — unaffected.
+  - **`app/(staff)/sales/page.tsx`**: No changes. `payment_method` was already fetched and passed through.
+  - **Signal used**: `payment_method = 'Points'` (DB-enforced enum check constraint) — there is no `points_redeemed` integer column on `sales`.
+  - **Verification**:
+    - `npm run build` clean (0 errors, 26 routes generated).
+
+
   (`ohm#3f8a2c1d`, 2026-09-21).
   - Implementation plan presented and approved before code execution.
   - **Shift-Aware Sort (`components/call-sheet-browser.tsx`)**:
