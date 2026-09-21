@@ -650,3 +650,183 @@ export async function updateRoomCount(targetCount: number, staffId: string): Pro
   revalidatePath("/settings");
   return { ok: true };
 }
+
+// ---------- Branding & Appearance (Owner for Branding, Staff/Owner for Appearance) ----------
+
+export async function updateBrandingSettings(
+  payload: { spaName?: string; logoUrl?: string | null },
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const ownerCheck = await requireOwner(supabase);
+  if (ownerCheck) return ownerCheck;
+
+  try {
+    let clientToUse: any = supabase;
+    const updateObj: Record<string, any> = {};
+    if (payload.spaName !== undefined) updateObj.spa_name = payload.spaName.trim() || "NXS Spa";
+    if (payload.logoUrl !== undefined) updateObj.logo_url = payload.logoUrl;
+
+    let { error } = await clientToUse
+      .from("app_settings")
+      .update(updateObj)
+      .eq("id", true);
+
+    if (error && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const serviceClient = createServiceClient();
+        const sRes = await (serviceClient as any)
+          .from("app_settings")
+          .update(updateObj)
+          .eq("id", true);
+        if (!sRes.error) {
+          error = null;
+          clientToUse = serviceClient;
+        }
+      } catch {
+        // Fall back to original error
+      }
+    }
+
+    if (error) return fail(error);
+
+    await logAction(
+      clientToUse,
+      staffId,
+      "settings_update_branding",
+      `spa_name=${updateObj.spa_name ?? "unchanged"} logo=${updateObj.logo_url ? "updated" : "cleared"}`
+    );
+
+    revalidatePath("/settings");
+    revalidatePath("/bookings");
+    return { ok: true };
+  } catch (err: unknown) {
+    return fail(err);
+  }
+}
+
+export async function uploadBrandLogo(
+  formData: FormData,
+  staffId: string
+): Promise<ActionResult & { url?: string }> {
+  const supabase = await createClient();
+  const ownerCheck = await requireOwner(supabase);
+  if (ownerCheck) return ownerCheck;
+
+  const file = formData.get("file") as File | null;
+  if (!file || typeof file === "string") {
+    return { ok: false, error: "No image file provided." };
+  }
+
+  if (!file.type.startsWith("image/")) {
+    return { ok: false, error: "Only image files (JPEG, PNG, WebP, SVG, GIF) are allowed." };
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    return { ok: false, error: "Image size must be 5MB or less." };
+  }
+
+  try {
+    let storageClient: any = supabase;
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        storageClient = createServiceClient();
+      } catch {
+        storageClient = supabase;
+      }
+    }
+
+    const ext = file.name.split(".").pop() || "png";
+    const filename = `logo-${Date.now()}.${ext}`;
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const { error: uploadError } = await storageClient.storage
+      .from("brand-assets")
+      .upload(filename, buffer, {
+        contentType: file.type,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      return fail(uploadError);
+    }
+
+    const { data: urlData } = storageClient.storage
+      .from("brand-assets")
+      .getPublicUrl(filename);
+
+    const publicUrl = urlData?.publicUrl || "";
+
+    await logAction(
+      storageClient,
+      staffId,
+      "settings_upload_brand_logo",
+      `filename=${filename} url=${publicUrl}`
+    );
+
+    return { ok: true, url: publicUrl };
+  } catch (err: unknown) {
+    return fail(err);
+  }
+}
+
+export async function updateAppearanceSettings(
+  payload: {
+    accentColor?: string;
+    fontFamily?: string;
+    fontScale?: string;
+    tableDensity?: string;
+  },
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  try {
+    let clientToUse: any = supabase;
+    const updateObj: Record<string, any> = {};
+    if (payload.accentColor !== undefined) updateObj.accent_color = payload.accentColor;
+    if (payload.fontFamily !== undefined) updateObj.font_family = payload.fontFamily;
+    if (payload.fontScale !== undefined) updateObj.font_scale = payload.fontScale;
+    if (payload.tableDensity !== undefined) updateObj.table_density = payload.tableDensity;
+
+    let { error } = await clientToUse
+      .from("app_settings")
+      .update(updateObj)
+      .eq("id", true);
+
+    if (error && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const serviceClient = createServiceClient();
+        const sRes = await (serviceClient as any)
+          .from("app_settings")
+          .update(updateObj)
+          .eq("id", true);
+        if (!sRes.error) {
+          error = null;
+          clientToUse = serviceClient;
+        }
+      } catch {
+        // Ignore fallback
+      }
+    }
+
+    // If the columns aren't in schema cache yet, don't break
+    if (error) {
+      console.warn("Could not save appearance settings to app_settings:", error);
+    } else {
+      await logAction(
+        clientToUse,
+        staffId,
+        "settings_update_appearance",
+        JSON.stringify(payload)
+      );
+    }
+
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (err: unknown) {
+    return fail(err);
+  }
+}
+

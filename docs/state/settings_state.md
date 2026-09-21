@@ -11,8 +11,9 @@ existing `canEdit*` gate stays exactly where it was, just re-parented under
 a tab:
 
 - **General** — Display (Appearance/theme toggle), Account
+- **Appearance & Branding** (`ohm#8b3c1d4e`, 2026-09-21) — Branding Controls (Spa Name, Brand Logo upload to `brand-assets` storage bucket / URL with live preview; Owner-only), Typography Settings (Font Family: Inter/Geist Modern Sans, Plus Jakarta Sans Balanced, Playfair/Cinzel Luxury Serif; Font Size Scale: Compact 90%, Normal 100%, Large 110%), Theme & Display (Accent Color palette: Gold, Emerald, Rose Gold, Bronze; Table Density: Comfortable, Dense; Light/Dark theme toggle).
 - **Services & Loyalty** — Services & Pricing, Loyalty Points Formula
-- **Promos & Security** — Void Authorization Code, Promo Codes
+- **Promos & Security** — Void Authorization Code, Walk-in Visit Claims, Promo Codes
 - **Scheduling & Capacity** — Weekend Fixed Time Slots, Add-ons, Capacity
 
 ## Implemented (UI + real Supabase persistence)
@@ -59,6 +60,10 @@ just local React state.
   page chrome. Verified all 10 tabs plus the Add Staff/Add Therapist/Edit
   Sale modals in light mode; dark mode re-checked pixel-identical to
   before via side-by-side screenshots.
+- **Branding & Appearance Controls** (`ohm#8b3c1d4e`, 2026-09-21):
+  - **Branding (Owner only)**: Spa Name input updates `app_settings.spa_name` (default `'NXS Spa'`) and broadcasts `nxs-branding-change`. Brand Logo uploader supports image file upload (PNG, JPEG, WebP, SVG, GIF up to 5MB) to Supabase Storage bucket `brand-assets` (`uploadBrandLogo`), storing public URL in `app_settings.logo_url` with live thumbnail preview and fallback to direct URL input or `/logo.jpeg`. Non-owners receive read-only badge. Dynamically propagates to sidebar navigation (`components/sidebar.tsx`).
+  - **Typography Settings**: Font Family selector supporting Inter/Geist (Modern Sans, `sans`), Plus Jakarta Sans (Balanced, `jakarta`), and Playfair Display / Cinzel (Luxury Serif, `serif`). Dynamic stylesheet injection ensures Google Fonts are loaded without layout shift. Font Size Scale supports Compact (90%), Normal (100%), and Large (110%), scaling `document.documentElement.style.fontSize`.
+  - **Theme & Display**: Accent Color palette selector (Gold `#c89b3c` default, Emerald `#10b981`, Rose Gold `#e0838a`, Bronze `#cd7f32`), dynamically swapping `--gold`, `--gold-hover`, and `--accent-gold` CSS custom properties with light-mode-aware values. Table Density selector toggles Comfortable (default) vs Dense (compact row padding via `[data-table-density="dense"]`). Persisted to `localStorage` and `app_settings` via `updateAppearanceSettings`.
 - **Account**: signed-in staff badge showing name/position/role. As of
   Staff Auth 6C-6 (`ohm#8r5m1v7z`, 2026-08-29), there is no role-switching
   control here — the real authenticated session (`sessionStaff.id` from

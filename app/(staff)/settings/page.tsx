@@ -41,9 +41,12 @@ export default async function SettingsPage() {
       .eq("active", true),
     (async () => {
       let clientToUse: any = supabase;
+      const fullSelect =
+        "id, loyalty_formula_mode, peso_per_point, void_auth_code_hash, sms_confirmation_template, allow_walkin_claims, spa_name, logo_url, accent_color, font_family, font_scale, table_density";
+
       let res = await clientToUse
         .from("app_settings")
-        .select("id, loyalty_formula_mode, peso_per_point, void_auth_code_hash, sms_confirmation_template, allow_walkin_claims")
+        .select(fullSelect)
         .limit(1)
         .maybeSingle();
 
@@ -52,7 +55,7 @@ export default async function SettingsPage() {
           const serviceClient = createServiceClient();
           const sRes = await (serviceClient as any)
             .from("app_settings")
-            .select("id, loyalty_formula_mode, peso_per_point, void_auth_code_hash, sms_confirmation_template, allow_walkin_claims")
+            .select(fullSelect)
             .limit(1)
             .maybeSingle();
           if (!sRes.error && sRes.data) {
@@ -65,14 +68,8 @@ export default async function SettingsPage() {
       }
 
       if (res.error) {
-        // In case specific columns (e.g. sms_confirmation_template or allow_walkin_claims) are missing in schema cache
-        const claimsRes = await clientToUse
-          .from("app_settings")
-          .select("allow_walkin_claims")
-          .limit(1)
-          .maybeSingle();
-
-        const baseRes = await clientToUse
+        // Fallback in case newly added columns are not yet in PostgREST schema cache
+        const fallbackRes = await clientToUse
           .from("app_settings")
           .select("loyalty_formula_mode, peso_per_point, void_auth_code_hash")
           .limit(1)
@@ -80,9 +77,15 @@ export default async function SettingsPage() {
 
         return {
           data: {
-            ...(baseRes.data ?? {}),
+            ...(fallbackRes.data ?? {}),
             sms_confirmation_template: null,
-            allow_walkin_claims: claimsRes.data?.allow_walkin_claims ?? true,
+            allow_walkin_claims: true,
+            spa_name: "NXS Spa",
+            logo_url: null,
+            accent_color: "gold",
+            font_family: "sans",
+            font_scale: "normal",
+            table_density: "comfortable",
           },
         };
       }
@@ -125,6 +128,12 @@ export default async function SettingsPage() {
         initialVoidAuthCodeConfigured={!!appSettings?.void_auth_code_hash}
         initialSmsTemplate={appSettings?.sms_confirmation_template ?? null}
         initialAllowWalkinClaims={appSettings?.allow_walkin_claims ?? true}
+        initialSpaName={appSettings?.spa_name ?? "NXS Spa"}
+        initialLogoUrl={appSettings?.logo_url ?? null}
+        initialAccentColor={appSettings?.accent_color ?? "gold"}
+        initialFontFamily={appSettings?.font_family ?? "sans"}
+        initialFontScale={appSettings?.font_scale ?? "normal"}
+        initialTableDensity={appSettings?.table_density ?? "comfortable"}
       />
     </div>
   );

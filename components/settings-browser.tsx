@@ -21,7 +21,15 @@ import {
   updateSmsTemplate,
   resetSmsTemplate,
   updateWalkinClaimsSetting,
+  updateBrandingSettings,
+  uploadBrandLogo,
+  updateAppearanceSettings,
 } from "@/app/(staff)/settings/actions";
+import {
+  ACCENT_PALETTES,
+  broadcastBrandingChange,
+  broadcastAppearanceChange,
+} from "@/components/sidebar";
 import { compareSlotTimes } from "@/lib/bookings/slots";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useTheme } from "@/lib/theme-context";
@@ -60,7 +68,12 @@ function fmtTime(t: string): string {
   return `${hr}:${m} ${+h < 12 ? "AM" : "PM"}`;
 }
 
-type SettingsTab = "general" | "services-loyalty" | "promos-security" | "scheduling-capacity";
+type SettingsTab =
+  | "general"
+  | "appearance-branding"
+  | "services-loyalty"
+  | "promos-security"
+  | "scheduling-capacity";
 
 function TabButton({
   active,
@@ -98,6 +111,12 @@ export function SettingsBrowser({
   initialVoidAuthCodeConfigured,
   initialSmsTemplate,
   initialAllowWalkinClaims = true,
+  initialSpaName = "NXS Spa",
+  initialLogoUrl = null,
+  initialAccentColor = "gold",
+  initialFontFamily = "sans",
+  initialFontScale = "normal",
+  initialTableDensity = "comfortable",
 }: {
   initialServices: Service[];
   initialPromos: Promo[];
@@ -111,6 +130,12 @@ export function SettingsBrowser({
   initialVoidAuthCodeConfigured: boolean;
   initialSmsTemplate?: string | null;
   initialAllowWalkinClaims?: boolean;
+  initialSpaName?: string;
+  initialLogoUrl?: string | null;
+  initialAccentColor?: string;
+  initialFontFamily?: string;
+  initialFontScale?: string;
+  initialTableDensity?: string;
 }) {
   const router = useRouter();
 
@@ -130,6 +155,65 @@ export function SettingsBrowser({
     currentRole === "Supervisor" || currentRole === "Owner";
   const canEditLoyaltyFormula = currentRole === "Owner";
   const canEditVoidAuthCode = currentRole === "Owner";
+
+  // Branding states
+  const [spaName, setSpaName] = useState<string>(initialSpaName || "NXS Spa");
+  const [spaNameDraft, setSpaNameDraft] = useState<string>(initialSpaName || "NXS Spa");
+  const [isSavingSpaName, setIsSavingSpaName] = useState(false);
+
+  const [logoUrl, setLogoUrl] = useState<string | null>(initialLogoUrl ?? null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(initialLogoUrl ?? null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [customLogoUrlInput, setCustomLogoUrlInput] = useState<string>("");
+  const [isSavingDirectLogo, setIsSavingDirectLogo] = useState(false);
+
+  // Appearance states
+  const [accentColor, setAccentColor] = useState<string>(initialAccentColor || "gold");
+  const [fontFamily, setFontFamily] = useState<string>(initialFontFamily || "sans");
+  const [fontScale, setFontScale] = useState<string>(initialFontScale || "normal");
+  const [tableDensity, setTableDensity] = useState<string>(initialTableDensity || "comfortable");
+
+  // Synchronize branding/appearance with localStorage and initial props on mount
+  useEffect(() => {
+    try {
+      const storedName = localStorage.getItem("nxs_spa_name");
+      if (storedName) {
+        setSpaName(storedName);
+        setSpaNameDraft(storedName);
+      } else if (initialSpaName) {
+        setSpaName(initialSpaName);
+        setSpaNameDraft(initialSpaName);
+      }
+
+      const storedLogo = localStorage.getItem("nxs_logo_url");
+      if (storedLogo) {
+        setLogoUrl(storedLogo);
+        setLogoPreview(storedLogo);
+      } else if (initialLogoUrl) {
+        setLogoUrl(initialLogoUrl);
+        setLogoPreview(initialLogoUrl);
+      }
+
+      const storedAccent = localStorage.getItem("nxs_accent_color");
+      if (storedAccent) setAccentColor(storedAccent);
+      else if (initialAccentColor) setAccentColor(initialAccentColor);
+
+      const storedFont = localStorage.getItem("nxs_font_family");
+      if (storedFont) setFontFamily(storedFont);
+      else if (initialFontFamily) setFontFamily(initialFontFamily);
+
+      const storedScale = localStorage.getItem("nxs_font_scale");
+      if (storedScale) setFontScale(storedScale);
+      else if (initialFontScale) setFontScale(initialFontScale);
+
+      const storedDensity = localStorage.getItem("nxs_table_density");
+      if (storedDensity) setTableDensity(storedDensity);
+      else if (initialTableDensity) setTableDensity(initialTableDensity);
+    } catch {
+      // ignore
+    }
+  }, [initialSpaName, initialLogoUrl, initialAccentColor, initialFontFamily, initialFontScale, initialTableDensity]);
 
   // Walk-in Claims Toggle state
   const [allowWalkinClaims, setAllowWalkinClaims] = useState<boolean>(
@@ -639,11 +723,168 @@ export function SettingsBrowser({
     router.refresh();
   };
 
+  // Handlers for Branding
+  const handleSaveSpaName = async () => {
+    if (!isOwner) return;
+    const trimmed = spaNameDraft.trim();
+    if (!trimmed) {
+      showToast("Spa name cannot be empty");
+      return;
+    }
+    setIsSavingSpaName(true);
+    const res = await updateBrandingSettings({ spaName: trimmed }, selectedStaffId);
+    setIsSavingSpaName(false);
+    if (!res.ok) {
+      showToast(`Failed to update spa name: ${res.error}`);
+      return;
+    }
+    setSpaName(trimmed);
+    broadcastBrandingChange({ spaName: trimmed });
+    showToast("Spa name updated successfully");
+    router.refresh();
+  };
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isOwner) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Please select a valid image file");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Image size must be 5MB or less");
+      return;
+    }
+    setLogoFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setLogoPreview(objectUrl);
+  };
+
+  const handleUploadLogo = async () => {
+    if (!isOwner || !logoFile) return;
+    setIsUploadingLogo(true);
+    const formData = new FormData();
+    formData.append("file", logoFile);
+
+    const res = await uploadBrandLogo(formData, selectedStaffId);
+    if (!res.ok) {
+      setIsUploadingLogo(false);
+      showToast(`Failed to upload logo: ${res.error || "Unknown error"}`);
+      return;
+    }
+    if (!res.url) {
+      setIsUploadingLogo(false);
+      showToast("Failed to upload logo: No URL returned");
+      return;
+    }
+
+    // Update app_settings with uploaded URL
+    const updateRes = await updateBrandingSettings({ logoUrl: res.url }, selectedStaffId);
+    setIsUploadingLogo(false);
+
+    if (!updateRes.ok) {
+      showToast(`Uploaded but failed to save setting: ${updateRes.error}`);
+      return;
+    }
+
+    setLogoUrl(res.url);
+    setLogoPreview(res.url);
+    setLogoFile(null);
+    broadcastBrandingChange({ logoUrl: res.url });
+    showToast("Brand logo uploaded and applied");
+    router.refresh();
+  };
+
+  const handleSaveDirectLogoUrl = async () => {
+    if (!isOwner) return;
+    const trimmed = customLogoUrlInput.trim();
+    setIsSavingDirectLogo(true);
+    const res = await updateBrandingSettings({ logoUrl: trimmed || null }, selectedStaffId);
+    setIsSavingDirectLogo(false);
+    if (!res.ok) {
+      showToast(`Failed to update logo URL: ${res.error}`);
+      return;
+    }
+    setLogoUrl(trimmed || null);
+    setLogoPreview(trimmed || null);
+    setCustomLogoUrlInput("");
+    broadcastBrandingChange({ logoUrl: trimmed || null });
+    showToast(trimmed ? "Logo URL updated" : "Logo reset to default");
+    router.refresh();
+  };
+
+  const handleResetLogo = async () => {
+    if (!isOwner) return;
+    setIsSavingDirectLogo(true);
+    const res = await updateBrandingSettings({ logoUrl: null }, selectedStaffId);
+    setIsSavingDirectLogo(false);
+    if (!res.ok) {
+      showToast(`Failed to reset logo: ${res.error}`);
+      return;
+    }
+    setLogoUrl(null);
+    setLogoPreview(null);
+    setLogoFile(null);
+    broadcastBrandingChange({ logoUrl: null });
+    showToast("Logo reset to default");
+    router.refresh();
+  };
+
+  // Handlers for Appearance (Typography, Accent, Density)
+  const handleSelectAccentColor = async (newAccent: string) => {
+    setAccentColor(newAccent);
+    broadcastAppearanceChange({ accentColor: newAccent });
+    await updateAppearanceSettings({ accentColor: newAccent }, selectedStaffId);
+    showToast(`Accent color set to ${ACCENT_PALETTES[newAccent]?.name || newAccent}`);
+  };
+
+  const handleSelectFontFamily = async (newFont: string) => {
+    setFontFamily(newFont);
+    broadcastAppearanceChange({ fontFamily: newFont });
+    await updateAppearanceSettings({ fontFamily: newFont }, selectedStaffId);
+    const label =
+      newFont === "jakarta"
+        ? "Plus Jakarta Sans (Balanced)"
+        : newFont === "serif"
+        ? "Playfair / Cinzel (Luxury Serif)"
+        : "Inter / Geist (Modern Sans)";
+    showToast(`Font family set to ${label}`);
+  };
+
+  const handleSelectFontScale = async (newScale: string) => {
+    setFontScale(newScale);
+    broadcastAppearanceChange({ fontScale: newScale });
+    await updateAppearanceSettings({ fontScale: newScale }, selectedStaffId);
+    showToast(
+      `Font scale set to ${
+        newScale === "compact"
+          ? "Compact (90%)"
+          : newScale === "large"
+          ? "Large (110%)"
+          : "Normal (100%)"
+      }`
+    );
+  };
+
+  const handleSelectTableDensity = async (newDensity: string) => {
+    setTableDensity(newDensity);
+    broadcastAppearanceChange({ tableDensity: newDensity });
+    await updateAppearanceSettings({ tableDensity: newDensity }, selectedStaffId);
+    showToast(`Table density set to ${newDensity === "dense" ? "Dense (Compact)" : "Comfortable"}`);
+  };
+
   return (
     <div className="max-w-4xl space-y-6">
       <div className="flex items-center gap-2 mb-2 flex-wrap">
         <TabButton active={tab === "general"} onClick={() => setTab("general")}>
           General
+        </TabButton>
+        <TabButton
+          active={tab === "appearance-branding"}
+          onClick={() => setTab("appearance-branding")}
+        >
+          Appearance & Branding
         </TabButton>
         <TabButton
           active={tab === "services-loyalty"}
@@ -664,6 +905,426 @@ export function SettingsBrowser({
           Scheduling & Capacity
         </TabButton>
       </div>
+
+      {tab === "appearance-branding" && (
+        <div className="space-y-6">
+          {/* SECTION 1: Branding (Owner Only) */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2.5">
+              <div className="text-[10.5px] font-bold tracking-[0.13em] uppercase text-muted">
+                Branding Controls
+              </div>
+              <span
+                className={`text-[10px] font-mono font-semibold uppercase px-2.5 py-0.5 rounded-full border ${
+                  isOwner
+                    ? "border-[#a97e2e] bg-gold/10 text-accent-gold"
+                    : "border-border bg-surface-2 text-muted"
+                }`}
+              >
+                {isOwner ? "Owner Editable" : "Owner Only (Read-Only)"}
+              </span>
+            </div>
+            <div className="text-[11px] text-muted mb-3">
+              Configure the public identity, business name, and official brand logo for NXS Spa.
+              Updates propagate across the sidebar navigation, layout header, and dashboard.
+            </div>
+
+            <div className="rounded-xl border border-border bg-surface p-5 space-y-5">
+              {/* Spa Name Field */}
+              <div>
+                <label className="block text-[11px] font-semibold text-foreground mb-1.5">
+                  Business / Spa Name
+                </label>
+                <div className="flex items-center gap-2.5 max-w-md">
+                  <input
+                    type="text"
+                    disabled={!isOwner}
+                    value={spaNameDraft}
+                    onChange={(e) => setSpaNameDraft(e.target.value)}
+                    placeholder="NXS Spa"
+                    className="flex-1 rounded-lg border border-border bg-background px-3.5 py-2 text-sm text-foreground outline-none focus:border-gold disabled:opacity-60 disabled:cursor-not-allowed"
+                  />
+                  {isOwner && (
+                    <button
+                      type="button"
+                      disabled={isSavingSpaName || spaNameDraft.trim() === spaName}
+                      onClick={handleSaveSpaName}
+                      className="rounded-lg bg-gold px-4 py-2 text-xs font-bold text-black hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition shrink-0"
+                    >
+                      {isSavingSpaName ? "Saving..." : "Save Name"}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Logo Uploader */}
+              <div className="border-t border-border pt-4">
+                <label className="block text-[11px] font-semibold text-foreground mb-1.5">
+                  Brand Logo & Live Preview
+                </label>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  {/* Live Preview Box */}
+                  <div className="w-16 h-16 rounded-xl border border-border bg-surface-2 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                    {logoPreview ? (
+                      <img
+                        src={logoPreview}
+                        alt="Logo preview"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = "/logo.jpeg";
+                        }}
+                      />
+                    ) : (
+                      <img
+                        src="/logo.jpeg"
+                        alt="Default logo"
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+
+                  {/* Actions & File Picker */}
+                  <div className="flex-1 space-y-2.5">
+                    {isOwner ? (
+                      <>
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <label className="rounded-lg border border-border bg-surface-2 px-3.5 py-2 text-xs font-semibold text-foreground hover:border-gold transition cursor-pointer">
+                            <span>{logoFile ? logoFile.name : "Choose Image File"}</span>
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,image/svg+xml,image/gif"
+                              className="hidden"
+                              onChange={handleLogoFileChange}
+                            />
+                          </label>
+                          {logoFile && (
+                            <button
+                              type="button"
+                              onClick={handleUploadLogo}
+                              disabled={isUploadingLogo}
+                              className="rounded-lg bg-gold px-3.5 py-2 text-xs font-bold text-black hover:brightness-110 disabled:opacity-50 transition"
+                            >
+                              {isUploadingLogo ? "Uploading..." : "Upload Logo"}
+                            </button>
+                          )}
+                          {(logoUrl || logoFile) && (
+                            <button
+                              type="button"
+                              onClick={handleResetLogo}
+                              disabled={isSavingDirectLogo || isUploadingLogo}
+                              className="rounded-lg border border-[#5e3c3c] px-3 py-2 text-xs font-semibold text-accent-red hover:brightness-125 transition"
+                            >
+                              Reset to Default
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Direct Image URL input */}
+                        <div className="flex items-center gap-2 max-w-md pt-1">
+                          <input
+                            type="url"
+                            value={customLogoUrlInput}
+                            onChange={(e) => setCustomLogoUrlInput(e.target.value)}
+                            placeholder="Or enter direct image URL (https://...)"
+                            className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground outline-none focus:border-gold"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSaveDirectLogoUrl}
+                            disabled={isSavingDirectLogo || !customLogoUrlInput.trim()}
+                            className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-xs font-semibold text-muted hover:text-foreground hover:border-gold disabled:opacity-40 transition shrink-0"
+                          >
+                            Set URL
+                          </button>
+                        </div>
+                        <div className="text-[10px] text-muted">
+                          Supports PNG, JPEG, SVG, WebP up to 5MB. Uploaded logos are saved to Supabase Storage.
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-[11px] text-muted">
+                        Only the Owner role can upload or change the brand logo.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 2: Typography (Font & Size Scale) */}
+          <div>
+            <div className="text-[10.5px] font-bold tracking-[0.13em] uppercase text-muted mb-1.5">
+              Typography Settings
+            </div>
+            <div className="text-[11px] text-muted mb-3">
+              Select font family and size scaling for readability across the console.
+            </div>
+
+            <div className="rounded-xl border border-border bg-surface p-5 space-y-5">
+              {/* Font Family Selector */}
+              <div>
+                <label className="block text-[11px] font-semibold text-foreground mb-2">
+                  Font Family
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {/* Option 1: Modern Sans */}
+                  <button
+                    type="button"
+                    onClick={() => handleSelectFontFamily("sans")}
+                    className={`rounded-xl border p-3.5 text-left transition flex flex-col justify-between ${
+                      fontFamily === "sans"
+                        ? "border-[#a97e2e] bg-gold/10"
+                        : "border-border bg-surface-2 hover:border-gold/50"
+                    }`}
+                  >
+                    <div>
+                      <div className="text-xs font-bold text-foreground font-sans">
+                        Inter / Geist
+                      </div>
+                      <div className="text-[10.5px] text-muted mt-0.5">
+                        Modern Sans — Clean, geometric & contemporary
+                      </div>
+                    </div>
+                    <div className="mt-3 text-[13px] font-sans font-medium text-accent-gold">
+                      Aa Bb Gg 123
+                    </div>
+                  </button>
+
+                  {/* Option 2: Balanced Sans */}
+                  <button
+                    type="button"
+                    onClick={() => handleSelectFontFamily("jakarta")}
+                    className={`rounded-xl border p-3.5 text-left transition flex flex-col justify-between ${
+                      fontFamily === "jakarta"
+                        ? "border-[#a97e2e] bg-gold/10"
+                        : "border-border bg-surface-2 hover:border-gold/50"
+                    }`}
+                  >
+                    <div>
+                      <div
+                        className="text-xs font-bold text-foreground"
+                        style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}
+                      >
+                        Plus Jakarta Sans
+                      </div>
+                      <div className="text-[10.5px] text-muted mt-0.5">
+                        Balanced — Warm, humanistic & high legibility
+                      </div>
+                    </div>
+                    <div
+                      className="mt-3 text-[13px] font-medium text-accent-gold"
+                      style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}
+                    >
+                      Aa Bb Gg 123
+                    </div>
+                  </button>
+
+                  {/* Option 3: Luxury Serif */}
+                  <button
+                    type="button"
+                    onClick={() => handleSelectFontFamily("serif")}
+                    className={`rounded-xl border p-3.5 text-left transition flex flex-col justify-between ${
+                      fontFamily === "serif"
+                        ? "border-[#a97e2e] bg-gold/10"
+                        : "border-border bg-surface-2 hover:border-gold/50"
+                    }`}
+                  >
+                    <div>
+                      <div
+                        className="text-xs font-bold text-foreground"
+                        style={{ fontFamily: '"Playfair Display", "Cinzel", serif' }}
+                      >
+                        Playfair / Cinzel
+                      </div>
+                      <div className="text-[10.5px] text-muted mt-0.5">
+                        Luxury Serif — Classic elegance & spa atmosphere
+                      </div>
+                    </div>
+                    <div
+                      className="mt-3 text-[13px] font-medium text-accent-gold"
+                      style={{ fontFamily: '"Playfair Display", "Cinzel", serif' }}
+                    >
+                      Aa Bb Gg 123
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Font Size Scale */}
+              <div className="border-t border-border pt-4">
+                <label className="block text-[11px] font-semibold text-foreground mb-2">
+                  Font Size Scale
+                </label>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectFontScale("compact")}
+                    className={`rounded-xl border p-3 text-center transition ${
+                      fontScale === "compact"
+                        ? "border-[#a97e2e] bg-gold/10"
+                        : "border-border bg-surface-2 hover:border-gold/50"
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-foreground">Compact (90%)</div>
+                    <div className="text-[10px] text-muted mt-0.5">Information dense</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectFontScale("normal")}
+                    className={`rounded-xl border p-3 text-center transition ${
+                      fontScale === "normal"
+                        ? "border-[#a97e2e] bg-gold/10"
+                        : "border-border bg-surface-2 hover:border-gold/50"
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-foreground">Normal (100%)</div>
+                    <div className="text-[10px] text-muted mt-0.5">Standard balance</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectFontScale("large")}
+                    className={`rounded-xl border p-3 text-center transition ${
+                      fontScale === "large"
+                        ? "border-[#a97e2e] bg-gold/10"
+                        : "border-border bg-surface-2 hover:border-gold/50"
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-foreground">Large (110%)</div>
+                    <div className="text-[10px] text-muted mt-0.5">Enhanced clarity</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 3: Theme & Display (Accent Color, Table Density, Light/Dark) */}
+          <div>
+            <div className="text-[10.5px] font-bold tracking-[0.13em] uppercase text-muted mb-1.5">
+              Theme & Display
+            </div>
+            <div className="text-[11px] text-muted mb-3">
+              Choose the accent color palette and table density comfort levels.
+            </div>
+
+            <div className="rounded-xl border border-border bg-surface p-5 space-y-5">
+              {/* Accent Color Palette */}
+              <div>
+                <label className="block text-[11px] font-semibold text-foreground mb-2">
+                  Accent Color Palette
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {Object.entries(ACCENT_PALETTES).map(([key, item]) => {
+                    const isSelected = accentColor === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => handleSelectAccentColor(key)}
+                        className={`rounded-xl border p-3 flex items-center gap-3 text-left transition ${
+                          isSelected
+                            ? "border-[#a97e2e] bg-gold/10 shadow-sm"
+                            : "border-border bg-surface-2 hover:border-gold/50"
+                        }`}
+                      >
+                        <span
+                          className="w-5 h-5 rounded-full shrink-0 shadow"
+                          style={{ backgroundColor: item.preview }}
+                        />
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-foreground truncate">
+                            {item.name}
+                          </div>
+                          {isSelected && (
+                            <div className="text-[9.5px] text-accent-gold font-mono uppercase">
+                              Active
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Table Density */}
+              <div className="border-t border-border pt-4">
+                <label className="block text-[11px] font-semibold text-foreground mb-2">
+                  Table Layout Density
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectTableDensity("comfortable")}
+                    className={`rounded-xl border p-3.5 text-left transition ${
+                      tableDensity === "comfortable"
+                        ? "border-[#a97e2e] bg-gold/10"
+                        : "border-border bg-surface-2 hover:border-gold/50"
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-foreground">Comfortable (Default)</div>
+                    <div className="text-[10.5px] text-muted mt-0.5">
+                      Spacious padding optimal for tablet use and touchscreen operations.
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectTableDensity("dense")}
+                    className={`rounded-xl border p-3.5 text-left transition ${
+                      tableDensity === "dense"
+                        ? "border-[#a97e2e] bg-gold/10"
+                        : "border-border bg-surface-2 hover:border-gold/50"
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-foreground">Dense (Compact)</div>
+                    <div className="text-[10.5px] text-muted mt-0.5">
+                      Tight padding allowing more rows and transactions to be visible simultaneously.
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Dark / Light Toggle */}
+              <div className="border-t border-border pt-4 flex items-center justify-between flex-wrap gap-2.5">
+                <div>
+                  <div className="text-[12px] font-bold text-foreground">Color Mode</div>
+                  <div className="text-[11px] text-muted mt-0.5">
+                    {isLightMode ? "Light mode active" : "Dark mode active"}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <label className="relative inline-block w-11 h-[25px] shrink-0 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="opacity-0 w-0 h-0"
+                      checked={isLightMode}
+                      onChange={(e) => setIsLightMode(e.target.checked)}
+                    />
+                    <span
+                      className={`absolute inset-0 rounded-full border transition-colors ${
+                        isLightMode
+                          ? "bg-gradient-to-br from-[#c89b3c] to-[#a97e2e] border-[#a97e2e]"
+                          : "bg-[#1d1610] border-border"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-[2px] left-[2px] w-[19px] h-[19px] rounded-full transition-transform ${
+                          isLightMode
+                            ? "translate-x-[19px] bg-background"
+                            : "bg-muted"
+                        }`}
+                      />
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {tab === "general" && (
       <div className="space-y-6">

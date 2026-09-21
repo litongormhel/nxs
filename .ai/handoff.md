@@ -4,10 +4,38 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#4a9e1d2c` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#8b3c1d4e` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Add Branding Customization, Typography Selector, and Theme Density Controls in Settings — complete**
+  (`ohm#8b3c1d4e`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Database Migration (`supabase/migrations/20260921180000_app_settings_branding.sql`)**:
+    - Adds `spa_name` (text, not null default `'NXS Spa'`), `logo_url` (text, null), `accent_color` (text, null default `'gold'`), `font_family` (text, null default `'sans'`), `font_scale` (text, null default `'normal'`), and `table_density` (text, null default `'comfortable'`) to `public.app_settings`.
+    - Creates public storage bucket `brand-assets` in `storage.buckets` (5MB limit, image mime types).
+    - Adds RLS policies for `brand-assets`: public SELECT, Owner-only INSERT, UPDATE, and DELETE.
+    - Triggers PostgREST schema reload.
+  - **Server Actions (`app/(staff)/settings/actions.ts`)**:
+    - `updateBrandingSettings({ spaName, logoUrl }, staffId)`: Owner-gated (`requireOwner`), updates `spa_name` and/or `logo_url` in `app_settings` with `createServiceClient` fallback, logs to `action_logs` (`settings_update_branding`), revalidates `/settings` and `/bookings`.
+    - `uploadBrandLogo(formData, staffId)`: Owner-gated (`requireOwner`), validates image type and file size (≤5MB), uploads to `brand-assets` storage bucket, returns public URL.
+    - `updateAppearanceSettings({ accentColor, fontFamily, fontScale, tableDensity }, staffId)`: updates persistent appearance defaults in `app_settings` with graceful schema cache fallback, logs to `action_logs`.
+  - **Settings Page (`app/(staff)/settings/page.tsx`)**:
+    - Queries `spa_name`, `logo_url`, `accent_color`, `font_family`, `font_scale`, `table_density` alongside existing fields with resilient fallback if columns are pending cache reload.
+    - Passes initial props to `<SettingsBrowser />`.
+  - **Settings UI (`components/settings-browser.tsx`)**:
+    - Added dedicated tab `"appearance-branding"` ("Appearance & Branding").
+    - **Branding (Owner only)**: Spa Name input with dirty check and save button; Logo file uploader with live thumbnail preview, upload to `brand-assets`, direct URL input fallback, and reset to default. Non-owners see read-only badge.
+    - **Typography Settings**: Font family radio cards for Inter/Geist (Modern Sans), Plus Jakarta Sans (Balanced Sans), and Playfair/Cinzel (Luxury Serif). Font scale radio cards for Compact (90%), Normal (100%), and Large (110%).
+    - **Theme & Display**: 4 Accent Color palette buttons (Gold `#c89b3c`, Emerald `#10b981`, Rose Gold `#e0838a`, Bronze `#cd7f32`). Table Density toggle (Comfortable vs Dense). Integrated Dark/Light color mode switch.
+  - **Global Application Binding (`components/sidebar.tsx`)**:
+    - Sidebar dynamically renders the configured `spa_name` and `logo_url` with fallback to `/logo.jpeg` and default name. Uses standard `<img>` for uploaded brand logos to avoid Next.js domain whitelist restriction errors.
+    - Dynamic appearance applier (`applyAppearanceTheme`) updates CSS custom properties `--gold`, `--gold-hover`, `--accent-gold`, and font family on `document.documentElement` / `document.body`, injecting Google Fonts link stylesheet dynamically on demand without layout shift.
+    - Dynamic table density styling applies `data-table-density="dense"` compact cell padding across the layout.
+    - Window event broadcasting (`nxs-branding-change`, `nxs-appearance-change`) ensures immediate, latency-free updates across all open views without requiring page reloads.
+  - **Verification**: `npm run build` clean (0 errors, 26 routes generated). See [[settings_state]].
+
 
 - **Restrict Sales Action Buttons After 3 Days to Owner Role Only — complete**
   (`ohm#4a9e1d2c`, 2026-09-21).
