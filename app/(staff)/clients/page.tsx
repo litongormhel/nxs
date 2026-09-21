@@ -196,7 +196,15 @@ export default async function ClientsPage() {
       has_portal_account: true,
     }));
 
-  // Parse Walk-In visits
+  // Current operational date in Manila time (Asia/Manila, UTC+8)
+  const todayManila = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+  // Parse Walk-In visits (strictly only checked-in or completed stays)
   type RawWalkInRow = {
     id: string;
     guest_label: string | null;
@@ -211,73 +219,109 @@ export default async function ClientsPage() {
     locker_occupancy: { locker_number: number } | { locker_number: number }[] | null;
   };
 
-  const walkInVisits: WalkInVisit[] = ((rawWalkIns ?? []) as RawWalkInRow[]).map((row) => {
-    const svc = Array.isArray(row.services) ? row.services[0] : row.services;
-    const thera = Array.isArray(row.therapists) ? row.therapists[0] : row.therapists;
-    const sale = Array.isArray(row.sales) ? row.sales[0] : row.sales;
-    const occ = Array.isArray(row.locker_occupancy) ? row.locker_occupancy[0] : row.locker_occupancy;
-
-    const guestKey = (row.guest_label ?? "").trim().toLowerCase();
-
-    // Cascading locker resolution:
-    // 1. row.locker_number or sale.locker_number (defensive)
-    // 2. joined row.locker_occupancy (via booking_id)
-    // 3. historical occupancy matched by booking_id
-    // 4. historical occupancy matched by guest_label on booking date
-    // 5. latest historical occupancy for that guest_label
-    let resolvedLocker: number | null =
-      (row as any).locker_number ??
-      (sale as any)?.locker_number ??
-      occ?.locker_number ??
-      occByBookingId[row.id] ??
-      null;
-
-    if (resolvedLocker == null && guestKey && occByGuestLabel[guestKey]) {
-      const historyList = occByGuestLabel[guestKey];
-      const sameDate = historyList.find((h) => h.checked_in_at?.startsWith(row.booking_date));
-      if (sameDate) {
-        resolvedLocker = sameDate.locker_number;
-      } else if (historyList.length > 0) {
-        resolvedLocker = historyList[0].locker_number;
+  const walkInVisits: WalkInVisit[] = ((rawWalkIns ?? []) as RawWalkInRow[])
+    .filter((row) => {
+      // 1. Exclude scheduled future bookings beyond current operating date
+      if (row.booking_date > todayManila) {
+        return false;
       }
-    }
 
-    // Cascading amount & payment method resolution:
-    let resolvedAmount: number | null = sale?.amount != null ? Number(sale.amount) : null;
-    let resolvedPaymentMethod: string | null = sale?.payment_method ?? null;
+      const normStatus = (row.status ?? "").trim().toLowerCase();
+      const isCompletedOrInService = normStatus === "completed" || normStatus === "in_service";
 
-    if (resolvedAmount == null && saleByBookingId[row.id]) {
-      resolvedAmount = saleByBookingId[row.id].amount;
-      resolvedPaymentMethod = resolvedPaymentMethod ?? saleByBookingId[row.id].payment_method;
-    }
+      // Direct locker occupancy linked to this specific booking
+      const occ = Array.isArray(row.locker_occupancy) ? row.locker_occupancy[0] : row.locker_occupancy;
+      const hasDirectLocker =
+        (row as any).locker_number != null ||
+        occ?.locker_number != null ||
+        occByBookingId[row.id] != null;
 
-    if (resolvedAmount == null && guestKey && saleByGuestLabel[guestKey]) {
-      const historySales = saleByGuestLabel[guestKey];
-      const sameDateSale = historySales.find((s) => s.created_at?.startsWith(row.booking_date));
-      if (sameDateSale) {
-        resolvedAmount = sameDateSale.amount;
-        resolvedPaymentMethod = resolvedPaymentMethod ?? sameDateSale.payment_method;
-      } else if (historySales.length > 0) {
-        resolvedAmount = historySales[0].amount;
-        resolvedPaymentMethod = resolvedPaymentMethod ?? historySales[0].payment_method;
+      // Direct sales record linked to this specific booking
+      const sale = Array.isArray(row.sales) ? row.sales[0] : row.sales;
+      const hasDirectSale =
+        (row as any).amount != null ||
+        sale?.amount != null ||
+        saleByBookingId[row.id] != null;
+
+      // Exclude bookings with status Booked, Needs Reassignment, Cancelled, No-show, pending, etc. that have not checked in
+      if (!isCompletedOrInService && !hasDirectLocker && !hasDirectSale) {
+        return false;
       }
-    }
 
-    return {
-      id: row.id,
-      guest_label: row.guest_label ?? "Walk-in Guest",
-      booking_date: row.booking_date,
-      start_time: row.start_time,
-      room_number: row.room_number ?? null,
-      status: row.status,
-      created_at: row.created_at,
-      service_name: svc?.name ?? null,
-      therapist_name: thera?.name ?? null,
-      locker_number: resolvedLocker,
-      amount: resolvedAmount,
-      payment_method: resolvedPaymentMethod,
-    };
-  });
+      // If status is explicitly cancelled or no-show without any valid stay/sales record, exclude
+      if ((normStatus === "cancelled" || normStatus === "no-show") && !hasDirectLocker && !hasDirectSale) {
+        return false;
+      }
+
+      return true;
+    })
+    .map((row) => {
+      const svc = Array.isArray(row.services) ? row.services[0] : row.services;
+      const thera = Array.isArray(row.therapists) ? row.therapists[0] : row.therapists;
+      const sale = Array.isArray(row.sales) ? row.sales[0] : row.sales;
+      const occ = Array.isArray(row.locker_occupancy) ? row.locker_occupancy[0] : row.locker_occupancy;
+
+      const guestKey = (row.guest_label ?? "").trim().toLowerCase();
+
+      // Cascading locker resolution:
+      // 1. row.locker_number or sale.locker_number (defensive)
+      // 2. joined row.locker_occupancy (via booking_id)
+      // 3. historical occupancy matched by booking_id
+      // 4. historical occupancy matched by guest_label on booking date
+      // 5. latest historical occupancy for that guest_label
+      let resolvedLocker: number | null =
+        (row as any).locker_number ??
+        (sale as any)?.locker_number ??
+        occ?.locker_number ??
+        occByBookingId[row.id] ??
+        null;
+
+      if (resolvedLocker == null && guestKey && occByGuestLabel[guestKey]) {
+        const historyList = occByGuestLabel[guestKey];
+        const sameDate = historyList.find((h) => h.checked_in_at?.startsWith(row.booking_date));
+        if (sameDate) {
+          resolvedLocker = sameDate.locker_number;
+        } else if (historyList.length > 0) {
+          resolvedLocker = historyList[0].locker_number;
+        }
+      }
+
+      // Cascading amount & payment method resolution:
+      let resolvedAmount: number | null = sale?.amount != null ? Number(sale.amount) : null;
+      let resolvedPaymentMethod: string | null = sale?.payment_method ?? null;
+
+      if (resolvedAmount == null && saleByBookingId[row.id]) {
+        resolvedAmount = saleByBookingId[row.id].amount;
+        resolvedPaymentMethod = resolvedPaymentMethod ?? saleByBookingId[row.id].payment_method;
+      }
+
+      if (resolvedAmount == null && guestKey && saleByGuestLabel[guestKey]) {
+        const historySales = saleByGuestLabel[guestKey];
+        const sameDateSale = historySales.find((s) => s.created_at?.startsWith(row.booking_date));
+        if (sameDateSale) {
+          resolvedAmount = sameDateSale.amount;
+          resolvedPaymentMethod = resolvedPaymentMethod ?? sameDateSale.payment_method;
+        } else if (historySales.length > 0) {
+          resolvedAmount = historySales[0].amount;
+          resolvedPaymentMethod = resolvedPaymentMethod ?? historySales[0].payment_method;
+        }
+      }
+
+      return {
+        id: row.id,
+        guest_label: row.guest_label ?? "Walk-in Guest",
+        booking_date: row.booking_date,
+        start_time: row.start_time,
+        room_number: row.room_number ?? null,
+        status: row.status,
+        created_at: row.created_at,
+        service_name: svc?.name ?? null,
+        therapist_name: thera?.name ?? null,
+        locker_number: resolvedLocker,
+        amount: resolvedAmount,
+        payment_method: resolvedPaymentMethod,
+      };
+    });
 
   return (
     <div className="p-8">

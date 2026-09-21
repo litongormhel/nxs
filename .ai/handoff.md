@@ -4,10 +4,27 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#4c9e2b1a` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#9f3e1b7c` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Exclude Upcoming and Unchecked-in Advance Bookings from Walk-in Guests Profile Tab — complete**
+  (`ohm#9f3e1b7c`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Audit & Status Filter (`app/(staff)/clients/page.tsx`)**:
+    - Computed `todayManila` via `Intl.DateTimeFormat` (`en-CA`, `Asia/Manila`, UTC+8, `YYYY-MM-DD`).
+    - Filtered `rawWalkIns` so that scheduled future bookings (`booking_date > todayManila`) and unlogged/un-checked-in advance bookings are excluded from the Walk-In tab.
+    - Verified check-in status: a walk-in booking is strictly included only if status is `completed`, `in_service`, or has an active/past `locker_occupancy` or `sales` record directly linked by `booking_id` (`row.locker_occupancy`, `occByBookingId[row.id]`, `row.sales`, `saleByBookingId[row.id]`).
+    - Excluded bookings with status `Booked`, `Needs Reassignment`, `Cancelled`, `No-show`, `confirmed`, or `pending` that have not checked in yet.
+    - Isolated per-booking check-in verification so cross-visit historical fallbacks do not mistakenly qualify upcoming bookings.
+  - **Verified History Counts & Grouping (`components/client-browser.tsx`)**:
+    - Added defensive filtering in `groupedWalkIns` aggregation, preventing uncompleted or un-checked-in bookings without lockers or payments from entering guest groups.
+    - Verified that `TOTAL VISITS` (`visitCount = sorted.length`) and `LAST VISIT DATE` (`sorted[0].booking_date`) strictly reflect actual past/completed visits.
+  - **Backward Compatibility**:
+    - Legitimate completed walk-in visits created via Quick Walk-in or Log Visit remain 100% visible with accurate locker assignments and payment formatting.
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors, 26 routes generated in 1102ms).
+  - **Next steps / References**: See [[clients_state]], `.ai/briefing.md`, and `walkthrough.md`.
 
 - **Fix Walk-In Guest History Click Action, Locker Resolution, and Zero Amount Formatting — complete**
   (`ohm#4c9e2b1a`, 2026-09-21).

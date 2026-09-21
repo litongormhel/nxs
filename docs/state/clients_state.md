@@ -2,6 +2,13 @@
 
 ## Implemented
 
+- **Exclude Upcoming and Unchecked-in Advance Bookings from Walk-in Guests Profile Tab (`ohm#9f3e1b7c`, 2026-09-21)**:
+  - Audited `rawWalkIns` query processing in `app/(staff)/clients/page.tsx` with respect to Philippine operating time (`Asia/Manila`, UTC+8).
+  - Excluded future scheduled booking dates (`booking_date > todayManila`) and unlogged/un-checked-in advance bookings from the **Walk-In Without Account** tab.
+  - A walk-in booking is strictly included only if status is `completed`, `in_service`, or has a direct `locker_occupancy` or `sales` record linked by `booking_id`. Bookings with status `Booked`, `Needs Reassignment`, `Cancelled`, `No-show`, `confirmed`, or `pending` that have not checked in yet are filtered out.
+  - Added defensive status and payment/locker checks in `groupedWalkIns` aggregation in `components/client-browser.tsx`, guaranteeing that `TOTAL VISITS` count (`visitCount`) and `LAST VISIT DATE` (`lastVisitDate`) strictly reflect actual past/completed visits.
+  - Preserved backward compatibility for all completed walk-in visits created via Quick Walk-in or Log Visit.
+
 - **Walk-In History Drawer, Locker Resolution & Zero Amount Formatting (`ohm#4c9e2b1a`, 2026-09-21)**:
   - Mounted interactive slide-over history drawer in `components/client-browser.tsx` for walk-in guests (`activeWalkInGroup`), triggered by clicking "View Past Stays →" or the guest table row.
   - Visit cards show: Visit #, Date, 12-hour Time, Service, Therapist, Massage Time, Room (`Room [Num]` or `None (Wet Area)`), Locker (`Locker [Num]` or `None`), Amount Paid & Payment Method, Status, and Booking ID. Adheres to semantic design tokens for light and dark modes.

@@ -291,6 +291,18 @@ export function ClientBrowser({
   const groupedWalkIns = useMemo(() => {
     const map = new Map<string, WalkInVisit[]>();
     for (const visit of walkInVisits) {
+      // Defensive filtering: ensure only completed, in-service, or verified checked-in visits are aggregated
+      const normStatus = (visit.status ?? "").trim().toLowerCase();
+      const isCompletedOrInService = normStatus === "completed" || normStatus === "in_service";
+      const hasLockerOrPayment = visit.locker_number != null || visit.amount != null;
+
+      if (!isCompletedOrInService && !hasLockerOrPayment) {
+        continue;
+      }
+      if ((normStatus === "cancelled" || normStatus === "no-show") && !hasLockerOrPayment) {
+        continue;
+      }
+
       const key = visit.guest_label.trim();
       const existing = map.get(key) ?? [];
       existing.push(visit);
@@ -299,6 +311,8 @@ export function ClientBrowser({
 
     const result: GroupedWalkIn[] = [];
     map.forEach((visits, codename) => {
+      if (visits.length === 0) return;
+
       const sorted = [...visits].sort((a, b) => {
         const dateA = new Date(`${a.booking_date}T${a.start_time || "00:00:00"}`).getTime();
         const dateB = new Date(`${b.booking_date}T${b.start_time || "00:00:00"}`).getTime();
