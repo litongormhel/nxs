@@ -142,7 +142,27 @@ export default async function ClientsPage() {
       .maybeSingle(),
     (supabase as any)
       .from("visit_claims")
-      .select("id, booking_id, target_client_id, requested_by_staff_id, reviewed_by_staff_id, points_to_credit, status, created_at, reviewed_at")
+      .select(`
+        id,
+        booking_id,
+        target_client_id,
+        requested_by_staff_id,
+        reviewed_by_staff_id,
+        points_to_credit,
+        status,
+        created_at,
+        reviewed_at,
+        bookings (
+          id,
+          guest_label,
+          booking_date,
+          start_time,
+          services ( name ),
+          therapists ( name ),
+          sales ( amount, payment_method, guest_label ),
+          locker_occupancy ( locker_number, guest_label )
+        )
+      `)
       .order("created_at", { ascending: false }),
   ]);
 
@@ -350,19 +370,48 @@ export default async function ClientsPage() {
     .map((c) => {
       const targetClient = (clients ?? []).find((cl) => cl.id === c.target_client_id);
       const staffMember = (staff ?? []).find((s) => s.id === c.requested_by_staff_id);
-      const rawBooking = ((rawWalkIns ?? []) as RawWalkInRow[]).find((b) => b.id === c.booking_id);
+      const joinedBooking = Array.isArray(c.bookings) ? c.bookings[0] : c.bookings;
+      const rawBooking = joinedBooking ?? ((rawWalkIns ?? []) as RawWalkInRow[]).find((b) => b.id === c.booking_id);
 
       const svc = Array.isArray(rawBooking?.services) ? rawBooking?.services[0] : rawBooking?.services;
       const thera = Array.isArray(rawBooking?.therapists) ? rawBooking?.therapists[0] : rawBooking?.therapists;
       const sale = Array.isArray(rawBooking?.sales) ? rawBooking?.sales[0] : rawBooking?.sales;
       const occ = Array.isArray(rawBooking?.locker_occupancy) ? rawBooking?.locker_occupancy[0] : rawBooking?.locker_occupancy;
+      const bookingOcc = Array.isArray(joinedBooking?.locker_occupancy) ? joinedBooking?.locker_occupancy[0] : joinedBooking?.locker_occupancy;
 
-      const resolvedLocker =
+      const guestKey = (
+        rawBooking?.guest_label ??
+        joinedBooking?.guest_label ??
+        sale?.guest_label ??
+        ""
+      ).trim().toLowerCase();
+
+      const resolvedGuestLabel =
+        joinedBooking?.guest_label ??
+        rawBooking?.guest_label ??
+        sale?.guest_label ??
+        rawWalkInSales?.find((s: any) => s.booking_id === c.booking_id)?.guest_label ??
+        allHistoricalOccupancy?.find((o: any) => o.booking_id === c.booking_id)?.guest_label ??
+        null;
+
+      let resolvedLocker =
+        bookingOcc?.locker_number ??
+        occ?.locker_number ??
         (rawBooking as any)?.locker_number ??
         (sale as any)?.locker_number ??
-        occ?.locker_number ??
         occByBookingId[c.booking_id] ??
         null;
+
+      if (resolvedLocker == null && guestKey && occByGuestLabel[guestKey]) {
+        const historyList = occByGuestLabel[guestKey];
+        const targetDate = rawBooking?.booking_date ?? joinedBooking?.booking_date;
+        const sameDate = historyList.find((h) => targetDate && h.checked_in_at?.startsWith(targetDate));
+        if (sameDate) {
+          resolvedLocker = sameDate.locker_number;
+        } else if (historyList.length > 0) {
+          resolvedLocker = historyList[0].locker_number;
+        }
+      }
 
       const resolvedAmount =
         sale?.amount != null
@@ -374,6 +423,8 @@ export default async function ClientsPage() {
         saleByBookingId[c.booking_id]?.payment_method ??
         null;
 
+      const codename = resolvedGuestLabel?.trim() || "Walk-in Guest";
+
       return {
         id: c.id,
         booking_id: c.booking_id,
@@ -381,6 +432,8 @@ export default async function ClientsPage() {
         target_client_codename: targetClient?.codename ?? "Unknown Member",
         target_client_username: targetClient?.username ?? "unknown",
         target_client_member_code: targetClient?.member_code ?? "",
+        walkin_codename: codename,
+        guest_label: resolvedGuestLabel?.trim() || null,
         points_to_credit: c.points_to_credit ?? 0,
         status: c.status,
         created_at: c.created_at,

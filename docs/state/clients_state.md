@@ -2,6 +2,22 @@
 
 ## Implemented
 
+- **Display Used Walk-in Codename in Pending Claims Details and Search (`ohm#2f7a9d4c`, 2026-09-21)**:
+  - **Server Data Query & Typings (`app/(staff)/clients/page.tsx`, `components/client-browser.tsx`)**:
+    - Updated `visit_claims` query to join `bookings` (`id, guest_label, booking_date, start_time, services(name), therapists(name), sales(amount, payment_method, guest_label), locker_occupancy(locker_number, guest_label)`).
+    - Resolved `guest_label` with cascading fallbacks across `joinedBooking`, `rawBooking`, `sales`, and `locker_occupancy`.
+    - Resolved `locker_number` via joined `locker_occupancy`, `rawBooking`, and historical `occByBookingId`.
+    - Added `walkin_codename: string | null` and `guest_label?: string | null` to `PendingClaim` and `PendingClaimRow` types.
+    - Mapped `walkin_codename` and `locker_number` onto all pending claims returned to `<ClientBrowser />`.
+  - **Client Browser UI & Search (`components/client-browser.tsx`)**:
+    - "ORIGINAL WALK-IN DETAILS" column in Pending Claims tab structured into 3 distinct visual tiers:
+      1. Top: Formatted date and 12-hour massage start time (`formatDisplayDate` & `formatTime`).
+      2. Middle: Prominently highlighted gold badge `Codename: {claim.walkin_codename ?? "Walk-in Guest"}` for verification against the target member.
+      3. Bottom: `Service • Therapist • Locker # • Amount (Payment Method)` with dark semantic tokens and strict null checks.
+    - Updated client-side search filter predicate in `filteredPendingClaims` to match on `walkin_codename` / `guest_label`. Staff can now filter pending claims directly by the guest codename used during the walk-in visit.
+    - Updated claims tab search input placeholder to `"Search claims by member, codename, staff, or service..."`.
+  - `npm run build` verified clean (0 errors).
+
 - **Pending Walk-in Visit Claims Tab with Staff Audit Trail and Approve All (`ohm#8f2b4c1a`, 2026-09-21)**:
   - **Database Schema & RLS (`supabase/migrations/20260921160000_past_visit_claims.sql`)**:
     - Created `public.visit_claims` table: `id` (PK, UUID), `booking_id` (FK `bookings`, unique), `target_client_id` (FK `clients`), `requested_by_staff_id` (FK `staff`), `reviewed_by_staff_id` (FK `staff`, nullable), `points_to_credit` (integer), `status` (`pending`, `approved`, `rejected`), `created_at`, `reviewed_at`.

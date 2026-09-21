@@ -20,6 +20,8 @@ export type PendingClaim = {
   target_client_codename: string;
   target_client_username: string;
   target_client_member_code: string;
+  walkin_codename: string | null;
+  guest_label?: string | null;
   points_to_credit: number;
   status: string;
   created_at: string;
@@ -32,6 +34,8 @@ export type PendingClaim = {
   amount: number | null;
   payment_method: string | null;
 };
+
+export type PendingClaimRow = PendingClaim;
 
 export type Client = {
   id: string;
@@ -476,6 +480,8 @@ export function ClientBrowser({
         c.target_client_codename.toLowerCase().includes(q) ||
         c.target_client_username.toLowerCase().includes(q) ||
         c.target_client_member_code.toLowerCase().includes(q) ||
+        (c.walkin_codename && c.walkin_codename.toLowerCase().includes(q)) ||
+        (c.guest_label && c.guest_label.toLowerCase().includes(q)) ||
         c.requested_by_staff_name.toLowerCase().includes(q) ||
         c.booking_date.includes(q) ||
         (c.service_name && c.service_name.toLowerCase().includes(q)) ||
@@ -707,7 +713,7 @@ export function ClientBrowser({
               ? "Search by codename, phone, or @username..."
               : activeTab === "walkins"
               ? "Search by guest codename (e.g. Wax, Marky) or date..."
-              : "Search claims by member, staff, or service..."
+              : "Search claims by member, codename, staff, or service..."
           }
           className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-4 text-sm text-foreground placeholder:text-muted focus:border-gold/50 focus:outline-none"
         />
@@ -1114,7 +1120,8 @@ export function ClientBrowser({
                           </td>
 
                           <td className="px-4 py-3 text-xs">
-                            <div className="space-y-0.5">
+                            <div className="space-y-1">
+                              {/* Top: Date & Time */}
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-foreground">
                                   {formatDisplayDate(claim.booking_date)}
@@ -1123,28 +1130,38 @@ export function ClientBrowser({
                                   {claim.start_time ? formatTime(claim.start_time) : "None (Wet Area)"}
                                 </span>
                               </div>
-                              <div className="text-muted text-[11px] flex flex-wrap gap-x-2">
+
+                              {/* Middle: Codename: [guest_label] */}
+                              <div className="flex items-center">
+                                <span className="inline-flex items-center gap-1 rounded bg-gold/10 border border-gold/30 px-1.5 py-0.5 font-semibold text-gold text-[11px]">
+                                  Codename: {claim.walkin_codename ?? "Walk-in Guest"}
+                                </span>
+                              </div>
+
+                              {/* Bottom: Service • Therapist • Locker # • Amount (Payment Method) */}
+                              <div className="text-muted text-[11px] flex flex-wrap items-center gap-x-2">
                                 <span>{claim.service_name ?? "Wet Area"}</span>
                                 <span>•</span>
                                 <span>Therapist: {claim.therapist_name ?? "Unassigned"}</span>
                                 {claim.locker_number != null && (
                                   <>
                                     <span>•</span>
-                                    <span className="text-gold">Locker {claim.locker_number}</span>
+                                    <span className="text-gold font-mono">Locker {claim.locker_number}</span>
                                   </>
                                 )}
-                              </div>
-                              <div className="text-[11px] font-medium text-foreground">
-                                {claim.amount != null ? (
-                                  <span>
-                                    ₱{Number(claim.amount).toLocaleString()}{" "}
-                                    {claim.payment_method && (
-                                      <span className="text-muted text-[10px]">({claim.payment_method})</span>
-                                    )}
-                                  </span>
-                                ) : (
-                                  <span className="text-muted italic">—</span>
-                                )}
+                                <span>•</span>
+                                <span className="font-medium text-foreground">
+                                  {claim.amount != null ? (
+                                    <span>
+                                      ₱{Number(claim.amount).toLocaleString()}{" "}
+                                      {claim.payment_method && (
+                                        <span className="text-muted text-[10px]">({claim.payment_method})</span>
+                                      )}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted italic">—</span>
+                                  )}
+                                </span>
                               </div>
                             </div>
                           </td>

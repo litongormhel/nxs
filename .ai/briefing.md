@@ -81,39 +81,37 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-21 — Implement Pending Walk-in Visit Claims Tab with Staff Audit Trail and Approve All**
+1. **2026-09-21 — Display Used Walk-in Codename in Pending Claims Details and Search**
+   (`ohm#2f7a9d4c`). Implementation plan presented and approved before code execution.
+   - **Data Query & Typings (`app/(staff)/clients/page.tsx`, `components/client-browser.tsx`)**: Extended `visit_claims` query to join `bookings` (`guest_label`, `locker_occupancy`, `services`, `therapists`, `sales`). Resolved `guest_label` with cascading fallbacks to `rawWalkIns`, `sales`, and `allHistoricalOccupancy`. Extended `PendingClaim` and `PendingClaimRow` types with `walkin_codename: string | null` and `guest_label?: string | null`. Mapped `walkin_codename` and `locker_number` onto all pending claims.
+   - **Pending Claims UI & Search (`components/client-browser.tsx`)**: In the Pending Claims tab table, redesigned the "ORIGINAL WALK-IN DETAILS" column into a clean 3-tier layout: (1) Top: Date & 12-hour Time, (2) Middle: highlighted gold badge `Codename: {claim.walkin_codename ?? "Walk-in Guest"}`, and (3) Bottom: Service • Therapist • Locker # (if available) • Amount (Payment Method). Included `walkin_codename` in `filteredPendingClaims` client-side search predicate and updated the search placeholder.
+   - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
+
+2. **2026-09-21 — Implement Pending Walk-in Visit Claims Tab with Staff Audit Trail and Approve All**
    (`ohm#8f2b4c1a`). Implementation plan presented and approved before code execution.
    - **Database & Schema (`supabase/migrations/20260921160000_past_visit_claims.sql`)**: Created table `public.visit_claims` with `booking_id` (unique, FK bookings), `target_client_id` (FK clients), `requested_by_staff_id` (FK staff), `reviewed_by_staff_id` (FK staff), `points_to_credit`, `status` (`pending`, `approved`, `rejected`), and audit timestamps. Added idempotent RLS policies (`staff_select` & `staff_insert` for `is_staff()`, `supervisor_update` for `is_supervisor_or_above()`).
    - **Server Actions (`app/(staff)/clients/actions.ts`)**: Added `requestWalkinClaim` to compute loyalty points based on `app_settings` and record initiating staff ID. Added `approveWalkinClaim` (Owner/Supervisor only) atomically linking `bookings`, `sales`, and `locker_occupancy`, inserting `EARN` ledger entry in `point_transactions`, and updating claim status to `approved`. Added `approveAllWalkinClaims` for batch execution and `rejectWalkinClaim` to restore visit to available walk-in pool.
    - **Queries & Component (`app/(staff)/clients/page.tsx`, `components/client-browser.tsx`)**: Excluded pending claim bookings from "Walk-In Without Account" tab. Added "Claim Past Walk-in Visit" modal to Member Details drawer with live points preview. Added third tab "Pending Claims (count)" with staff audit trail display (`Requested by: [Staff Name] on [Date/Time]`), single-click `[Approve]` and `[Reject]` (no modal), and "Approve All" confirmation modal.
    - `npm run build` clean (0 errors). See [[clients_state]] and `.ai/handoff.md`.
 
-2. **2026-09-21 — Add Resilient Fallback for quick_walkin RPC Parameter Signature**
+3. **2026-09-21 — Add Resilient Fallback for quick_walkin RPC Parameter Signature**
    (`ohm#1c4e9a7b`). Implementation plan presented and approved before code execution.
    - **Server Actions (`app/(staff)/bookings/actions.ts`)**: In `quickWalkin`, wrapped `supabase.rpc("quick_walkin", ...)` execution in an adaptive retry block. If PostgREST returns a function signature mismatch or schema cache error (`PGRST202` or error message referencing `p_notes` / `Could not find the function` / `schema cache`), automatically falls back to invoking `quick_walkin` without `p_notes`.
    - **Post-Creation Notes Update (`app/(staff)/bookings/actions.ts`)**: On successful creation returning `booking_id`, updates `bookings.notes` via `.update({ notes: input.notes.trim() }).eq("id", bookingId)` wrapped in safe `try...catch` logging warnings without blocking counter operations if column is missing.
    - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-21 — Add sms_confirmation_template Column to app_settings and Fix Variable Typo**
+4. **2026-09-21 — Add sms_confirmation_template Column to app_settings and Fix Variable Typo**
    (`ohm#5e9a2b7c`). Implementation plan presented and approved before code execution.
    - **Database & Schema (`supabase/migrations/20260921150000_add_sms_confirmation_template.sql`)**: Added nullable `sms_confirmation_template text` column to `public.app_settings` (`if not exists`). Ensured `app_settings_update` RLS policy permits `is_supervisor_or_above()`. Executed `NOTIFY pgrst, 'reload schema';` to refresh PostgREST schema cache.
    - **Server Actions (`app/(staff)/settings/actions.ts`)**: Updated `updateSmsTemplate` (and exported `saveSmsTemplate` alias) and `resetSmsTemplate` to initialize Supabase via `createServiceClient()` with fallback to `createClient()`. Added automatic fallback retry using service client on RLS failure. Added defensive error handling that gracefully intercepts missing column errors (`42703`, `PGRST204`, or schema cache errors) and returns clear, human-readable instructions.
    - **Settings UI (`components/settings-browser.tsx`)**: Added `normalizeSmsVariables` helper replacing all occurrences of typo `{room_numner}` with `{room_number}`. Initialized state with sanitized template copy, sanitized template text prior to saving in `handleSaveSmsTemplate`, ensured variable pills insertion cleanly inserts `{room_number}`, and updated reset handler to restore `{room_number}` cleanly.
    - `npm run build` clean (0 errors). See [[settings_state]] and `.ai/handoff.md`.
 
-4. **2026-09-21 — Fix Empty Bookings Table After Adding Notes Column**
+5. **2026-09-21 — Fix Empty Bookings Table After Adding Notes Column**
    (`ohm#7d2a9b4c`). Implementation plan presented and approved before code execution.
    - **Diagnosis & Root Cause**: Migration `supabase/migrations/20260921140000_add_bookings_notes.sql` was not executed on the live database, causing queries selecting `notes` on `public.bookings` to fail with Postgres error `42703` (`column bookings.notes does not exist`). Silent failure previously defaulted `bookingsData` to null/empty, causing 0 bookings to render across all tabs (Upcoming, Check-in, Check-out).
    - **Client Component Resilient Fallback (`components/booking-browser.tsx`)**: Captured query error via `bookingsRes.error` and logged via `console.error`. Added automatic fallback query retrying without `notes` if error `42703` or column missing error is encountered. Immediately restored visibility of all 18 active bookings for `09/21/2026` across Upcoming (3), Check-in (11), and Check-out (4) tabs.
    - **Server Component Resilient Fallback (`app/(staff)/bookings/page.tsx`)**: Captured `flaggedError` and `activeBookingsError`. Implemented automatic fallback queries without `notes` for `effectiveFlaggedStatus` and `effectiveActiveBookings`, ensuring `<ReassignmentPanel />` and `<BookingBrowser />` receive full booking lists without crashing or dropping rows.
-   - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
-
-5. **2026-09-21 — Add Session Notes / Vehicle Info to Bookings and Display in Table**
-   (`ohm#4a7b1c3e`). Implementation plan presented and approved before code execution.
-   - **Database & Schema (`supabase/migrations/20260921140000_add_bookings_notes.sql`)**: Added nullable `notes text` column to `public.bookings`. Updated `public.quick_walkin(...)` function signature to accept `p_notes text default null`, populating `bookings.notes` on atomic walk-in creation. Reloaded PostgREST schema cache.
-   - **Server Actions (`app/(staff)/bookings/actions.ts`)**: Updated `createBooking`, `quickWalkin`, and `logVisitBooking` inputs to accept `notes?: string | null` and persist `notes: input.notes?.trim() || null` across all booking creation and check-in paths (including active locker reuse and RPC execution). Included `notes` in day bookings queries in `app/(staff)/bookings/page.tsx`.
-   - **Input Fields in Modals (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`, `components/log-visit-modal.tsx`)**: Added optional input field "Notes / Vehicle Info (optional)" with placeholder "e.g. Vios ABC-123 blocking slot 2" across Quick Walk-in, New Booking, and Log Visit modals. Initialized and synced notes when selecting open bookings.
-   - **Bookings Table Display (`components/booking-browser.tsx`)**: In the CLIENT column across tabs (Upcoming, Check-in, Check-out), render gold note badge `<div className="mt-1 flex items-center gap-1 text-[11px] text-accent-gold/90 bg-accent-gold/10 border border-accent-gold/20 rounded px-1.5 py-0.5 max-w-fit">🚗 {row.notes}</div>` underneath the client name when `row.notes && row.notes.trim() !== ''`. When notes are empty, null, or undefined, strictly renders nothing to maintain compact row height.
    - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
 
 

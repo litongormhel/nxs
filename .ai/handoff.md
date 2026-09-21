@@ -4,10 +4,30 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#8f2b4c1a` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#2f7a9d4c` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Display Used Walk-in Codename in Pending Claims Details and Search — complete**
+  (`ohm#2f7a9d4c`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Server Data Query & Typings (`app/(staff)/clients/page.tsx`, `components/client-browser.tsx`)**:
+    - In `app/(staff)/clients/page.tsx`, enhanced the `visit_claims` query to join `bookings` (`id`, `guest_label`, `booking_date`, `start_time`, `services(name)`, `therapists(name)`, `sales(amount, payment_method, guest_label)`, `locker_occupancy(locker_number, guest_label)`).
+    - Resolved `guest_label` with cascading fallbacks (`joinedBooking.guest_label` -> `rawBooking.guest_label` -> `sale.guest_label` -> `rawWalkInSales` -> `allHistoricalOccupancy`).
+    - Resolved `locker_number` via joined `locker_occupancy`, `rawBooking`, `sale`, and `occByBookingId`.
+    - Extended `PendingClaim` and `PendingClaimRow` types with `walkin_codename: string | null` and `guest_label?: string | null`.
+    - Mapped `walkin_codename: resolvedGuestLabel?.trim() || "Walk-in Guest"` and `locker_number` onto all `pendingClaims` items.
+  - **Client Browser UI & Search (`components/client-browser.tsx`)**:
+    - In the Pending Claims tab table, redesigned the "ORIGINAL WALK-IN DETAILS" cell into a clear 3-tier hierarchy:
+      - Top: Formatted date & 12-hour time (`formatDisplayDate(claim.booking_date)` & `formatTime(claim.start_time)` or `"None (Wet Area)"`).
+      - Middle: Highlighted gold pill badge `Codename: {claim.walkin_codename ?? "Walk-in Guest"}`.
+      - Bottom: `Service • Therapist • Locker # • Amount (Payment Method)` with dark semantic tokens and strict null/undefined formatting.
+    - Updated `filteredPendingClaims` client-side search predicate to check `c.walkin_codename` and `c.guest_label`, allowing staff to search pending claims by the guest codename used during the walk-in visit.
+    - Updated claims search placeholder to `"Search claims by member, codename, staff, or service..."`.
+  - **Tests & Verification**:
+    - `npm run build` passed clean (0 compilation errors, 26 routes generated).
+
 
 - **Implement Pending Walk-in Visit Claims Tab with Staff Audit Trail and Approve All — complete**
   (`ohm#8f2b4c1a`, 2026-09-21).
