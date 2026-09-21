@@ -80,6 +80,7 @@ export type Database = {
           id: boolean
           loyalty_formula_mode: string | null
           peso_per_point: number | null
+          sms_confirmation_template: string | null
           void_auth_code_hash: string | null
         }
         Insert: {
@@ -87,6 +88,7 @@ export type Database = {
           id?: boolean
           loyalty_formula_mode?: string | null
           peso_per_point?: number | null
+          sms_confirmation_template?: string | null
           void_auth_code_hash?: string | null
         }
         Update: {
@@ -94,6 +96,7 @@ export type Database = {
           id?: boolean
           loyalty_formula_mode?: string | null
           peso_per_point?: number | null
+          sms_confirmation_template?: string | null
           void_auth_code_hash?: string | null
         }
         Relationships: []

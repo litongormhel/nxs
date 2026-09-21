@@ -168,11 +168,13 @@
     `QuickWalkinModal` updated locker options mapping to render all lockers without filtering occupied ones out. Occupied lockers are rendered with `disabled` attribute and text `Locker {n} — Occupied` with `text-muted` styling. Default option formatted as `— select locker —`. Added validation in `canSubmit` and `handleSubmit` ensuring selected locker is strictly unoccupied.
 - `components/sms-preview-modal.tsx` — shown after a successful New
   Booking for a registered client (`client_id` not null). Editable
-  textarea pre-filled with **placeholder** copy (no locked SMS format
-  existed anywhere in this repo — confirmed with the user rather than
-  invented) using the service's non-discounted `price`. No SMS gateway is
-  wired into this repo — this is a compose/preview + copy-to-clipboard
-  step only, not a real send.
+  textarea pre-filled with the active customized SMS template from Settings
+  (or default official Nexus Spa copy: `DEFAULT_SMS_TEMPLATE` from
+  `lib/bookings/sms.ts`, `ohm#4f8e1b2d`) interpolated dynamically with
+  `{booking_date}`, `{client_name}`, `{slot_time}`, `{therapist_name}`,
+  `{service_name}`, and `{amount}`. No SMS gateway is wired into this
+  repo — this is a compose/preview + copy-to-clipboard step only, not a
+  real send. Staff retain full textarea editability before copying.
 - `app/bookings/actions.ts` — `createBooking(input)` server action for
   **New Booking** (now allows nullable `therapistId` and `roomNumber` for
   services like Wet Area and passes `promo_id`/`pax_count`), and

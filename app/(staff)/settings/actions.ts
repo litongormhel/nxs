@@ -269,6 +269,45 @@ export async function updateLoyaltyFormula(
   return { ok: true };
 }
 
+// ---------- SMS Confirmation Template ----------
+
+export async function updateSmsTemplate(
+  template: string,
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("app_settings")
+    .update({ sms_confirmation_template: template })
+    .eq("id", true);
+  if (error) return fail(error);
+  await logAction(
+    supabase,
+    staffId,
+    "settings_update_sms_template",
+    "updated sms confirmation template"
+  );
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+export async function resetSmsTemplate(staffId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("app_settings")
+    .update({ sms_confirmation_template: null })
+    .eq("id", true);
+  if (error) return fail(error);
+  await logAction(
+    supabase,
+    staffId,
+    "settings_reset_sms_template",
+    "reset sms confirmation template to default"
+  );
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
 // ---------- Void Authorization Code ----------
 
 export async function updateVoidAuthCode(code: string, staffId: string): Promise<ActionResult> {

@@ -4,10 +4,35 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#8b2f4c1e` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#4f8e1b2d` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Implement Customizable SMS Confirmation Template in Settings with Official Nexus Spa Copy — complete**
+  (`ohm#4f8e1b2d`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Official Default Template & Variable Helper (`lib/bookings/sms.ts`)**:
+    - Established official Nexus Spa confirmation copy as system fallback/default (`DEFAULT_SMS_TEMPLATE`).
+    - Configured documented variables list (`SMS_TEMPLATE_VARIABLES`): `{booking_date}`, `{client_name}`, `{slot_time}`, `{therapist_name}`, `{service_name}` (optional), and `{amount}` (optional).
+    - Built pure function `interpolateSmsTemplate(template, data)` supporting seamless placeholder interpolation with safe fallbacks for unassigned therapists (`—`) and formatted currencies.
+  - **Settings Management UI (`app/(staff)/settings/page.tsx`, `components/settings-browser.tsx`)**:
+    - Added "SMS Confirmation Template" management card under the General tab in Settings.
+    - Features multiline monospace textarea with responsive height (`rows={11}`).
+    - Added clickable variable chips row that inserts placeholder tokens at the current cursor position in the textarea without losing focus.
+    - Added "Save Template" (commits to `app_settings` via `updateSmsTemplate`) and "Reset to Default" (reverts textarea to `DEFAULT_SMS_TEMPLATE` and calls `resetSmsTemplate`).
+    - Gated editing to Supervisor or Owner roles (`canEditCatalog`), rendering read-only textarea and omitting action buttons for Front Desk.
+    - Wired toast feedback (`showToast`) on save and reset.
+  - **Database Persistence & Server Actions (`app/(staff)/settings/actions.ts`, `supabase/migrations/20260921100000_app_settings_sms_template.sql`, `lib/types/database.ts`)**:
+    - Created migration adding `sms_confirmation_template text` column to `public.app_settings` singleton and updating `app_settings_update` RLS policy to `is_supervisor_or_above()`.
+    - Exported server actions `updateSmsTemplate(template, staffId)` and `resetSmsTemplate(staffId)` with action logging to `action_logs` (`settings_update_sms_template`, `settings_reset_sms_template`) and `revalidatePath("/settings")`.
+    - Implemented cascading fallback query in `app/(staff)/settings/page.tsx` ensuring backwards compatibility if the column is pending in local mock DBs.
+  - **SMS Preview Integration (`components/booking-form-modal.tsx`, `components/sms-preview-modal.tsx`)**:
+    - `BookingFormModal` queries active `sms_confirmation_template` from `app_settings` on mount (defaulting to `DEFAULT_SMS_TEMPLATE`).
+    - When creating an advance booking for registered clients, dynamically interpolates the active template with resolved client codename, booking date, formatted time slot, assigned therapist name, service, and amount.
+    - Updated `SmsPreviewModal` to accept `initialMessage` prop and expanded textarea to 11 rows with monospace styling, retaining full user editability before clicking "Copy".
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors, 26 routes generated in 4.0s).
+  - **Next steps / References**: See [[settings_state]], [[bookings_state]], and `.ai/briefing.md`.
 
 - **Add Context-Rich Success Toast Notifications for Bookings Creation — complete**
   (`ohm#8b2f4c1e`, 2026-09-21).

@@ -1,21 +1,11 @@
 "use client";
 
 import { useState } from "react";
-
-// TEMP: placeholder SMS copy pending locked format — no SMS gateway is wired
-// into this repo yet, so this is a compose/preview step only, not a real send.
-function buildPlaceholderMessage(booking: {
-  codename: string;
-  serviceName: string;
-  price: number;
-  date: string;
-  startTime: string;
-}): string {
-  return `Hi ${booking.codename}, your ${booking.serviceName} booking is confirmed for ${booking.date} at ${booking.startTime}. Amount: ₱${booking.price}. See you soon!`;
-}
+import { DEFAULT_SMS_TEMPLATE, interpolateSmsTemplate } from "@/lib/bookings/sms";
 
 export function SmsPreviewModal({
   booking,
+  initialMessage,
   onClose,
 }: {
   booking: {
@@ -24,28 +14,39 @@ export function SmsPreviewModal({
     price: number;
     date: string;
     startTime: string;
+    therapistName?: string | null;
   };
+  initialMessage?: string;
   onClose: () => void;
 }) {
-  const [text, setText] = useState(buildPlaceholderMessage(booking));
+  const [text, setText] = useState(() => {
+    if (initialMessage) return initialMessage;
+    return interpolateSmsTemplate(DEFAULT_SMS_TEMPLATE, {
+      booking_date: booking.date,
+      client_name: booking.codename,
+      slot_time: booking.startTime,
+      therapist_name: booking.therapistName ?? "—",
+      service_name: booking.serviceName,
+      amount: booking.price,
+    });
+  });
   const [copied, setCopied] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-lg border border-border bg-surface p-6">
-        <h2 className="text-sm font-medium text-muted uppercase tracking-wide">
-          SMS Preview
+      <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-6 shadow-2xl">
+        <h2 className="text-sm font-semibold text-accent-gold uppercase tracking-wider">
+          SMS Booking Confirmation Preview
         </h2>
         <p className="mt-1 text-xs text-muted">
-          Booking created. No SMS gateway is configured yet — edit below, then
-          copy and send manually.
+          Review or edit the confirmation message below before copying to send to the client.
         </p>
 
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          rows={4}
-          className="mt-4 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+          rows={11}
+          className="mt-4 w-full rounded-lg border border-border bg-background px-3.5 py-2.5 font-mono text-[12px] leading-relaxed text-foreground focus:border-gold outline-none resize-y"
         />
 
         <div className="mt-6 flex justify-end gap-3">

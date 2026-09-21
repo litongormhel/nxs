@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useStaffSim } from "@/lib/staff-context";
 import {
@@ -18,12 +18,15 @@ import {
   deleteAddon,
   addLockers,
   updateRoomCount,
+  updateSmsTemplate,
+  resetSmsTemplate,
 } from "@/app/(staff)/settings/actions";
 import { compareSlotTimes } from "@/lib/bookings/slots";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useTheme } from "@/lib/theme-context";
 import { LoyaltyFormulaSettings } from "@/components/loyalty-formula-settings";
 import { VoidAuthCodeSettings } from "@/components/void-auth-code-settings";
+import { DEFAULT_SMS_TEMPLATE, SMS_TEMPLATE_VARIABLES } from "@/lib/bookings/sms";
 
 export type Service = {
   id: string;
@@ -92,6 +95,7 @@ export function SettingsBrowser({
   initialLoyaltyFormulaMode,
   initialPesoPerPoint,
   initialVoidAuthCodeConfigured,
+  initialSmsTemplate,
 }: {
   initialServices: Service[];
   initialPromos: Promo[];
@@ -103,6 +107,7 @@ export function SettingsBrowser({
   initialLoyaltyFormulaMode: "uniform" | "proportional" | null;
   initialPesoPerPoint: number | null;
   initialVoidAuthCodeConfigured: boolean;
+  initialSmsTemplate?: string | null;
 }) {
   const router = useRouter();
 
@@ -154,6 +159,21 @@ export function SettingsBrowser({
   const [roomCountDraft, setRoomCountDraft] = useState<number>(
     initialRoomsCount || 18
   );
+
+  // SMS Template states
+  const [smsTemplate, setSmsTemplate] = useState<string>(
+    initialSmsTemplate ?? DEFAULT_SMS_TEMPLATE
+  );
+  const [savedSmsTemplate, setSavedSmsTemplate] = useState<string>(
+    initialSmsTemplate ?? DEFAULT_SMS_TEMPLATE
+  );
+  const [isSavingSms, setIsSavingSms] = useState(false);
+  const smsTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const isSmsDirty = smsTemplate !== savedSmsTemplate;
+  const isDefaultSms =
+    smsTemplate.trim() === DEFAULT_SMS_TEMPLATE.trim() &&
+    savedSmsTemplate.trim() === DEFAULT_SMS_TEMPLATE.trim();
 
   // Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -513,6 +533,50 @@ export function SettingsBrowser({
     router.refresh();
   };
 
+  const handleInsertVariable = (variableKey: string) => {
+    if (!smsTextareaRef.current) {
+      setSmsTemplate((prev) => prev + variableKey);
+      return;
+    }
+    const textarea = smsTextareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const val = textarea.value;
+    const newVal = val.substring(0, start) + variableKey + val.substring(end);
+    setSmsTemplate(newVal);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + variableKey.length, start + variableKey.length);
+    }, 0);
+  };
+
+  const handleSaveSmsTemplate = async () => {
+    setIsSavingSms(true);
+    const res = await updateSmsTemplate(smsTemplate, selectedStaffId);
+    setIsSavingSms(false);
+    if (!res.ok) {
+      showToast(`Failed to save SMS template: ${res.error}`);
+      return;
+    }
+    setSavedSmsTemplate(smsTemplate);
+    showToast("SMS confirmation template saved successfully");
+    router.refresh();
+  };
+
+  const handleResetSmsTemplate = async () => {
+    setIsSavingSms(true);
+    const res = await resetSmsTemplate(selectedStaffId);
+    setIsSavingSms(false);
+    if (!res.ok) {
+      showToast(`Failed to reset SMS template: ${res.error}`);
+      return;
+    }
+    setSmsTemplate(DEFAULT_SMS_TEMPLATE);
+    setSavedSmsTemplate(DEFAULT_SMS_TEMPLATE);
+    showToast("SMS confirmation template reset to default");
+    router.refresh();
+  };
+
   return (
     <div className="max-w-4xl space-y-6">
       <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -621,6 +685,75 @@ export function SettingsBrowser({
               </div>
             </div>
             <span className="text-[10.5px] text-muted">Signed in</span>
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION: SMS Confirmation Template */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2.5">
+          <div className="text-[10.5px] font-bold tracking-[0.13em] uppercase text-muted">
+            SMS Confirmation Template
+          </div>
+          {canEditCatalog && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleResetSmsTemplate}
+                disabled={isSavingSms || isDefaultSms}
+                className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-muted hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Reset to Default
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveSmsTemplate}
+                disabled={isSavingSms || !isSmsDirty}
+                className="rounded-lg bg-gold px-3 py-1.5 text-[11px] font-bold text-black hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                {isSavingSms ? "Saving..." : "Save Template"}
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="text-[11px] text-muted mb-3">
+          {canEditCatalog
+            ? "Configure the official SMS booking confirmation copy sent to registered clients. Click placeholder chips to insert them into your message."
+            : "Read-only for Front Desk. Only Supervisor or Owner roles can edit."}
+        </div>
+
+        <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
+          <div>
+            <div className="text-[11px] font-semibold text-foreground mb-1.5">
+              Available Variables <span className="text-muted font-normal">(click to insert at cursor)</span>:
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {SMS_TEMPLATE_VARIABLES.map((v) => (
+                <button
+                  key={v.key}
+                  type="button"
+                  disabled={!canEditCatalog}
+                  onClick={() => handleInsertVariable(v.key)}
+                  title={v.description}
+                  className="rounded-md border border-border bg-surface-2 px-2.5 py-1 font-mono text-[11px] text-accent-gold hover:border-gold/60 transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {v.label}
+                  {v.isOptional && <span className="ml-1 text-[9.5px] text-muted font-sans">(optional)</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <textarea
+              ref={smsTextareaRef}
+              rows={11}
+              disabled={!canEditCatalog}
+              value={smsTemplate}
+              onChange={(e) => setSmsTemplate(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3.5 py-2.5 font-mono text-[12px] text-foreground focus:border-gold outline-none disabled:opacity-60 disabled:cursor-not-allowed leading-relaxed resize-y"
+              placeholder={DEFAULT_SMS_TEMPLATE}
+            />
           </div>
         </div>
       </div>

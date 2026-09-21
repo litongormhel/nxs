@@ -8,6 +8,7 @@ import { slotsOverlap, isSlotPastGracePeriod } from "@/lib/bookings/slots";
 import { spaDayNow } from "@/lib/analytics/spa-day";
 import { SmsPreviewModal } from "@/components/sms-preview-modal";
 import { ClientCombobox } from "@/components/client-combobox";
+import { DEFAULT_SMS_TEMPLATE, interpolateSmsTemplate } from "@/lib/bookings/sms";
 import type { Client, Service, Staff, Therapist } from "@/components/booking-browser";
 import type { Database } from "@/lib/types/database";
 
@@ -155,12 +156,15 @@ export function BookingFormModal({
   const [therapistServicesMap, setTherapistServicesMap] = useState<Map<string, Set<string>>>(new Map());
   const [servicesLoaded, setServicesLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeSmsTemplate, setActiveSmsTemplate] = useState<string>(DEFAULT_SMS_TEMPLATE);
   const [smsBooking, setSmsBooking] = useState<{
     codename: string;
     price: number;
     serviceName: string;
     date: string;
     startTime: string;
+    therapistName?: string | null;
+    message?: string;
   } | null>(null);
   const [pendingSuccessToast, setPendingSuccessToast] = useState<{
     title: string;
@@ -172,6 +176,20 @@ export function BookingFormModal({
   const [clientBookings, setClientBookings] = useState<
     Array<{ client_id: string | null; guest_label: string | null; start_time: string }>
   >([]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("app_settings")
+      .select("sms_confirmation_template")
+      .eq("id", true)
+      .maybeSingle()
+      .then(({ data, error: err }) => {
+        if (!err && data?.sms_confirmation_template) {
+          setActiveSmsTemplate(data.sms_confirmation_template);
+        }
+      });
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -531,12 +549,23 @@ export function BookingFormModal({
 
       if (!isWalkIn && selectedClient && selectedService) {
         setPendingSuccessToast(successToastData);
+        const interpolated = interpolateSmsTemplate(activeSmsTemplate, {
+          booking_date: date,
+          client_name: selectedClient.codename,
+          slot_time: formattedSlot || time,
+          therapist_name: resolvedTherapistName ?? "—",
+          service_name: selectedService.name,
+          amount: selectedService.price,
+        });
+
         setSmsBooking({
           codename: selectedClient.codename,
           price: selectedService.price,
           serviceName: selectedService.name,
           date,
-          startTime: time,
+          startTime: formattedSlot || time,
+          therapistName: resolvedTherapistName,
+          message: interpolated,
         });
         return;
       }
@@ -550,6 +579,7 @@ export function BookingFormModal({
     return (
       <SmsPreviewModal
         booking={smsBooking}
+        initialMessage={smsBooking.message}
         onClose={() => {
           setSmsBooking(null);
           if (pendingSuccessToast) {
