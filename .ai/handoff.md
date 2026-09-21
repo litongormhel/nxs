@@ -4,10 +4,27 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#7d3e2a8f` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#3d7b9a2e` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Remove 11:00 AM Slot and Align Filter Pills with Settings Weekend/Weekday Time Slots — complete**
+  (`ohm#3d7b9a2e`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Root Cause Identified (`components/booking-browser.tsx`)**:
+    - The `availableSlots` memoization union'd two sources: the configured `timeSlots` prop (from `weekend_slots` DB table) **and** every `dayBookings[].start_time` from the day's live booking data.
+    - A real booking in the DB with `start_time = '11:00'` (11:00 AM — outside spa operating hours, legacy data) was being promoted to a filter pill. No hardcoded `11:00` exists in any `.ts`/`.tsx` source file.
+  - **Fix (`components/booking-browser.tsx`)**:
+    - Removed the `dayBookings` loop from the `availableSlots` memo. Filter pills now reflect only the configured time slots from `weekend_slots` (i.e., what is explicitly set in Settings).
+    - Added explanatory comment documenting why the dayBookings union was removed.
+    - `timeSlots` prop was already dynamically sourced from `weekend_slots` in the page server component — no change to sourcing.
+  - **No other changes required**:
+    - `booking-form-modal.tsx` — already receives `timeSlots` as a prop; no union bug; untouched.
+    - `app/(staff)/bookings/page.tsx` — already queries `weekend_slots` and passes as `timeSlots`; untouched.
+    - `docs/state/bookings_state.md` — surgically updated under `ohm#bookingfilterbar`.
+  - **Tests & Verification**:
+    - `npm run build` verified clean (0 compilation errors, 26 routes generated).
 
 - **Fix SMS Template Save Error and Add Optional Room Variable — complete**
   (`ohm#7d3e2a8f`, 2026-09-21).

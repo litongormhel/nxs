@@ -255,12 +255,13 @@ export function BookingBrowser({
     [dayBookings]
   );
 
+  // Filter pills reflect only configured timeSlots (from weekend_slots in Settings).
+  // Booking start_time values are intentionally excluded — merging them caused stray
+  // pills for any booking whose start_time falls outside the configured slot grid
+  // (e.g. legacy rows with 11:00 AM).
   const availableSlots = useMemo(() => {
-    const set = new Set<string>();
-    for (const s of timeSlots) if (s) set.add(s.slice(0, 5));
-    for (const b of dayBookings) if (b.start_time) set.add(b.start_time.slice(0, 5));
-    return sortSlotTimes(Array.from(set));
-  }, [timeSlots, dayBookings]);
+    return sortSlotTimes(timeSlots.filter(Boolean).map((s) => s.slice(0, 5)));
+  }, [timeSlots]);
 
   const rowsForTab = tab === "upcoming" ? upcomingRows : tab === "checkin" ? checkinRows : checkoutRows;
 
