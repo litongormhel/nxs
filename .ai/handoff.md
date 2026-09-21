@@ -4,10 +4,31 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#5c1a8d2e` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#9d3b7e1a` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Add Confirmation Modal for Weekly Days Off and Services Offered Changes — complete**
+  (`ohm#9d3b7e1a`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Badge Click Interception (`components/therapist-browser.tsx`, `components/therapist-card.tsx`)**:
+    - Replaced direct mutation execution with confirmation modal interception for both weekly day-off pills (`Sun`–`Sat`) and services-offered pills (`Combi Massage`, `Signature Massage`, `Scrub`).
+    - Added `FULL_WEEKDAYS` map and `BadgeConfirmState` tracking `{ type: "day_off" | "service", therapist: string, target: string, action: "add" | "remove" }`.
+    - Refactored `TherapistBrowser` click dispatchers to `handleRequestToggleDayOff` and `handleRequestToggleService` which set `badgeConfirm`.
+    - Enhanced tooltip descriptions on `TherapistCard` day-off and service badges to clearly reflect the action (`Add/Remove ... as/from weekly days off`, `Add/Remove ... to/from services offered`).
+  - **Confirmation Modal UX & Theme Parity (`components/therapist-browser.tsx`)**:
+    - Designed modal conforming to semantic design system tokens (`bg-surface`, `bg-surface-2`, `border-border`, `text-foreground`, `text-muted`, `bg-gold`, `bg-accent-red`, `bg-accent-green`).
+    - Explicitly displays therapist name, target action description:
+      - Day off: `"Add Wednesday as weekly day off"` / `"Remove Wednesday from weekly days off"`.
+      - Service: `"Add Scrub to services offered"` / `"Remove Scrub from services offered"`.
+    - Added explicit warning notice when adding a weekly day off that upcoming bookings for that weekday will be flagged as `Needs Reassignment`.
+  - **Guarded Mutation Execution**:
+    - Network calls (`toggleDayOff`, `toggleTherapistService`) are executed strictly upon clicking "Confirm", accompanied by double-submission protection (`isSubmittingBadge`).
+    - Dismissing the modal (via "Cancel" or backdrop click) cleanly clears modal state without firing any network requests or mutating local state.
+    - On confirmation: updates local `therapistMeta` state, triggers `router.refresh()` for service joins, presents toast confirmation, and dismisses modal.
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors).
+  - **Next steps / References**: See [[therapists_state]] and `.ai/briefing.md`.
 
 - **Filter Service Dropdown in Quick Walk-in and Booking Modals by Therapist Services Offered — complete**
   (`ohm#5c1a8d2e`, 2026-09-21).

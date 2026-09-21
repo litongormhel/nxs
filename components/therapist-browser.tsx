@@ -40,6 +40,16 @@ const ALL_THERAPIST_SERVICES = [
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+const FULL_WEEKDAYS: Record<string, string> = {
+  Sun: "Sunday",
+  Mon: "Monday",
+  Tue: "Tuesday",
+  Wed: "Wednesday",
+  Thu: "Thursday",
+  Fri: "Friday",
+  Sat: "Saturday",
+};
+
 export type TherapistMetaRecord = {
   dayOff: string[];
   services: string[];
@@ -354,6 +364,16 @@ export function TherapistBrowser({
   const [absentConfirmTherapist, setAbsentConfirmTherapist] = useState<string | null>(null);
   const [absentConfirmBookings, setAbsentConfirmBookings] = useState<BookingInfo[]>([]);
 
+  // Weekly day off & services offered confirmation modal state
+  type BadgeConfirmState = {
+    type: "day_off" | "service";
+    therapist: string;
+    target: string;
+    action: "add" | "remove";
+  } | null;
+  const [badgeConfirm, setBadgeConfirm] = useState<BadgeConfirmState>(null);
+  const [isSubmittingBadge, setIsSubmittingBadge] = useState<boolean>(false);
+
   // Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const showToast = (msg: string) => setToastMessage(msg);
@@ -431,73 +451,107 @@ export function TherapistBrowser({
     );
   };
 
-  // Day off toggle handler — writes through to therapist_day_off
-  const handleToggleDayOff = async (t: string, wd: string) => {
+  // Day off toggle request handler — opens confirmation modal instead of immediate mutation
+  const handleRequestToggleDayOff = (t: string, wd: string) => {
     const meta = therapistMeta[t];
-    if (!meta || !sessionStaff) return;
+    if (!meta) return;
     const isCurrentlyOff = meta.dayOff.includes(wd);
-    const turningOff = !isCurrentlyOff;
-    const therapistId = therapistIds[t];
-    const weekday = WEEKDAYS.indexOf(wd);
-
-    const res = await toggleDayOffAction(
-      therapistId,
-      weekday,
-      turningOff,
-      sessionStaff.id
-    );
-    if (!res.ok) {
-      showToast(`Couldn't update ${t}'s day off — ${res.error}`);
-      return;
-    }
-
-    setTherapistMeta((prev) => {
-      const current = prev[t];
-      if (!current) return prev;
-      const updated = turningOff
-        ? [...current.dayOff, wd]
-        : current.dayOff.filter((d) => d !== wd);
-      return {
-        ...prev,
-        [t]: { ...current, dayOff: updated },
-      };
+    setBadgeConfirm({
+      type: "day_off",
+      therapist: t,
+      target: wd,
+      action: isCurrentlyOff ? "remove" : "add",
     });
-    showToast(`${t} · ${wd} ${turningOff ? "marked off" : "available again"}`);
   };
 
-  // Services offered toggle handler — writes through to therapist_services
-  const handleToggleService = async (t: string, s: string) => {
+  // Services offered toggle request handler — opens confirmation modal instead of immediate mutation
+  const handleRequestToggleService = (t: string, s: string) => {
     const meta = therapistMeta[t];
     if (!meta) return;
     const offers = meta.services.includes(s);
-    const therapistId = therapistIds[t];
-    const serviceId = serviceIdMap[s];
-    if (!therapistId || !serviceId) return;
-
-    const res = await toggleTherapistServiceAction(
-      therapistId,
-      serviceId,
-      !offers,
-      sessionStaff?.id ?? ""
-    );
-    if (!res.ok) {
-      showToast(`Couldn't update ${t}'s services — ${res.error}`);
-      return;
-    }
-
-    setTherapistMeta((prev) => {
-      const current = prev[t];
-      if (!current) return prev;
-      const updated = offers
-        ? current.services.filter((x) => x !== s)
-        : [...current.services, s];
-      return {
-        ...prev,
-        [t]: { ...current, services: updated },
-      };
+    setBadgeConfirm({
+      type: "service",
+      therapist: t,
+      target: s,
+      action: offers ? "remove" : "add",
     });
-    showToast(`${t} now ${!offers ? "offers" : "no longer offers"} ${s}`);
-    router.refresh();
+  };
+
+  // Confirms and executes day-off or service mutation
+  const handleConfirmBadgeAction = async () => {
+    if (!badgeConfirm || isSubmittingBadge) return;
+    const { type, therapist: t, target, action } = badgeConfirm;
+    setIsSubmittingBadge(true);
+    try {
+      if (type === "day_off") {
+        const meta = therapistMeta[t];
+        if (!meta || !sessionStaff) return;
+        const turningOff = action === "add";
+        const therapistId = therapistIds[t];
+        const weekday = WEEKDAYS.indexOf(target);
+
+        const res = await toggleDayOffAction(
+          therapistId,
+          weekday,
+          turningOff,
+          sessionStaff.id
+        );
+        if (!res.ok) {
+          showToast(`Couldn't update ${t}'s day off — ${res.error}`);
+          return;
+        }
+
+        setTherapistMeta((prev) => {
+          const current = prev[t];
+          if (!current) return prev;
+          const updated = turningOff
+            ? [...current.dayOff, target]
+            : current.dayOff.filter((d) => d !== target);
+          return {
+            ...prev,
+            [t]: { ...current, dayOff: updated },
+          };
+        });
+        const dayFull = FULL_WEEKDAYS[target] || target;
+        showToast(`${t} · ${dayFull} ${turningOff ? "marked as day off" : "available again"}`);
+        setBadgeConfirm(null);
+      } else if (type === "service") {
+        const meta = therapistMeta[t];
+        if (!meta) return;
+        const offering = action === "add";
+        const therapistId = therapistIds[t];
+        const serviceId = serviceIdMap[target];
+        if (!therapistId || !serviceId) return;
+
+        const res = await toggleTherapistServiceAction(
+          therapistId,
+          serviceId,
+          offering,
+          sessionStaff?.id ?? ""
+        );
+        if (!res.ok) {
+          showToast(`Couldn't update ${t}'s services — ${res.error}`);
+          return;
+        }
+
+        setTherapistMeta((prev) => {
+          const current = prev[t];
+          if (!current) return prev;
+          const updated = offering
+            ? [...current.services, target]
+            : current.services.filter((x) => x !== target);
+          return {
+            ...prev,
+            [t]: { ...current, services: updated },
+          };
+        });
+        showToast(`${t} now ${offering ? "offers" : "no longer offers"} ${target}`);
+        setBadgeConfirm(null);
+        router.refresh();
+      }
+    } finally {
+      setIsSubmittingBadge(false);
+    }
   };
 
   // Intercepts "Mark Absent Today" from the kebab menu — checks if the
@@ -1052,8 +1106,8 @@ export function TherapistBrowser({
                 }
                 isMenuOpen={openKebab === t}
                 onToggleMenu={() => setOpenKebab(openKebab === t ? null : t)}
-                onToggleDayOff={(d) => handleToggleDayOff(t, d)}
-                onToggleService={(s) => handleToggleService(t, s)}
+                onToggleDayOff={(d) => handleRequestToggleDayOff(t, d)}
+                onToggleService={(s) => handleRequestToggleService(t, s)}
                 onRequestMarkAbsent={() => handleRequestMarkAbsent(t)}
                 onMarkPresent={() => handleMarkPresent(t)}
                 onRequestLeave={() => {
@@ -1560,6 +1614,85 @@ export function TherapistBrowser({
                   Confirm
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Confirm Weekly Day Off or Service Change */}
+      {badgeConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => {
+            if (!isSubmittingBadge) setBadgeConfirm(null);
+          }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4 animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="text-base font-serif font-bold text-foreground">
+                {badgeConfirm.type === "day_off"
+                  ? "Confirm Weekly Day Off Change"
+                  : "Confirm Service Change"}
+              </h3>
+              <p className="text-[11px] text-muted mt-0.5">
+                Therapist: <span className="font-semibold text-foreground">{badgeConfirm.therapist}</span>
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-border bg-surface-2 p-3.5 space-y-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 ${
+                    badgeConfirm.action === "add"
+                      ? badgeConfirm.type === "day_off"
+                        ? "bg-accent-red"
+                        : "bg-accent-green"
+                      : "bg-muted"
+                  }`}
+                />
+                <span className="font-medium text-foreground">
+                  {badgeConfirm.type === "day_off"
+                    ? badgeConfirm.action === "add"
+                      ? `Add ${FULL_WEEKDAYS[badgeConfirm.target] || badgeConfirm.target} as weekly day off`
+                      : `Remove ${FULL_WEEKDAYS[badgeConfirm.target] || badgeConfirm.target} from weekly days off`
+                    : badgeConfirm.action === "add"
+                    ? `Add ${badgeConfirm.target} to services offered`
+                    : `Remove ${badgeConfirm.target} from services offered`}
+                </span>
+              </div>
+
+              {badgeConfirm.type === "day_off" && badgeConfirm.action === "add" && (
+                <p className="text-[11px] text-accent-amber leading-relaxed pt-2 border-t border-border/50">
+                  ⚠️ Any upcoming bookings for {badgeConfirm.therapist} on{" "}
+                  <span className="font-semibold">
+                    {FULL_WEEKDAYS[badgeConfirm.target] || badgeConfirm.target}s
+                  </span>{" "}
+                  will automatically be flagged as{" "}
+                  <span className="font-semibold">Needs Reassignment</span>.
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                disabled={isSubmittingBadge}
+                onClick={() => setBadgeConfirm(null)}
+                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground disabled:opacity-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingBadge}
+                onClick={handleConfirmBadgeAction}
+                className="flex-1 rounded-lg bg-gold hover:brightness-110 py-2 text-xs font-bold text-black disabled:opacity-50 transition-all shadow-sm flex items-center justify-center gap-1.5"
+              >
+                {isSubmittingBadge ? "Updating..." : "Confirm"}
+              </button>
             </div>
           </div>
         </div>

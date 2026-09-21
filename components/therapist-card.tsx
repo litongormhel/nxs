@@ -521,7 +521,7 @@ export function TherapistCard({
                       ? "bg-accent-red text-white border border-transparent shadow-sm"
                       : "border border-border text-muted hover:border-gold/40 hover:text-foreground"
                   }`}
-                  title={`${therapist} - ${d} ${isOff ? "Day Off" : "Working"}`}
+                  title={`${therapist}: ${isOff ? "Remove" : "Add"} ${d} ${isOff ? "from" : "as"} weekly day off`}
                 >
                   {d}
                 </button>
@@ -548,7 +548,7 @@ export function TherapistCard({
                       ? "bg-accent-green text-white border border-transparent shadow-sm"
                       : "border border-border text-muted/70 hover:border-gold/40 hover:text-foreground"
                   }`}
-                  title={`${therapist} - ${s} ${isOffered ? "Offered" : "Not Offered"}`}
+                  title={`${therapist}: ${isOffered ? "Remove" : "Add"} ${s} ${isOffered ? "from" : "to"} services offered`}
                 >
                   {s}
                 </button>

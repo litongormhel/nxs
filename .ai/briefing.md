@@ -81,36 +81,37 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-21 — Filter Service Dropdown in Quick Walk-in and Booking Modals by Therapist Services Offered**
+1. **2026-09-21 — Add Confirmation Modal for Weekly Days Off and Services Offered Changes**
+   (`ohm#9d3b7e1a`). Implementation plan presented and approved before code execution.
+   - **Badge Click Interception (`components/therapist-browser.tsx`, `components/therapist-card.tsx`)**: Intercepted day-off and service-offered badge clicks on therapist cards to prevent accidental immediate database mutations. Added `BadgeConfirmState` tracking action details (therapist name, target day or service, and action type: add vs remove).
+   - **Confirmation Modal UX & Theme Parity**: Built confirmation modal using semantic theme tokens (`bg-surface`, `bg-surface-2`, `border-border`, `text-foreground`, `text-muted`, `bg-gold`). Clearly displays therapist name, targeted change (`"Add Wednesday as weekly day off"` / `"Remove Wednesday from weekly days off"`, `"Add Scrub to services offered"` / `"Remove Scrub from services offered"`), and warns when adding a day off that upcoming bookings will be flagged as `Needs Reassignment`.
+   - **Guarded Mutation Execution**: Network mutations (`toggleDayOff`, `toggleTherapistService`) are executed strictly upon clicking "Confirm" with double-submission prevention (`isSubmittingBadge`). Clicking "Cancel" or backdrop dismisses the dialog leaving state and database untouched.
+   - `npm run build` clean (0 errors). See [[therapists_state]] and `.ai/handoff.md`.
+
+2. **2026-09-21 — Filter Service Dropdown in Quick Walk-in and Booking Modals by Therapist Services Offered**
    (`ohm#5c1a8d2e`). Implementation plan presented and approved before code execution.
    - **Bidirectional Service Filtering (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`)**: Stored `therapistServicesMap` (`therapist_id -> Set<service_id>`) from `therapist_services`. Derived `availableServices`: if `therapistId` is selected, strictly filters `services` to those offered by that therapist; otherwise renders all active services. Added bidirectional synchronization effect: if the selected therapist does not offer the currently active `serviceId`, automatically resets/defaults `serviceId` to the therapist's first qualified service. Updated therapist dropdown `onChange` in both modals to immediately adjust `serviceId` to the newly selected therapist's qualified services.
    - **Card-to-Modal Integration Parity**: Verified pre-filled modal launch from therapist cards (e.g. Leo) strictly limits Service dropdown to offered services (`Combi Massage`, `Signature Massage`), excluding unoffered services (`Scrub`, `Wet Area`).
    - **Pricing & Room Recalculations**: Ensured `amount`, duration, room availability calculations, and split payment auto-balancing recalculate seamlessly on dynamic service adjustments.
    - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
 
-2. **2026-09-19 — Fix Locker Out of Order Persistence and Board State Refresh**
+3. **2026-09-19 — Fix Locker Out of Order Persistence and Board State Refresh**
    (`ohm#6e3a9c2d`). Implementation plan presented and approved before code execution.
    - **Mutation Verification (`app/(staff)/lockers/actions.ts`)**: Added `.select()` chained to `.update()` in `toggleLockerMaintenance` to verify rows were committed in Postgres and catch silent RLS denials (returning an explicit error if 0 rows are updated). Revalidated `/dashboard` alongside `/lockers`, `/bookings`, `/call-sheet`, and `/clients`.
    - **Resilient Cascading Query (`app/(staff)/lockers/page.tsx`)**: Replaced the abrupt `.select("number")` fallback with a cascading query in `fetchLockers` (`number, status, is_maintenance, maintenance_note` -> `number, status, maintenance_note` -> `number, status` -> `number`). Prevents missing `is_maintenance` schema cache columns (`PGRST204`) from dropping the `status` column. Correctly normalizes `isMaintenance` and passes populated items to `<LockerBoard>`.
    - **Board State Refresh & Sync (`components/locker-board.tsx`)**: Synced `occ` on `occupancy` prop changes. Preserved optimistic maintenance status so cards immediately render out of order without reverting to Free on refresh.
    - `npm run build` clean (0 errors). See [[lockers_state]] and `.ai/handoff.md`.
 
-3. **2026-09-19 — Fix Therapist Cards Theme Styling to Support Light Mode**
+4. **2026-09-19 — Fix Therapist Cards Theme Styling to Support Light Mode**
    (`ohm#8e2c4b1d`). Implementation plan presented and approved before code execution.
    - **TherapistCard Semantic Tokens (`components/therapist-card.tsx`)**: Replaced all hardcoded dark-theme hex colors (`bg-[#14100c]`, `border-white/10`, `text-[#f2ede4]`, `text-[#8a8378]`, `bg-[#993556]`, `bg-[#3b6d11]`, `bg-white/5`, etc.) with semantic Tailwind CSS theme tokens (`bg-surface`, `border-border`, `text-foreground`, `text-muted`, `bg-accent-red`, `bg-accent-green`, `bg-surface-2`, etc.). Covers card container, avatar, name, status dot, kebab menu, dropdown, progress bar, section headers, all 5 slot button states (unavailable/selected/past/booked/free), day-off toggles, service toggles, and CTA buttons.
    - **TherapistBrowser Cleanup (`components/therapist-browser.tsx`)**: Replaced remaining hardcoded hex values (`border-[#a97e2e]`, `hover:bg-[#c89b3c]/10`, `from-gold to-[#a97e2e]`, `border-[#6b4f1f]`) with semantic tokens (`border-gold`, `hover:bg-gold/10`, `from-gold to-gold-hover`, `border-gold/50`).
    - **Light Mode Gold Tokens (`app/globals.css`)**: Added `--gold: #a07820` and `--gold-hover: #b8891a` to `body.light` block so gold accent adapts properly in light mode.
    - `npm run build` clean (0 errors). See [[therapists_state]] and `.ai/handoff.md`.
 
-4. **2026-09-19 — Enable Interactive Slot Selection on Therapist Cards to Launch Pre-filled Quick Walk-in Modal**
+5. **2026-09-19 — Enable Interactive Slot Selection on Therapist Cards to Launch Pre-filled Quick Walk-in Modal**
    (`ohm#2d9a4b8f`). Implementation plan presented and approved before code execution.
    - **Interactive Per-Card Slot Selection (`components/therapist-card.tsx`, `components/therapist-browser.tsx`)**: Added `selectedSlotByTherapist: Record<string, string>` state in `TherapistBrowser`. Passed `selectedSlot` and `onSelectSlot` to `TherapistCard`. Clicking an available slot pill highlights it with selected active styling (`bg-foreground text-background font-semibold`) and dynamically updates the bottom action button to `Book {fmtTime(activeSlot)}` (e.g. `Book 10:00 PM`). Non-available, booked, and past slots remain non-clickable.
    - **Pre-filled Quick Walk-in Modal (`components/quick-walkin-modal.tsx`, `components/therapist-browser.tsx`)**: Extended `QuickWalkinModal` props interface with `initialTherapistId`, `initialSlotTime`, and `initialDate`. Added self-populating fallback queries for missing catalog props. Clicking the card's `Book [Time]` button opens `QuickWalkinModal` pre-populated with therapist, time slot, and current roster date. Modal retains pre-selected therapist without clearing, auto-selects a qualified service offered by that therapist, and auto-derives the first available room for the slot time.
    - `npm run build` clean (0 errors). See [[therapists_state]] and `.ai/handoff.md`.
-
-5. **2026-09-19 — Implement Past Time Grace Period and Booked Slots Gating in Booking Modals**
-   (`ohm#7f3b1e9a`). Implementation plan presented and approved before code execution.
-   - **Time Slot Utilities (`lib/bookings/slots.ts`)**: Added `getSlotStartMs` and `isSlotPastGracePeriod` helpers. Supports full midnight-crossing operational window awareness (mapping post-midnight slots 00:00, 00:30, 01:00 to the morning after the spa day anchor). Evaluates 20-minute grace period on the active spa day window (`spaDayNow()`), while leaving future dates completely open.
-   - **Past Time & Booked Slots Gating (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`)**: Incorporated 30s interval ticker `currentTime` for live grace period evaluation. Differentiated slot states: past slots render in faded dark gray (`border-border/40 bg-background/50 text-foreground/30 opacity-25 cursor-not-allowed`) without line-through; booked slots render struck-through with red/muted outline (`border-dashed border-red-500/30 bg-red-950/10 text-red-400/60 line-through opacity-60 cursor-not-allowed`) and marked with a `Booked` sub-label. Added submission guards against past and booked slots. Quick Walk-in date initialized via `spaDayNow()`.
-   - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
 
