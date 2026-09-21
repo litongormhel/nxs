@@ -4,10 +4,33 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#2c8f1e4a` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#6b3e8a1d` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Dynamically Derive 100-Points Loyalty Discount from Live Combi Massage Price — complete**
+  (`ohm#6b3e8a1d`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Dynamic Baseline Credit Resolution (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`, `components/log-visit-modal.tsx`)**:
+    - Dynamically derives baseline credit from live catalog services: `const combiService = services.find(s => s.name.toLowerCase().includes('combi'))`, `const combiCredit = combiService?.price ?? 1100` with safe fallback. Zero hardcoding of ₱1,100.
+  - **Upgrade Difference Calculation**:
+    - Evaluates `servicePaidAmount = Math.max(0, selectedServicePrice - combiCredit)` and `totalAmount = servicePaidAmount + addonTotal` when promo is `redeem_100_pts`.
+    - Combi Massage (₱1,100) -> ₱0 base payment (add-ons payable).
+    - Signature Massage (₱1,300) -> ₱200 upgrade fee.
+    - Scrub + Massage (₱1,800) -> ₱700 upgrade fee.
+  - **UI Label & Inline Feedback**:
+    - Dynamic promo dropdown option label:
+      - If service price <= combiCredit: `Loyalty Reward: Redeem 100 pts (Free Service / Fully Covered)`
+      - If service price > combiCredit: `Loyalty Reward: Redeem 100 pts (+₱${servicePrice - combiCredit} Upgrade Fee)`
+    - Dynamic gold inline indicator: `🏅 100 pts applied (-₱${combiCredit} credit). Upgrade fee: ₱${Math.max(0, servicePrice - combiCredit)}`
+    - SMS preview in `BookingFormModal` reflects calculated upgrade difference instead of assuming ₱0 for higher-tier services.
+  - **Backend Server Action Synchronization (`app/(staff)/bookings/actions.ts`)**:
+    - Authoritatively queries live Combi Massage price in `quickWalkin` and `logVisitBooking` to calculate `paid_amount` for sales and split payment distributions.
+    - Forwarded `isRedemption: input.isRedemption` when `logVisitBooking` delegates to `quickWalkin`.
+    - Strictly deducts 100 points via `point_transactions` ledger entry (`entry_type = 'REDEEM'`, `points_delta = -100`).
+  - **Tests & Verification**:
+    - `npm run build` clean (0 errors, 26 routes generated).
 
 - **Implement 100 Points Loyalty Redemption in Booking Promo Dropdown — complete**
   (`ohm#2c8f1e4a`, 2026-09-21).

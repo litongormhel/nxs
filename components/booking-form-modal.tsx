@@ -305,6 +305,8 @@ export function BookingFormModal({
 
   const selectedClient = isWalkIn ? null : clients.find((c) => c.id === clientSelectValue);
   const selectedService = services.find((s) => s.id === serviceId);
+  const combiService = services.find((s) => s.name.toLowerCase().includes("combi"));
+  const combiCredit = combiService?.price ?? 1100;
   const duration = selectedService?.duration_minutes ?? 0;
   const isMassageService = selectedService?.name !== "Wet Area";
   const isTherapistSelected = !!therapistId;
@@ -599,7 +601,7 @@ export function BookingFormModal({
 
       const basePrice = selectedService?.price ?? 0;
       const servicePrice = isRedeeming
-        ? 0
+        ? Math.max(0, basePrice - combiCredit)
         : selectedPromo
         ? Math.max(basePrice - selectedPromo.discount, 0)
         : basePrice;
@@ -948,7 +950,9 @@ export function BookingFormModal({
                 <option value="none">No Promo</option>
                 {canRedeemLoyalty && (
                   <option value="redeem_100_pts" className="text-gold font-medium">
-                    Loyalty Reward: Redeem 100 pts (Free Service / 100% off)
+                    {(selectedService?.price ?? 0) <= combiCredit
+                      ? "Loyalty Reward: Redeem 100 pts (Free Service / Fully Covered)"
+                      : `Loyalty Reward: Redeem 100 pts (+₱${(selectedService?.price ?? 0) - combiCredit} Upgrade Fee)`}
                   </option>
                 )}
                 {!canRedeemLoyalty && !isWalkIn && !!clientSelectValue && (
@@ -965,7 +969,9 @@ export function BookingFormModal({
               {promoId === "redeem_100_pts" && (
                 <div className="mt-1.5 flex items-center gap-1.5 text-xs text-gold font-medium">
                   <span>🏅</span>
-                  <span>100 points will be deducted upon confirmation</span>
+                  <span>
+                    100 pts applied (-₱{combiCredit} credit). Upgrade fee: ₱{Math.max(0, (selectedService?.price ?? 0) - combiCredit)}
+                  </span>
                 </div>
               )}
             </div>

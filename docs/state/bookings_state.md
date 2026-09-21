@@ -658,6 +658,28 @@ Day-Off therapist (Leo) could be saved from New Booking.
   - Inserts `point_transactions` row with `entry_type = 'REDEEM'`, `points_delta = -100` tied to `client_id`, `booking_id`, and `sale_id`.
 - `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
 
+**Correction, `ohm#6b3e8a1d` (2026-09-21)** — Dynamically Derive 100-Points Loyalty Discount from Live Combi Massage Price.
+
+- **Dynamic Baseline Credit Resolution (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`, `components/log-visit-modal.tsx`)**:
+  - Dynamically derives baseline credit from live catalog services: `const combiService = services.find(s => s.name.toLowerCase().includes('combi'))`, `const combiCredit = combiService?.price ?? 1100` with safe fallback.
+  - Resolves dynamic pricing without hardcoding ₱1,100.
+- **Upgrade Difference Calculation**:
+  - Evaluates `servicePaidAmount = Math.max(0, selectedServicePrice - combiCredit)` and `totalAmount = servicePaidAmount + addonTotal` when promo is `redeem_100_pts`.
+  - Combi Massage (₱1,100) -> ₱0 base payment (add-ons payable).
+  - Signature Massage (₱1,300) -> ₱200 upgrade fee.
+  - Scrub + Massage (₱1,800) -> ₱700 upgrade fee.
+- **UI Label & Inline Feedback**:
+  - Dynamic promo dropdown option label:
+    - If service price <= combiCredit: `Loyalty Reward: Redeem 100 pts (Free Service / Fully Covered)`
+    - If service price > combiCredit: `Loyalty Reward: Redeem 100 pts (+₱${servicePrice - combiCredit} Upgrade Fee)`
+  - Dynamic gold inline indicator: `🏅 100 pts applied (-₱${combiCredit} credit). Upgrade fee: ₱${Math.max(0, servicePrice - combiCredit)}`
+  - SMS preview in `BookingFormModal` reflects calculated upgrade difference.
+- **Backend Server Action Synchronization (`app/(staff)/bookings/actions.ts`)**:
+  - Authoritatively queries live Combi Massage price in `quickWalkin` and `logVisitBooking` to calculate `paid_amount` for sales and split payment distributions.
+  - Forwarded `isRedemption: input.isRedemption` when `logVisitBooking` delegates to `quickWalkin`.
+  - Strictly deducts 100 points via `point_transactions` ledger entry (`entry_type = 'REDEEM'`, `points_delta = -100`).
+- `npm run build` clean (0 errors). See `.ai/handoff.md` and `.ai/briefing.md`.
+
 ## Known simplifications (not gaps — deliberate for this phase's scope)
 
 - The New Booking conflict-greying query re-fetches on every date change

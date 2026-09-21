@@ -737,11 +737,14 @@ export function QuickWalkinModal({
 
   const isLoyaltyRedemption = promoId === "redeem_100_pts";
 
+  const combiService = services.find((s) => s.name.toLowerCase().includes("combi"));
+  const combiCredit = combiService?.price ?? 1100;
+
   const amount = useMemo(() => {
     const base = selectedService?.price ?? 0;
     let value = base;
     if (isLoyaltyRedemption) {
-      value = 0;
+      value = Math.max(0, base - combiCredit);
     } else if (selectedPromo) {
       value = Math.max(base - selectedPromo.discount, 0);
     } else if (manualDiscountOn) {
@@ -754,14 +757,16 @@ export function QuickWalkinModal({
       .filter((a) => addonIds.includes(a.id))
       .reduce((sum, a) => sum + a.price, 0);
     return value + addonsTotal;
-  }, [selectedService, isLoyaltyRedemption, selectedPromo, manualDiscountOn, discountType, discountValue, addonIds, addons]);
+  }, [selectedService, isLoyaltyRedemption, combiCredit, selectedPromo, manualDiscountOn, discountType, discountValue, addonIds, addons]);
 
   // Service-only paid amount (post-promo/discount, excluding add-ons) — the
   // input to the loyalty formula. Distinct from `amount`, which is what's
   // recorded on the sale and includes add-ons.
   const servicePaidAmount = useMemo(() => {
-    if (isLoyaltyRedemption) return 0;
     const base = selectedService?.price ?? 0;
+    if (isLoyaltyRedemption) {
+      return Math.max(0, base - combiCredit);
+    }
     if (selectedPromo) return Math.max(base - selectedPromo.discount, 0);
     if (manualDiscountOn) {
       return discountType === "pct"
@@ -769,7 +774,7 @@ export function QuickWalkinModal({
         : Math.max(base - discountValue, 0);
     }
     return base;
-  }, [selectedService, isLoyaltyRedemption, selectedPromo, manualDiscountOn, discountType, discountValue]);
+  }, [selectedService, isLoyaltyRedemption, combiCredit, selectedPromo, manualDiscountOn, discountType, discountValue]);
 
   useEffect(() => {
     if (isSplitPayment) {
@@ -1394,7 +1399,9 @@ export function QuickWalkinModal({
                 <option value="none">No Promo</option>
                 {canRedeemLoyalty && (
                   <option value="redeem_100_pts" className="text-gold font-medium">
-                    Loyalty Reward: Redeem 100 pts (Free Service / 100% off)
+                    {(selectedService?.price ?? 0) <= combiCredit
+                      ? "Loyalty Reward: Redeem 100 pts (Free Service / Fully Covered)"
+                      : `Loyalty Reward: Redeem 100 pts (+₱${(selectedService?.price ?? 0) - combiCredit} Upgrade Fee)`}
                   </option>
                 )}
                 {!canRedeemLoyalty && !!clientId && (
@@ -1411,7 +1418,9 @@ export function QuickWalkinModal({
               {isLoyaltyRedemption && (
                 <div className="mt-1.5 flex items-center gap-1.5 text-xs text-gold font-medium">
                   <span>🏅</span>
-                  <span>100 points will be deducted upon confirmation</span>
+                  <span>
+                    100 pts applied (-₱{combiCredit} credit). Upgrade fee: ₱{Math.max(0, (selectedService?.price ?? 0) - combiCredit)}
+                  </span>
                 </div>
               )}
             </div>

@@ -327,6 +327,33 @@ export async function quickWalkin(
     }
   }
 
+  // Authoritatively derive paid_amount when redeeming loyalty reward
+  let authoritativeAmount = input.amount;
+  if (input.isRedemption) {
+    const { data: allServices } = await supabase
+      .from("services")
+      .select("id, name, price")
+      .eq("active", true);
+
+    const combiService = (allServices ?? []).find((s) =>
+      s.name.toLowerCase().includes("combi")
+    );
+    const combiCredit = combiService?.price ?? 1100;
+    const selectedService = (allServices ?? []).find((s) => s.id === input.serviceId);
+    const selectedServicePrice = selectedService?.price ?? 0;
+    const authoritativeServicePaid = Math.max(0, selectedServicePrice - combiCredit);
+
+    let addonsTotal = 0;
+    if (input.addonIds && input.addonIds.length > 0) {
+      const { data: addonsData } = await supabase
+        .from("addons")
+        .select("id, price")
+        .in("id", input.addonIds);
+      addonsTotal = (addonsData ?? []).reduce((sum, a) => sum + a.price, 0);
+    }
+    authoritativeAmount = authoritativeServicePaid + addonsTotal;
+  }
+
   // Audit active occupancy on the requested locker
   let isReusingActiveLocker = false;
   let activeOccId: string | null = null;
@@ -360,12 +387,27 @@ export async function quickWalkin(
 
   const isSplit = input.isSplitPayment || input.paymentMethod === "Split (Cash + GCash)";
   const method1 = input.splitMethod1 ?? "Cash";
-  const amount1 = isSplit ? (input.splitCashAmount ?? input.splitAmount1 ?? 0) : input.amount;
+  const rawAmount1 = isSplit ? (input.splitCashAmount ?? input.splitAmount1 ?? 0) : authoritativeAmount;
   const method2 = input.splitMethod2 ?? "GCash";
-  const amount2 = isSplit ? (input.splitGcashAmount ?? input.splitAmount2 ?? 0) : 0;
+  const rawAmount2 = isSplit ? (input.splitGcashAmount ?? input.splitAmount2 ?? 0) : 0;
+
+  let amount1 = rawAmount1;
+  let amount2 = rawAmount2;
+
+  if (input.isRedemption && isSplit) {
+    if (authoritativeAmount === 0) {
+      amount1 = 0;
+      amount2 = 0;
+    } else {
+      amount1 = Math.max(0, authoritativeAmount - amount2);
+    }
+  } else if (!isSplit) {
+    amount1 = authoritativeAmount;
+    amount2 = 0;
+  }
 
   const primaryMethod = isSplit ? method1 : input.paymentMethod;
-  const primaryAmount = isSplit ? amount1 : input.amount;
+  const primaryAmount = isSplit ? amount1 : authoritativeAmount;
 
   if (isReusingActiveLocker && activeOccId) {
     // Locker is already occupied by this same client — reuse the active occupancy row
@@ -1253,6 +1295,7 @@ export async function logVisitBooking(
       splitGcashAmount: input.splitGcashAmount,
       paymentRef: input.paymentRef,
       staffId: input.staffId,
+      isRedemption: input.isRedemption,
     });
     if (!res.ok) {
       return { ok: false, error: res.error, field: res.field };
@@ -1449,10 +1492,52 @@ export async function logVisitBooking(
     return { ok: false, error: bookingErr.message };
   }
 
+  // Authoritatively derive paid_amount when redeeming loyalty reward
+  let authoritativeAmount = input.amount;
+  if (input.isRedemption) {
+    const { data: allServices } = await supabase
+      .from("services")
+      .select("id, name, price")
+      .eq("active", true);
+
+    const combiService = (allServices ?? []).find((s) =>
+      s.name.toLowerCase().includes("combi")
+    );
+    const combiCredit = combiService?.price ?? 1100;
+    const selectedService = (allServices ?? []).find((s) => s.id === input.serviceId) ?? service;
+    const selectedServicePrice = selectedService?.price ?? 0;
+    const authoritativeServicePaid = Math.max(0, selectedServicePrice - combiCredit);
+
+    let addonsTotal = 0;
+    if (input.addonIds && input.addonIds.length > 0) {
+      const { data: addonsData } = await supabase
+        .from("addons")
+        .select("id, price")
+        .in("id", input.addonIds);
+      addonsTotal = (addonsData ?? []).reduce((sum, a) => sum + a.price, 0);
+    }
+    authoritativeAmount = authoritativeServicePaid + addonsTotal;
+  }
+
   // 4. Insert Sale (1 row for standard Cash/GCash, 2 rows for Split Payment)
   const isSplit = input.paymentMethod === "Split (Cash + GCash)";
-  const cashAmt = isSplit ? (input.splitCashAmount ?? 0) : input.amount;
-  const gcashAmt = isSplit ? (input.splitGcashAmount ?? 0) : 0;
+  const rawCashAmt = isSplit ? (input.splitCashAmount ?? 0) : authoritativeAmount;
+  const rawGcashAmt = isSplit ? (input.splitGcashAmount ?? 0) : 0;
+
+  let cashAmt = rawCashAmt;
+  let gcashAmt = rawGcashAmt;
+
+  if (input.isRedemption && isSplit) {
+    if (authoritativeAmount === 0) {
+      cashAmt = 0;
+      gcashAmt = 0;
+    } else {
+      cashAmt = Math.max(0, authoritativeAmount - gcashAmt);
+    }
+  } else if (!isSplit) {
+    cashAmt = authoritativeAmount;
+    gcashAmt = 0;
+  }
 
   let saleId: string | null = null;
 
@@ -1506,7 +1591,7 @@ export async function logVisitBooking(
         booking_id: input.bookingId,
         service_id: input.serviceId,
         therapist_id: input.therapistId,
-        amount: input.amount,
+        amount: authoritativeAmount,
         payment_method: input.paymentMethod,
         payment_ref: input.paymentRef,
         promo_id: input.promoId,
