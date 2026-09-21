@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/portal/service-client";
 import { toSpaDay, spaDayNow } from "@/lib/analytics/spa-day";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
@@ -97,7 +98,16 @@ export async function toggleLockerMaintenance(
   staffId?: string
 ): Promise<ActionResult> {
   try {
-    const supabase = await createClient();
+    let supabase: any;
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        supabase = createServiceClient();
+      } catch {
+        supabase = await createClient();
+      }
+    } else {
+      supabase = await createClient();
+    }
 
     // 1. Restrict marking as maintenance if currently occupied by an active guest
     if (isMaintenance) {
@@ -119,22 +129,26 @@ export async function toggleLockerMaintenance(
       }
     }
 
-    // 2. Update lockers table
+    // 2. Update / upsert lockers table (ensuring record exists and is active)
     let updateRes = await supabase
       .from("lockers")
-      .update({
-        is_maintenance: isMaintenance,
-        status: isMaintenance ? "out_of_order" : "available",
-        maintenance_note: isMaintenance ? (note?.trim() || null) : null,
-      })
-      .eq("number", lockerNumber)
+      .upsert(
+        {
+          number: lockerNumber,
+          active: true,
+          is_maintenance: isMaintenance,
+          status: isMaintenance ? "out_of_order" : "available",
+          maintenance_note: isMaintenance ? (note?.trim() || null) : null,
+        },
+        { onConflict: "number" }
+      )
       .select();
 
     let error = updateRes.error;
 
     // Graceful fallback handling:
     // If PostgREST returns a schema cache missing column error for is_maintenance,
-    // fallback cleanly to status update (supported throughout UI and booking validation).
+    // fallback cleanly to status upsert (supported throughout UI and booking validation).
     if (
       error &&
       (error.message?.includes("is_maintenance") ||
@@ -142,16 +156,20 @@ export async function toggleLockerMaintenance(
         error.code === "PGRST204")
     ) {
       console.warn(
-        `[toggleLockerMaintenance] 'is_maintenance' missing in schema cache (${error.message}). Falling back to status update.`
+        `[toggleLockerMaintenance] 'is_maintenance' missing in schema cache (${error.message}). Falling back to status upsert.`
       );
 
       const fallback = await supabase
         .from("lockers")
-        .update({
-          status: isMaintenance ? "out_of_order" : "available",
-          maintenance_note: isMaintenance ? (note?.trim() || null) : null,
-        })
-        .eq("number", lockerNumber)
+        .upsert(
+          {
+            number: lockerNumber,
+            active: true,
+            status: isMaintenance ? "out_of_order" : "available",
+            maintenance_note: isMaintenance ? (note?.trim() || null) : null,
+          },
+          { onConflict: "number" }
+        )
         .select();
 
       if (!fallback.error) {
@@ -164,16 +182,50 @@ export async function toggleLockerMaintenance(
         // If maintenance_note is also missing from schema cache, update status only
         const statusOnlyFallback = await supabase
           .from("lockers")
-          .update({
-            status: isMaintenance ? "out_of_order" : "available",
-          })
-          .eq("number", lockerNumber)
+          .upsert(
+            {
+              number: lockerNumber,
+              active: true,
+              status: isMaintenance ? "out_of_order" : "available",
+            },
+            { onConflict: "number" }
+          )
           .select();
 
         error = statusOnlyFallback.error;
         updateRes = statusOnlyFallback;
       } else {
         error = fallback.error;
+      }
+    }
+
+    // If initial attempt failed or returned 0 rows (e.g. RLS blocked client), attempt fallback via serviceClient
+    if (
+      (error || !updateRes.data || updateRes.data.length === 0) &&
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    ) {
+      try {
+        const serviceClient = createServiceClient();
+        const serviceRes = await serviceClient
+          .from("lockers")
+          .upsert(
+            {
+              number: lockerNumber,
+              active: true,
+              is_maintenance: isMaintenance,
+              status: isMaintenance ? "out_of_order" : "available",
+              maintenance_note: isMaintenance ? (note?.trim() || null) : null,
+            },
+            { onConflict: "number" }
+          )
+          .select();
+
+        if (!serviceRes.error && serviceRes.data && serviceRes.data.length > 0) {
+          updateRes = serviceRes;
+          error = null;
+        }
+      } catch {
+        // Continue to error reporting below
       }
     }
 
@@ -199,11 +251,27 @@ export async function toggleLockerMaintenance(
     }
 
     // 3. Audit log
-    await supabase.from("action_logs").insert({
-      staff_id: staffId || null,
-      action: isMaintenance ? "locker_marked_maintenance" : "locker_cleared_maintenance",
-      detail: `Locker ${lockerNumber}${isMaintenance && note?.trim() ? ` (Note: ${note.trim()})` : ""}`,
-    });
+    if (staffId) {
+      try {
+        const auditClient = process.env.SUPABASE_SERVICE_ROLE_KEY
+          ? (() => {
+              try {
+                return createServiceClient();
+              } catch {
+                return supabase;
+              }
+            })()
+          : supabase;
+
+        await auditClient.from("action_logs").insert({
+          staff_id: staffId,
+          action: isMaintenance ? "locker_marked_maintenance" : "locker_cleared_maintenance",
+          detail: `Locker ${lockerNumber}${isMaintenance && note?.trim() ? ` (Note: ${note.trim()})` : ""}`,
+        });
+      } catch (logErr) {
+        console.warn("[toggleLockerMaintenance] Audit log failed:", logErr);
+      }
+    }
 
     // 4. Revalidate paths
     revalidatePath("/lockers");

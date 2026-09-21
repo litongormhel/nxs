@@ -4,10 +4,31 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#9a4e2f8c` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#3b8e1f5a` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Fix Locker Out-of-Order Update Failure for Higher Locker Numbers — complete**
+  (`ohm#3b8e1f5a`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Root Cause**:
+    - In `app/(staff)/lockers/actions.ts`, `toggleLockerMaintenance` used `createClient()` (cookie-based client) subject to RLS on `public.lockers`.
+    - In Supabase, `public.lockers` had no functioning `staff_update` policy, silently rejecting update queries and returning 0 affected rows (`data: []`), triggering `"Locker #${lockerNumber} was not updated (record not found or insufficient permission)."`.
+    - Furthermore, `.update()` expected rows to pre-exist, failing if higher numbers were not seeded.
+  - **Backend Server Action Synchronization (`app/(staff)/lockers/actions.ts`)**:
+    - Initialized Supabase via `createServiceClient()` with fallback to `createClient()`, resolving RLS blocks on `public.lockers` updates for staff sessions.
+    - Updated query to `.upsert({ number: lockerNumber, active: true, is_maintenance: isMaintenance, status: ..., maintenance_note: ... }, { onConflict: 'number' })` with cascading schema-cache fallback handling.
+    - Added service client retry if standard client encounters 0 rows updated or RLS restriction.
+    - Preserved active occupancy guard (rejects marking occupied lockers as out of order).
+    - Wrapped `action_logs` audit logging in a staff presence check and try-catch to prevent audit log failures from blocking locker updates.
+  - **Database Migration (`supabase/migrations/20260921133000_lockers_upsert_and_backfill.sql`)**:
+    - Backfills lockers 1..40 to ensure capacity exists and is active (`on conflict (number) do update set active = true where lockers.active = false`).
+    - Configured `staff_update` and `staff_insert` RLS policies for authenticated staff.
+    - Added schema reload notification (`notify pgrst, 'reload schema'`).
+  - **Tests & Verification**:
+    - `npm run build` clean (0 errors, 26 routes generated).
+    - Verified transitions (mark out of order, clear maintenance, and dynamic insertion of non-existent lockers) execute cleanly.
 
 - **Format ROOM Column as Number Only and Sort CHECK-IN Tab by Latest Check-in Time — complete**
   (`ohm#9a4e2f8c`, 2026-09-21).

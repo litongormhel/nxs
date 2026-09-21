@@ -1,6 +1,6 @@
 # Lockers State
 
-Last updated: 2026-09-19 (`ohm#6e3a9c2d`)
+Last updated: 2026-09-21 (`ohm#3b8e1f5a`)
 
 ## Overview
 
@@ -42,9 +42,10 @@ Append/audit tracking of locker check-ins and check-outs.
 ## Server Actions (`app/(staff)/lockers/actions.ts`)
 
 1. **`toggleLockerMaintenance(lockerNumber, isMaintenance, note?, staffId?)`**:
+   - **Service Client with Fallback**: Uses `createServiceClient()` if `SUPABASE_SERVICE_ROLE_KEY` is present with graceful fallback to `createClient()`, resolving Supabase RLS and permission errors when staff toggle locker status.
    - **Active Occupancy Guard**: If `isMaintenance` is `true`, queries `locker_occupancy` for an active occupant (`checked_out_at IS NULL`). Rejects with an error requiring guest checkout before the locker can be marked out of order.
-   - **Database Update & Mutation Verification**: Updates `is_maintenance`, `status`, and `maintenance_note` on `public.lockers` chaining `.select()` to ensure rows were committed and guard against silent RLS rejections (fails with a descriptive error if 0 rows are updated). If PostgREST returns a schema cache missing column error for `is_maintenance` (`PGRST204`), falls back gracefully to updating `status` (`'out_of_order'` or `'available'`) and `maintenance_note` (or `status` only) without failing unhandled.
-   - **Action Log**: Inserts audit log into `action_logs` (`locker_marked_maintenance` or `locker_cleared_maintenance`).
+   - **Database Upsert & Mutation Verification**: Safely upserts (`.upsert({ number: lockerNumber, active: true, ... }, { onConflict: 'number' })`) on `public.lockers`, ensuring lockers up to any capacity exist and are marked active. Chaining `.select()` verifies rows were committed. If PostgREST returns a schema cache missing column error for `is_maintenance` (`PGRST204`), falls back gracefully to status upsert (`'out_of_order'` or `'available'`) and `maintenance_note` (or `status` only) without failing unhandled. If the standard client encounters 0 updated rows or RLS restriction, automatically retries via `serviceClient`.
+   - **Action Log**: Safely inserts audit log into `action_logs` (`locker_marked_maintenance` or `locker_cleared_maintenance`) wrapped in a staff guard and try-catch.
    - **Revalidation**: Revalidates `/lockers`, `/bookings`, `/dashboard`, `/call-sheet`, and `/clients`.
 
 2. **`checkOutLocker(occupancyId, actorStaffId)`**:
