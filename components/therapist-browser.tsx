@@ -1042,7 +1042,12 @@ export function TherapistBrowser({
           type="date"
           value={viewDate}
           onChange={(e) => setViewDate(e.target.value)}
-          className="rounded-lg border border-border bg-surface px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
+          onClick={(e) => {
+            try {
+              e.currentTarget.showPicker?.();
+            } catch {}
+          }}
+          className="rounded-lg border border-border bg-surface px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold cursor-pointer"
         />
         <select
           value={viewTime}
@@ -1359,7 +1364,12 @@ export function TherapistBrowser({
                     type="date"
                     value={leaveStart}
                     onChange={(e) => setLeaveStart(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
+                    onClick={(e) => {
+                      try {
+                        e.currentTarget.showPicker?.();
+                      } catch {}
+                    }}
+                    className="w-full rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold cursor-pointer"
                   />
                 </div>
                 <div>
@@ -1370,7 +1380,12 @@ export function TherapistBrowser({
                     type="date"
                     value={leaveEnd}
                     onChange={(e) => setLeaveEnd(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold"
+                    onClick={(e) => {
+                      try {
+                        e.currentTarget.showPicker?.();
+                      } catch {}
+                    }}
+                    className="w-full rounded-lg border border-border bg-surface-2 px-2.5 py-2 text-xs text-foreground outline-none focus:border-gold cursor-pointer"
                   />
                 </div>
               </div>

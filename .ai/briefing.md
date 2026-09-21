@@ -81,7 +81,13 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-21 — Implement Customizable SMS Confirmation Template in Settings with Official Nexus Spa Copy**
+1. **2026-09-21 — Make Date Picker Calendar Indicator Visible and White on Dark Backgrounds**
+   (`ohm#3f7a1b9e`). Implementation plan presented and approved before code execution.
+   - **Calendar Picker Indicator Styling (`app/globals.css`)**: Styled `input[type="date"]::-webkit-calendar-picker-indicator` with `filter: invert(1)` and pointer cursor for crisp, white visibility against dark surfaces (`bg-surface`, `bg-surface-2`). Added smooth hover opacity transition (`opacity: 0.85` to `1.0`). Scoped `filter: invert(0)` under `body.light` to preserve standard dark indicator contrast on light backgrounds.
+   - **Therapist Browser Interaction Parity (`components/therapist-browser.tsx`)**: Added `cursor-pointer` to the toolbar date filter input (`viewDate`) and Mark On Leave modal inputs (`leaveStart`, `leaveEnd`). Wired safe click handler calling `e.currentTarget.showPicker?.()` in a `try/catch` block so clicking anywhere on the input or icon smoothly triggers the native date picker popover. Preserved layout, padding, font styling, and focus borders.
+   - `npm run build` clean (0 errors). See [[therapists_state]] and `.ai/handoff.md`.
+
+2. **2026-09-21 — Implement Customizable SMS Confirmation Template in Settings with Official Nexus Spa Copy**
    (`ohm#4f8e1b2d`). Implementation plan presented and approved before code execution.
    - **Default Official Template & Variable Utility (`lib/bookings/sms.ts`)**: Established official Nexus Spa confirmation copy as default template (`DEFAULT_SMS_TEMPLATE`). Supported variables (`{booking_date}`, `{client_name}`, `{slot_time}`, `{therapist_name}`, optional `{service_name}` and `{amount}`) and added robust string placeholder interpolation helper (`interpolateSmsTemplate`).
    - **Settings Management UI (`app/(staff)/settings/page.tsx`, `components/settings-browser.tsx`)**: Added "SMS Confirmation Template" management card under the General tab in Settings. Features multiline monospace textarea, clickable variable chips inserting placeholders at cursor position, "Save Template", and "Reset to Default" actions with dirty-state tracking, toast notifications, and role-based permissions (Supervisor/Owner edit, Front Desk read-only).
@@ -89,32 +95,26 @@ Full invariant list: [[nxs-architecture-locks]].
    - **SMS Preview Integration (`components/booking-form-modal.tsx`, `components/sms-preview-modal.tsx`)**: BookingFormModal queries active template from `app_settings` on mount, dynamically interpolates booking context upon creating advance registered client bookings, and mounts SmsPreviewModal with full textarea editability and copy-to-clipboard functionality.
    - `npm run build` clean (0 errors). See [[settings_state]], [[bookings_state]], and `.ai/handoff.md`.
 
-2. **2026-09-21 — Add Context-Rich Success Toast Notifications for Bookings Creation**
+3. **2026-09-21 — Add Context-Rich Success Toast Notifications for Bookings Creation**
    (`ohm#8b2f4c1e`). Implementation plan presented and approved before code execution.
    - **Quick Walk-in Modal Feedback (`components/quick-walkin-modal.tsx`)**: Added floating success toast notification triggered upon successful walk-in creation and modal closure (both immediate completion and post-points-warning dismissal). Formats context-rich message: Title: `"Walk-in logged successfully!"`, Subtitle: `Client Name • Service Name (Therapist Name) • Locker #[Num] • Room [Num]` (with null-safe handling for Wet Area without room/therapist).
    - **New Booking Modal Feedback (`components/booking-form-modal.tsx`)**: Added matching floating success toast notification triggered upon successful advance booking save and modal closure (both direct walk-in completions and post-SMS preview dismissal). Formats scheduling context: Title: `"Booking created successfully!"`, Subtitle: `Client Name • [Date], [Slot Time] • Service Name (Therapist Name)`.
    - **DOM-Mounted Toast Dispatcher (`showBookingToast`)**: Mounts toast container directly to `document.body` at `z-[100]` with NXS theme tokens (`border-gold`, `bg-surface-2`, `text-accent-gold`, `text-foreground`, `shadow-2xl`, `animate-fade-in`), ensuring toasts persist across modal unmounting with 4-second auto-fade and click-to-dismiss. Preserves existing inline error handling and server revalidation.
    - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-21 — Audit and Fix Service Name vs ID Mismatch in Therapist Booking Flow**
+4. **2026-09-21 — Audit and Fix Service Name vs ID Mismatch in Therapist Booking Flow**
    (`ohm#1b4e9f7a`). Implementation plan presented and approved before code execution.
    - **Database & Catalog Resolution (`public.services`, `public.therapist_services`)**: Audited catalog records and identified discrepancy: inactive `Scrub` (`326e0b78-49cb-441c-aa03-e54453f2f67f`, `active: false`) vs active `Scrub + Massage` (`8c97c5db-eaa9-47b9-89c0-9db114000483`, `active: true`). Migrated 7 therapist capability records in `therapist_services` from the legacy inactive ID to the active `Scrub + Massage` ID.
    - **Roster Card & Browser Alignment (`components/therapist-browser.tsx`)**: Retained concise `"Scrub"` pill label on cards for layout parity. Mapped `"Scrub"` in `serviceIdMap` to `serviceIds["Scrub + Massage"] ?? serviceIds["Scrub"]`. Added `normalizeServiceNames` helper to translate incoming server-side `"Scrub + Massage"` strings into `"Scrub"` on card capabilities and sync effects, ensuring toggling and card display align with live database IDs.
    - **Quick Walk-in Modal Resilience (`components/quick-walkin-modal.tsx`)**: Added defense-in-depth normalization in `therapist_services` query handling, mapping legacy inactive `Scrub` ID to active `Scrub + Massage` ID. Verified bidirectional filtering: selecting a therapist offering scrub immediately includes `Scrub + Massage · 90min` in available services; selecting `Scrub + Massage` filters dropdown to qualified therapists.
    - `npm run build` clean (0 errors). See [[therapists_state]], [[bookings_state]], and `.ai/handoff.md`.
 
-4. **2026-09-21 — Add Confirmation Modal for Weekly Days Off and Services Offered Changes**
+5. **2026-09-21 — Add Confirmation Modal for Weekly Days Off and Services Offered Changes**
    (`ohm#9d3b7e1a`). Implementation plan presented and approved before code execution.
    - **Badge Click Interception (`components/therapist-browser.tsx`, `components/therapist-card.tsx`)**: Intercepted day-off and service-offered badge clicks on therapist cards to prevent accidental immediate database mutations. Added `BadgeConfirmState` tracking action details (therapist name, target day or service, and action type: add vs remove).
    - **Confirmation Modal UX & Theme Parity**: Built confirmation modal using semantic theme tokens (`bg-surface`, `bg-surface-2`, `border-border`, `text-foreground`, `text-muted`, `bg-gold`). Clearly displays therapist name, targeted change (`"Add Wednesday as weekly day off"` / `"Remove Wednesday from weekly days off"`, `"Add Scrub to services offered"` / `"Remove Scrub from services offered"`), and warns when adding a day off that upcoming bookings will be flagged as `Needs Reassignment`.
    - **Guarded Mutation Execution**: Network mutations (`toggleDayOff`, `toggleTherapistService`) are executed strictly upon clicking "Confirm" with double-submission prevention (`isSubmittingBadge`). Clicking "Cancel" or backdrop dismisses the dialog leaving state and database untouched.
    - `npm run build` clean (0 errors). See [[therapists_state]] and `.ai/handoff.md`.
 
-5. **2026-09-21 — Filter Service Dropdown in Quick Walk-in and Booking Modals by Therapist Services Offered**
-   (`ohm#5c1a8d2e`). Implementation plan presented and approved before code execution.
-   - **Bidirectional Service Filtering (`components/quick-walkin-modal.tsx`, `components/booking-form-modal.tsx`)**: Stored `therapistServicesMap` (`therapist_id -> Set<service_id>`) from `therapist_services`. Derived `availableServices`: if `therapistId` is selected, strictly filters `services` to those offered by that therapist; otherwise renders all active services. Added bidirectional synchronization effect: if the selected therapist does not offer the currently active `serviceId`, automatically resets/defaults `serviceId` to the therapist's first qualified service. Updated therapist dropdown `onChange` in both modals to immediately adjust `serviceId` to the newly selected therapist's qualified services.
-   - **Card-to-Modal Integration Parity**: Verified pre-filled modal launch from therapist cards (e.g. Leo) strictly limits Service dropdown to offered services (`Combi Massage`, `Signature Massage`), excluding unoffered services (`Scrub`, `Wet Area`).
-   - **Pricing & Room Recalculations**: Ensured `amount`, duration, room availability calculations, and split payment auto-balancing recalculate seamlessly on dynamic service adjustments.
-   - `npm run build` clean (0 errors). See [[bookings_state]] and `.ai/handoff.md`.
 
 

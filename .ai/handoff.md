@@ -4,10 +4,24 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#4f8e1b2d` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#3f7a1b9e` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Make Date Picker Calendar Indicator Visible and White on Dark Backgrounds — complete**
+  (`ohm#3f7a1b9e`, 2026-09-21).
+  - Implementation plan presented and approved before code execution.
+  - **Calendar Picker Indicator Styling (`app/globals.css`)**:
+    - Targeted `input[type="date"]::-webkit-calendar-picker-indicator` with `filter: invert(1)` and `cursor: pointer` so the calendar icon appears crisp, white, and clearly visible against dark backgrounds (`bg-surface`, `bg-surface-2`).
+    - Configured smooth hover opacity transition (`opacity: 0.85` default to `opacity: 1` on hover).
+    - Scoped `filter: invert(0)` under `body.light` with `opacity: 0.7` to `0.9` on hover, ensuring the icon remains standard dark and legible against light mode surfaces.
+  - **Therapist Browser Interaction Parity (`components/therapist-browser.tsx`)**:
+    - Added `cursor-pointer` to the Therapist Roster date input (`viewDate`) and Mark On Leave modal date inputs (`leaveStart`, `leaveEnd`).
+    - Wired safe click handler calling `e.currentTarget.showPicker?.()` within a `try/catch` block to smoothly trigger the native date picker popover when clicking anywhere in the field or icon.
+    - Preserved existing padding, font sizing, text alignment, and focus borders intact.
+  - **Tests & Verification**: `npm run build` clean (0 compilation errors, 26 routes generated).
+  - **Next steps / References**: See [[therapists_state]] and `.ai/briefing.md`.
 
 - **Implement Customizable SMS Confirmation Template in Settings with Official Nexus Spa Copy — complete**
   (`ohm#4f8e1b2d`, 2026-09-21).
