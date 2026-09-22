@@ -4,10 +4,17 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#9c4e2b7a` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#7k2m9dqp` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Client Portal: Replace Member # with Username on Profile and My QR Screens — complete**
+  (`ohm#7k2m9dqp`, 2026-09-22).
+  - Implementation plan presented and approved before code execution.
+  - **Profile Screen (`components/client-portal/member-dashboard.tsx`)**: Reordered greeting hierarchy to display member codename first (`Welcome, <span className="text-gold">{member.codename}</span>`) and placed the client's username handle directly underneath (`@{member.username}`), matching the approved passbook mockup (`nxs-member-passbook.html`) and removing any Member # display line from the profile card header.
+  - **My QR Modal (`components/client-portal/member-dashboard.tsx`)**: Removed redundant `#{member.memberCode}` badge pill from the QR modal header, aligned close button to right (`justify-end`), and displayed `@{member.username}` under `{member.codename}` in the modal identity section.
+  - **Verification**: `npm run build` clean (0 errors, 26 routes generated).
 
 - **Implement Therapist Break Time Slot Management with Confirmation Modal — complete**
   (`ohm#9c4e2b7a`, 2026-09-22).

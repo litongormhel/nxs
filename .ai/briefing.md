@@ -81,7 +81,13 @@ Full invariant list: [[nxs-architecture-locks]].
 
 ### Last Completed Tasks
 
-1. **2026-09-22 — Implement Therapist Break Time Slot Management with Confirmation Modal**
+1. **2026-09-22 — Client Portal: Replace Member # with Username on Profile and My QR Screens**
+   (`ohm#7k2m9dqp`). Implementation plan presented and approved before code execution.
+   - **Profile Screen (`components/client-portal/member-dashboard.tsx`)**: Reordered greeting hierarchy to display member codename first (`Welcome, <span className="text-gold">{member.codename}</span>`) and placed the client's username handle directly underneath (`@{member.username}`), matching the approved passbook mockup and removing any Member # display line.
+   - **My QR Modal (`components/client-portal/member-dashboard.tsx`)**: Removed redundant `#{member.memberCode}` badge from the modal header, aligned close button to right (`justify-end`), and displayed `@{member.username}` under `{member.codename}` in the modal identity section.
+   - `npm run build` clean (0 errors, 26 routes generated). See [[clients_state]] and `.ai/handoff.md`.
+
+2. **2026-09-22 — Implement Therapist Break Time Slot Management with Confirmation Modal**
    (`ohm#9c4e2b7a`). Implementation plan presented and approved before code execution.
    - **Database Migration (`supabase/migrations/20260922100000_therapist_breaks.sql`)**: Declares `therapist_breaks` table (`therapist_id`, `break_date`, `slot_time`, `created_by`), unique constraint on `(therapist_id, break_date, slot_time)`, RLS policies for `is_staff()`, and updates `check_therapist_availability()` trigger function on `bookings` to reject overlapping bookings with `THERAPIST_UNAVAILABLE: Break`.
    - **Break Confirmation Modal & Therapist Browser (`components/therapist-browser.tsx`)**: Kebab menu ("Set Break Time") or clicking break slots opens a modal with timeslot selector (badges: Free, Booked, Break). Renders exact confirmation text `"Confirm setting [Time] as Break Time for [Therapist Name]? This slot will become unavailable for customer bookings."`. Prohibits setting break on active bookings with an alert banner and disabled button. Allows removing scheduled breaks with confirmation.
@@ -89,14 +95,14 @@ Full invariant list: [[nxs-architecture-locks]].
    - **Booking Actions & Flow Gating (`components/booking-form-modal.tsx`, `components/quick-walkin-modal.tsx`, `app/(staff)/bookings/actions.ts`)**: Break slots are blocked, labeled `(on break)` in therapist selector dropdown, struck-through with `Break` tag in time slot grids, and caught by server-side booking validation returning user-friendly break rejection message.
    - `npm run build` clean (0 errors). See `.ai/handoff.md`.
 
-2. **2026-09-21 — Add Branding Customization, Typography Selector, and Theme Density Controls in Settings**
+3. **2026-09-21 — Add Branding Customization, Typography Selector, and Theme Density Controls in Settings**
    (`ohm#8b3c1d4e`). Implementation plan presented and approved before code execution.
    - **Database & Storage Expansion**: Added migration `20260921180000_app_settings_branding.sql` declaring `spa_name`, `logo_url`, `accent_color`, `font_family`, `font_scale`, `table_density` on `app_settings` and creating public `brand-assets` storage bucket with Owner-only RLS upload policies.
    - **Appearance & Branding Tab (`components/settings-browser.tsx`)**: Created dedicated "Appearance & Branding" tab. Branding section (Owner-only) includes Spa Name updater, image uploader with live thumbnail preview to Supabase Storage `brand-assets` bucket via `uploadBrandLogo` and direct URL fallback. Typography section features Font Family selector (Inter/Geist, Plus Jakarta Sans, Playfair/Cinzel with dynamic stylesheet injection) and Font Scale selector (Compact 90%, Normal 100%, Large 110%). Theme & Display section offers 4 Accent Color palettes (Gold, Emerald, Rose Gold, Bronze) and Table Density toggle (Comfortable vs Dense).
    - **Global Layout Binding (`components/sidebar.tsx`)**: Sidebar dynamically displays updated Spa Name and logo image with error fallback. Appearance changes immediately update `--gold`, `--gold-hover`, `--accent-gold`, and font variables, broadcasting across windows and persisting to `localStorage` and `app_settings`.
    - `npm run build` clean (0 errors). See [[settings_state]] and `.ai/handoff.md`.
 
-3. **2026-09-21 — Restrict Sales Action Buttons After 3 Days to Owner Role Only**
+4. **2026-09-21 — Restrict Sales Action Buttons After 3 Days to Owner Role Only**
    (`ohm#4a9e1d2c`). Implementation plan presented and approved before code execution.
    - **`isSaleLapsed` helper (`components/sales-browser.tsx`)**: Pure function returning `true` when `Date.now() - new Date(createdAt).getTime() > 3 * 24 * 60 * 60 * 1000`.
    - **Edit button**: `disabled={!editAllowed || editLocked}` where `editLocked = isSaleLapsed(s.created_at) && currentRole !== "Owner"`. Title switches between lapse message and role message. `onClick` double-guards both conditions.
@@ -105,16 +111,11 @@ Full invariant list: [[nxs-architecture-locks]].
    - **`editSale`**: calls `guardLapsedSale` before DB update. **`voidSale`**: calls `guardLapsedSale` after PIN validation (Step 2b), before DB update. `restoreSale` untouched. No DB migrations.
    - `npm run build` clean (0 errors). See [[sales_state]] and `.ai/handoff.md`.
 
-4. **2026-09-21 — Display "Redeem" for Points Redemption Transactions in Sales Table**
+5. **2026-09-21 — Display "Redeem" for Points Redemption Transactions in Sales Table**
    (`ohm#7d2a1c4e`). Implementation plan presented and approved before code execution.
    - **Promo Column (`components/sales-browser.tsx`)**: When `payment_method === 'Points'`, renders a gold `Redeem` badge (`bg-gold/15 text-accent-gold`, uppercase, matching the Voided badge style) instead of `—`. All non-Points rows continue to display `promo_label ?? "—"` — unaffected.
    - **Payment Column (`components/sales-browser.tsx`)**: When `payment_method === 'Points'`, renders `Points` in `text-accent-gold font-medium` so it is visually distinct from `Cash` / `GCash` / `Card`. All other payment methods render as plain muted text — unaffected.
    - **Signal used**: `payment_method = 'Points'` (DB-enforced check constraint on `sales`). No `points_redeemed` column exists in the schema.
    - **`app/(staff)/sales/page.tsx`**: No changes — `payment_method` was already fetched and mapped.
    - `npm run build` clean (0 errors). See [[sales_state]] and `.ai/handoff.md`.
-
-5. **2026-09-21 — Sort Call Sheet by Operating Shift Time (4:00 PM First, 1:00 AM Last)**
-   (`ohm#3f8a2c1d`). Implementation plan presented and approved before code execution.
-   - **Shift-Aware Sort (`components/call-sheet-browser.tsx`)**: Added `getOperatingMinutes(slotTime: string | null): number` helper that converts a `HH:MM` slot time to absolute minutes on the operating day. Post-midnight times (`h < 6`, e.g. `01:00`) are offset by `+24 h` so they rank after all PM slots. `null` slot_time returns `9999` (sinks to bottom). Updated the `useMemo` for `filtered` to spread-copy and `.sort()` with primary key = `getOperatingMinutes(slot_time)` ascending, secondary key = `locker_number` ascending. Filter pill buttons and the `availableSlots` array are completely untouched.
-   - `npm run build` clean (0 errors). See [[operations_state]] and `.ai/handoff.md`.
 

@@ -2,6 +2,11 @@
 
 ## Implemented
 
+- **Client Portal: Replace Member # with Username on Profile and My QR Screens (`ohm#7k2m9dqp`, 2026-09-22)**:
+  - **Profile Screen (`components/client-portal/member-dashboard.tsx`)**: Placed `@username` directly beneath the member's display name (`Welcome, {member.codename}`) and removed any Member # display line from the profile card header, matching the approved passbook mockup (`nxs-member-passbook.html`).
+  - **My QR Screen / Modal (`components/client-portal/member-dashboard.tsx`)**: Removed the redundant `#{member.memberCode}` badge pill from the QR modal header (aligning the close button to the right) and rendered the client's username handle (`@{member.username}`) under the codename heading.
+  - `npm run build` clean (0 errors, 26 routes generated).
+
 - **Redesign Member Profile Drawer with Streamlined Header and 2-Column Stats (`ohm#5c8e1a4f`, 2026-09-21)**:
   - **Header Section (`components/client-browser.tsx`)**: Replaced standalone "MOBILE NUMBER" and "MEMBER SINCE" full-width cards with a cohesive 3-line header:
     1. Line 1: Member codename prominently displayed alongside close `[✕]` button.

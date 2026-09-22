@@ -80,13 +80,10 @@ export function MemberDashboard({ member, pastVisits }: MemberDashboardProps) {
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs text-muted">@{member.username}</span>
-            </div>
             <h1 className="text-2xl font-bold text-foreground tracking-tight">
               Welcome, <span className="text-gold">{member.codename}</span>
             </h1>
-            <p className="text-xs text-muted mt-0.5">NXS Spa Member Portal</p>
+            <p className="text-xs text-muted mt-0.5">@{member.username}</p>
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -270,10 +267,7 @@ export function MemberDashboard({ member, pastVisits }: MemberDashboardProps) {
             className="w-full max-w-sm rounded-xl border border-border bg-surface p-6 text-center shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
-              <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-surface-2 border border-border text-gold">
-                #{member.memberCode}
-              </span>
+            <div className="flex items-center justify-end">
               <button
                 onClick={() => setShowQrModal(false)}
                 className="text-muted hover:text-foreground text-sm cursor-pointer p-1"
@@ -285,7 +279,7 @@ export function MemberDashboard({ member, pastVisits }: MemberDashboardProps) {
 
             <div>
               <h3 className="text-lg font-bold text-foreground">{member.codename}</h3>
-              <p className="text-xs text-muted">Member QR Code</p>
+              <p className="text-xs text-muted">@{member.username}</p>
             </div>
 
             <div className="rounded-lg border border-border bg-[#0a0705] p-4 flex justify-center">
