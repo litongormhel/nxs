@@ -43,6 +43,103 @@ function verifyVoidPin(pin: string, storedHash: string): boolean {
   return trimmedPin === storedHash;
 }
 
+const MAX_PIN_ATTEMPTS = 3;
+const LOCKOUT_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
+async function checkPinRateLimit(
+  adminClient: ReturnType<typeof createStaffServiceClient>,
+  staffId: string
+): Promise<ActionResult | null> {
+  const { data: attempt } = await adminClient
+    .from("sale_void_attempts")
+    .select("failed_count, locked_until")
+    .eq("staff_id", staffId)
+    .maybeSingle();
+
+  if (attempt?.locked_until) {
+    const lockUntilMs = new Date(attempt.locked_until).getTime();
+    const remainingMs = lockUntilMs - Date.now();
+    if (remainingMs > 0) {
+      const remainingMins = Math.ceil(remainingMs / (60 * 1000));
+      return {
+        ok: false,
+        error: `Too many failed PIN attempts. Account locked. Please try again in ${remainingMins} minute(s).`,
+      };
+    }
+  }
+  return null;
+}
+
+async function recordPinFailure(
+  adminClient: ReturnType<typeof createStaffServiceClient>,
+  staffId: string
+): Promise<ActionResult> {
+  const { data: attempt } = await adminClient
+    .from("sale_void_attempts")
+    .select("failed_count")
+    .eq("staff_id", staffId)
+    .maybeSingle();
+
+  const newFailedCount = (attempt?.failed_count ?? 0) + 1;
+
+  if (newFailedCount >= MAX_PIN_ATTEMPTS) {
+    const lockUntil = new Date(Date.now() + LOCKOUT_DURATION_MS).toISOString();
+    await adminClient.from("sale_void_attempts").upsert({
+      staff_id: staffId,
+      failed_count: 0,
+      locked_until: lockUntil,
+      updated_at: new Date().toISOString(),
+    });
+    return {
+      ok: false,
+      error: "Too many failed PIN attempts. Account locked for 5 minutes.",
+    };
+  }
+
+  await adminClient.from("sale_void_attempts").upsert({
+    staff_id: staffId,
+    failed_count: newFailedCount,
+    locked_until: null,
+    updated_at: new Date().toISOString(),
+  });
+
+  const remaining = MAX_PIN_ATTEMPTS - newFailedCount;
+  return {
+    ok: false,
+    error: `Invalid Manager / Owner PIN. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
+  };
+}
+
+async function resetPinAttempts(
+  adminClient: ReturnType<typeof createStaffServiceClient>,
+  staffId: string
+): Promise<void> {
+  await adminClient.from("sale_void_attempts").upsert({
+    staff_id: staffId,
+    failed_count: 0,
+    locked_until: null,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function getAuthenticatedStaff(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<{ id: string; position: string } | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: staffRow } = await supabase
+    .from("staff")
+    .select("id, position")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!staffRow) return null;
+  return { id: staffRow.id, position: staffRow.position };
+}
+
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
 /**
@@ -154,21 +251,16 @@ export async function voidSale(
     let saleId: string;
     let pin: string;
     let reason: string;
-    let staffId: string;
 
     if (typeof input === "object" && input !== null) {
       saleId = input.saleId;
       pin = input.pin;
       reason = input.reason;
-      staffId = input.staffId;
     } else {
       saleId = input;
       pin = "";
       reason = "Direct void";
-      staffId = legacyStaffId ?? "";
     }
-
-    const formattedStaffId = staffId && staffId.trim() ? staffId.trim() : null;
 
     if (!pin || !pin.trim()) {
       return { ok: false, error: "Manager PIN is required." };
@@ -178,10 +270,21 @@ export async function voidSale(
       return { ok: false, error: "Reason for void is required." };
     }
 
-    const adminClient = createStaffServiceClient();
     const supabase = await createClient();
+    const adminClient = createStaffServiceClient();
 
-    // Step 1: Fetch void_auth_code_hash directly from app_settings
+    // Resolve authenticated staff member via session, never trusting client-supplied staffId
+    const callerStaff = await getAuthenticatedStaff(supabase);
+    if (!callerStaff) {
+      return { ok: false, error: "Not signed in or unrecognized staff profile." };
+    }
+    const authenticatedStaffId = callerStaff.id;
+
+    // Rate-limiting / failure throttle check before verifying PIN
+    const lockoutErr = await checkPinRateLimit(adminClient, authenticatedStaffId);
+    if (lockoutErr) return lockoutErr;
+
+    // Step 1: Fetch void_auth_code_hash directly from app_settings via privileged admin client
     const { data: settings, error: settingsError } = await adminClient
       .from("app_settings")
       .select("void_auth_code_hash")
@@ -195,12 +298,15 @@ export async function voidSale(
       };
     }
 
-    // Step 2: Verify the provided pin against void_auth_code_hash without RPC
+    // Step 2: Verify the provided pin against void_auth_code_hash
     const isValid = verifyVoidPin(pin, settings.void_auth_code_hash);
 
     if (!isValid) {
-      return { ok: false, error: "Invalid Manager / Owner PIN." };
+      return await recordPinFailure(adminClient, authenticatedStaffId);
     }
+
+    // Reset failed attempts on valid PIN entry
+    await resetPinAttempts(adminClient, authenticatedStaffId);
 
     // Step 2b: 3-day lapse guard — non-Owner cannot void sales older than 3 days
     const lapseErr = await guardLapsedSale(adminClient, supabase, saleId);
@@ -213,7 +319,7 @@ export async function voidSale(
         voided: true,
         void_reason: reason.trim(),
         voided_at: new Date().toISOString(),
-        voided_by: formattedStaffId,
+        voided_by: authenticatedStaffId,
       })
       .eq("id", saleId);
 
@@ -226,7 +332,7 @@ export async function voidSale(
         .update({
           voided: true,
           voided_at: new Date().toISOString(),
-          voided_by: formattedStaffId,
+          voided_by: authenticatedStaffId,
         })
         .eq("id", saleId);
       updateError = fallback.error;
@@ -239,9 +345,9 @@ export async function voidSale(
 
     // Step 4: Insert audit record into action_logs directly (ensures reason is always persisted)
     await adminClient.from("action_logs").insert({
-      staff_id: formattedStaffId,
+      staff_id: authenticatedStaffId,
       action: "sale_void",
-      detail: `sale_id=${saleId} voided_by=${formattedStaffId ?? "unknown"} reason=${reason.trim()}`,
+      detail: `sale_id=${saleId} voided_by=${authenticatedStaffId} reason=${reason.trim()}`,
     });
 
     // Step 5: Return { ok: true } and call revalidatePath("/sales")
@@ -266,9 +372,6 @@ export async function restoreSale(
     const saleId = input.saleId;
     const pin = input.pin;
     const reason = input.reason;
-    const staffId = input.staffId;
-
-    const formattedStaffId = staffId && staffId.trim() ? staffId.trim() : null;
 
     if (!pin || !pin.trim()) {
       return { ok: false, error: "Manager PIN is required." };
@@ -278,9 +381,21 @@ export async function restoreSale(
       return { ok: false, error: "Reason for restore is required." };
     }
 
+    const supabase = await createClient();
     const adminClient = createStaffServiceClient();
 
-    // Step 1: Fetch void_auth_code_hash directly from app_settings
+    // Resolve authenticated staff member via session, never trusting client-supplied staffId
+    const callerStaff = await getAuthenticatedStaff(supabase);
+    if (!callerStaff) {
+      return { ok: false, error: "Not signed in or unrecognized staff profile." };
+    }
+    const authenticatedStaffId = callerStaff.id;
+
+    // Rate-limiting / failure throttle check before verifying PIN
+    const lockoutErr = await checkPinRateLimit(adminClient, authenticatedStaffId);
+    if (lockoutErr) return lockoutErr;
+
+    // Step 1: Fetch void_auth_code_hash directly from app_settings via privileged admin client
     const { data: settings, error: settingsError } = await adminClient
       .from("app_settings")
       .select("void_auth_code_hash")
@@ -294,12 +409,15 @@ export async function restoreSale(
       };
     }
 
-    // Step 2: Verify the provided pin against void_auth_code_hash without RPC
+    // Step 2: Verify the provided pin against void_auth_code_hash
     const isValid = verifyVoidPin(pin, settings.void_auth_code_hash);
 
     if (!isValid) {
-      return { ok: false, error: "Invalid Manager / Owner PIN." };
+      return await recordPinFailure(adminClient, authenticatedStaffId);
     }
+
+    // Reset failed attempts on valid PIN entry
+    await resetPinAttempts(adminClient, authenticatedStaffId);
 
     // Step 3: Directly update public.sales with fallback if void_reason column is not in DB cache
     let { error: updateError } = await adminClient
@@ -334,9 +452,9 @@ export async function restoreSale(
 
     // Step 4: Insert audit record into action_logs directly
     await adminClient.from("action_logs").insert({
-      staff_id: formattedStaffId,
+      staff_id: authenticatedStaffId,
       action: "sale_restore",
-      detail: `sale_id=${saleId} restored_by=${formattedStaffId ?? "unknown"} reason=${reason.trim()}`,
+      detail: `sale_id=${saleId} restored_by=${authenticatedStaffId} reason=${reason.trim()}`,
     });
 
     // Step 5: Return { ok: true } and call revalidatePath("/sales")

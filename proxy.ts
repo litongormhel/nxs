@@ -14,6 +14,12 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
+  // Cron and keep-alive endpoints authenticate via CRON_SECRET Bearer token header,
+  // not Supabase staff auth session cookies. Exclude them from staff login redirect.
+  if (pathname === "/api/keep-alive" || pathname.startsWith("/api/cron/")) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
