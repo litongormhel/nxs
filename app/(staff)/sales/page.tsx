@@ -18,6 +18,7 @@ export default async function SalesPage({
     { data: therapists },
     { data: staff },
     { data: authorizers },
+    { data: redeemTransactions },
   ] = await Promise.all([
     supabase
       .from("sales")
@@ -34,6 +35,12 @@ export default async function SalesPage({
       .select("id, name")
       .in("position", ["Supervisor", "Owner"])
       .order("name", { ascending: true }),
+    supabase
+      .from("point_transactions")
+      .select("sale_id, booking_id")
+      .eq("entry_type", "REDEEM")
+      .gte("created_at", bounds.startIso)
+      .lte("created_at", bounds.endIso),
   ]);
 
   let sales = salesResFirstTry.data;
@@ -54,30 +61,46 @@ export default async function SalesPage({
   }
 
   const staffNameById = new Map((staff ?? []).map((s) => [s.id, s.name]));
+  const redeemSaleIds = new Set(
+    (redeemTransactions ?? []).map((pt) => pt.sale_id).filter(Boolean)
+  );
+  const redeemBookingIds = new Set(
+    (redeemTransactions ?? []).map((pt) => pt.booking_id).filter(Boolean)
+  );
 
   return (
     <div className="p-6 md:p-8">
       <SalesBrowser
         key={selectedDate}
         selectedDate={selectedDate}
-        initialSales={(sales ?? []).map((s) => ({
-          id: s.id,
-          booking_id: (s as { booking_id?: string | null }).booking_id ?? null,
-          client_name: s.clients?.codename ?? s.guest_label ?? "Walk-in",
-          is_walkin: s.client_id === null,
-          service_name: s.services?.name ?? "—",
-          amount: Number(s.amount),
-          payment_method: s.payment_method,
-          payment_ref: s.payment_ref,
-          promo_label: s.promos?.label ?? null,
-          therapist_id: s.therapist_id,
-          therapist_name: s.therapists?.name ?? null,
-          voided: s.voided,
-          voided_by_name: s.voided_by ? staffNameById.get(s.voided_by) ?? "—" : null,
-          void_reason: (s as { void_reason?: string | null }).void_reason ?? null,
-          edited_by_name: s.edited_by ? staffNameById.get(s.edited_by) ?? "—" : null,
-          created_at: s.created_at,
-        }))}
+        initialSales={(sales ?? []).map((s) => {
+          const isRedemption =
+            s.payment_method === "Points" ||
+            (s.id ? redeemSaleIds.has(s.id) : false) ||
+            Boolean(s.booking_id && redeemBookingIds.has(s.booking_id)) ||
+            Boolean(s.payment_ref?.toLowerCase().includes("100 pts")) ||
+            Boolean(s.payment_ref?.toLowerCase().includes("redemption"));
+
+          return {
+            id: s.id,
+            booking_id: (s as { booking_id?: string | null }).booking_id ?? null,
+            client_name: s.clients?.codename ?? s.guest_label ?? "Walk-in",
+            is_walkin: s.client_id === null,
+            service_name: s.services?.name ?? "—",
+            amount: Number(s.amount),
+            payment_method: s.payment_method,
+            payment_ref: s.payment_ref,
+            promo_label: s.promos?.label ?? null,
+            is_redemption: isRedemption,
+            therapist_id: s.therapist_id,
+            therapist_name: s.therapists?.name ?? null,
+            voided: s.voided,
+            voided_by_name: s.voided_by ? staffNameById.get(s.voided_by) ?? "—" : null,
+            void_reason: (s as { void_reason?: string | null }).void_reason ?? null,
+            edited_by_name: s.edited_by ? staffNameById.get(s.edited_by) ?? "—" : null,
+            created_at: s.created_at,
+          };
+        })}
         therapists={therapists ?? []}
         authorizers={authorizers ?? []}
       />

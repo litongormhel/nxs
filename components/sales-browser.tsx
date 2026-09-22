@@ -16,6 +16,7 @@ export type Sale = {
   payment_method: string;
   payment_ref: string | null;
   promo_label: string | null;
+  is_redemption?: boolean;
   therapist_id: string | null;
   therapist_name: string | null;
   voided: boolean;
@@ -30,6 +31,7 @@ export type ConsolidatedSale = {
   booking_id: string | null;
   sales: Sale[];
   is_split: boolean;
+  is_redemption?: boolean;
   client_name: string;
   is_walkin: boolean;
   service_name: string;
@@ -95,6 +97,21 @@ function isSaleLapsed(createdAt: string): boolean {
   return Date.now() - new Date(createdAt).getTime() > 3 * 24 * 60 * 60 * 1000;
 }
 
+function isPointsRedemption(sale: ConsolidatedSale): boolean {
+  return Boolean(
+    sale.is_redemption ||
+    sale.sales.some(
+      (item) =>
+        item.is_redemption ||
+        item.payment_method === "Points" ||
+        item.payment_ref?.toLowerCase().includes("100 pts") ||
+        item.payment_ref?.toLowerCase().includes("redemption")
+    ) ||
+    sale.promo_label?.toLowerCase().includes("100 pts") ||
+    sale.promo_label?.toLowerCase().includes("redemption")
+  );
+}
+
 const GRID_COLS = "1.1fr 1fr 1fr .9fr 1.1fr .9fr 1fr 1.6fr";
 
 export function SalesBrowser({
@@ -158,6 +175,9 @@ export function SalesBrowser({
         }
         existing.is_split = true;
         existing.voided = existing.sales.every((item) => item.voided);
+        if (s.is_redemption) {
+          existing.is_redemption = true;
+        }
         if (!existing.promo_label && s.promo_label) {
           existing.promo_label = s.promo_label;
         }
@@ -178,6 +198,12 @@ export function SalesBrowser({
           booking_id: s.booking_id ?? null,
           sales: [s],
           is_split: false,
+          is_redemption: Boolean(
+            s.is_redemption ||
+            s.payment_method === "Points" ||
+            s.payment_ref?.toLowerCase().includes("100 pts") ||
+            s.payment_ref?.toLowerCase().includes("redemption")
+          ),
           client_name: s.client_name,
           is_walkin: s.is_walkin,
           service_name: s.service_name,
@@ -670,19 +696,43 @@ export function SalesBrowser({
               <div>
                 {s.is_split ? (
                   <div className="space-y-1">
-                    <span className="inline-flex items-center rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
-                      SPLIT
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="inline-flex items-center rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
+                        SPLIT
+                      </span>
+                      {isPointsRedemption(s) && (
+                        <span className="text-[10px] font-semibold text-accent-gold">
+                          Points + Split
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[11px] text-muted space-y-0.5 leading-tight">
                       <div>• Cash: ₱{s.cash_amount.toLocaleString()}</div>
                       <div>
                         • {s.digital_method || "Digital"}: ₱{s.digital_amount.toLocaleString()}
-                        {s.digital_ref && (
+                        {s.digital_ref && !s.digital_ref.startsWith("100 pts Reward") && (
                           <span className="ml-1 opacity-60 text-[9.5px] font-mono">(Ref: {s.digital_ref})</span>
                         )}
                       </div>
                     </div>
                   </div>
+                ) : isPointsRedemption(s) ? (
+                  s.amount === 0 ? (
+                    <div className="inline-flex items-center gap-1 font-semibold text-accent-gold">
+                      <span className="text-xs">⭐</span> Points
+                    </div>
+                  ) : (
+                    <div className="text-muted">
+                      <div className="inline-flex items-center gap-1 font-semibold text-accent-gold">
+                        <span className="text-xs">⭐</span> Points + {s.sales[0]?.payment_method ?? "Cash"}
+                      </div>
+                      {s.sales[0]?.payment_ref && !s.sales[0].payment_ref.startsWith("100 pts Reward") && (
+                        <div className="text-[9.5px] text-muted opacity-70">
+                          Ref: {s.sales[0].payment_ref}
+                        </div>
+                      )}
+                    </div>
+                  )
                 ) : (
                   <div className="text-muted">
                     {s.sales[0]?.payment_method === "Points" ? (
@@ -690,16 +740,16 @@ export function SalesBrowser({
                     ) : (
                       s.sales[0]?.payment_method ?? "Cash"
                     )}
-                    {s.sales[0]?.payment_ref && (
+                    {s.sales[0]?.payment_ref && !s.sales[0].payment_ref.startsWith("100 pts Reward") && (
                       <span className="ml-1 opacity-60 text-[9.5px]">Ref: {s.sales[0].payment_ref}</span>
                     )}
                   </div>
                 )}
               </div>
               <div className="text-muted">
-                {s.sales.some((item) => item.payment_method === "Points") ? (
-                  <span className="rounded bg-gold/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-accent-gold">
-                    Redeem
+                {isPointsRedemption(s) ? (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-semibold text-amber-400 whitespace-nowrap">
+                    <span>🎁</span> 100 pts Reward
                   </span>
                 ) : (
                   s.promo_label ?? "—"

@@ -649,7 +649,11 @@ export async function quickWalkin(
   let amount1 = rawAmount1;
   let amount2 = rawAmount2;
 
-  if (input.isRedemption && isSplit) {
+  const isRedemption = Boolean(input.isRedemption || input.promoId === "redeem_100_pts");
+  const effectivePromoId = input.promoId === "redeem_100_pts" || input.promoId === "none" ? null : input.promoId;
+  const redemptionTag = "100 pts Reward";
+
+  if (isRedemption && isSplit) {
     if (authoritativeAmount === 0) {
       amount1 = 0;
       amount2 = 0;
@@ -661,8 +665,22 @@ export async function quickWalkin(
     amount2 = 0;
   }
 
-  const primaryMethod = isSplit ? method1 : input.paymentMethod;
+  let primaryMethod = isSplit ? method1 : input.paymentMethod;
   const primaryAmount = isSplit ? amount1 : authoritativeAmount;
+  if (isRedemption && primaryAmount === 0) {
+    primaryMethod = "Points";
+  }
+
+  const basePaymentRef = isSplit
+    ? (method1 !== "Cash" ? input.paymentRef : null)
+    : (input.paymentMethod !== "Cash" ? input.paymentRef : null);
+  const primaryPaymentRef = isRedemption
+    ? (basePaymentRef ? `${redemptionTag} • Ref: ${basePaymentRef}` : redemptionTag)
+    : basePaymentRef;
+
+  const effectiveNotes = isRedemption
+    ? (input.notes?.trim() ? `${input.notes.trim()} (${redemptionTag})` : redemptionTag)
+    : (input.notes?.trim() || null);
 
   if (isReusingActiveLocker && activeOccId) {
     // Locker is already occupied by this same client — reuse the active occupancy row
@@ -675,12 +693,12 @@ export async function quickWalkin(
       service_id: input.serviceId,
       therapist_id: input.therapistId,
       room_number: input.roomNumber,
-      promo_id: input.promoId,
+      promo_id: effectivePromoId,
       booking_date: input.bookingDate,
       start_time: input.startTime,
       status: "Completed",
       created_by: input.staffId,
-      notes: input.notes?.trim() || null,
+      notes: effectiveNotes,
     } as any);
 
     if (bookingErr) {
@@ -718,8 +736,8 @@ export async function quickWalkin(
       therapist_id: input.therapistId,
       amount: primaryAmount,
       payment_method: primaryMethod,
-      payment_ref: isSplit ? (method1 !== "Cash" ? input.paymentRef : null) : (input.paymentMethod !== "Cash" ? input.paymentRef : null),
-      promo_id: input.promoId,
+      payment_ref: primaryPaymentRef,
+      promo_id: effectivePromoId,
       manual_discount_type: input.manualDiscountType,
       manual_discount_value: input.manualDiscountValue,
       processed_by: input.staffId,
@@ -812,7 +830,7 @@ export async function quickWalkin(
         amount: amount2,
         payment_method: method2,
         payment_ref: input.paymentRef,
-        promo_id: input.promoId,
+        promo_id: effectivePromoId,
         manual_discount_type: input.manualDiscountType,
         manual_discount_value: input.manualDiscountValue,
         processed_by: input.staffId,
@@ -828,7 +846,7 @@ export async function quickWalkin(
       .eq("id", input.serviceId)
       .single();
 
-    const pointsLogNote = input.isRedemption
+    const pointsLogNote = isRedemption
       ? " points_redeemed=100"
       : ` points_awarded=${pointsAwarded ?? (input.clientId ? "NONE:formula_not_configured" : "n/a")}`;
 
@@ -855,16 +873,16 @@ export async function quickWalkin(
     p_booking_date: input.bookingDate,
     p_start_time: input.startTime,
     p_locker_number: input.lockerNumber,
-    p_promo_id: input.promoId,
+    p_promo_id: effectivePromoId,
     p_manual_discount_type: input.manualDiscountType,
     p_manual_discount_value: input.manualDiscountValue,
     p_addon_ids: input.addonIds,
     p_amount: primaryAmount,
     p_payment_method: primaryMethod,
-    p_payment_ref: isSplit ? (method1 !== "Cash" ? input.paymentRef : null) : (input.paymentMethod !== "Cash" ? input.paymentRef : null),
+    p_payment_ref: primaryPaymentRef,
     p_staff_id: input.staffId,
-    p_points_earned: input.isRedemption ? null : pointsAwarded,
-    p_notes: input.notes?.trim() || null,
+    p_points_earned: isRedemption ? null : pointsAwarded,
+    p_notes: effectiveNotes,
   };
 
   let { data, error } = await supabase.rpc("quick_walkin", rpcPayload as any);
@@ -928,10 +946,10 @@ export async function quickWalkin(
     return { ok: false, error: "Quick walk-in did not return a booking id." };
   }
 
-  if (input.notes?.trim()) {
+  if (effectiveNotes) {
     try {
       const { error: notesErr } = await (supabase.from("bookings") as any)
-        .update({ notes: input.notes.trim() })
+        .update({ notes: effectiveNotes })
         .eq("id", bookingId);
       if (notesErr) {
         console.warn("[quickWalkin] Non-blocking note update warning:", notesErr.message);
@@ -941,7 +959,7 @@ export async function quickWalkin(
     }
   }
 
-  if (input.clientId && input.isRedemption) {
+  if (input.clientId && isRedemption) {
     const { data: svc } = await supabase
       .from("services")
       .select("name")
@@ -973,7 +991,7 @@ export async function quickWalkin(
       amount: amount2,
       payment_method: method2,
       payment_ref: input.paymentRef,
-      promo_id: input.promoId,
+      promo_id: effectivePromoId,
       manual_discount_type: input.manualDiscountType,
       manual_discount_value: input.manualDiscountValue,
       processed_by: input.staffId,
@@ -1609,7 +1627,11 @@ export async function logVisitBooking(
     }
   }
 
-  if (input.isRedemption) {
+  const isRedemption = Boolean(input.isRedemption || input.promoId === "redeem_100_pts");
+  const effectivePromoId = input.promoId === "redeem_100_pts" || input.promoId === "none" ? null : input.promoId;
+  const redemptionTag = "100 pts Reward";
+
+  if (isRedemption) {
     if (!input.clientId) {
       return { ok: false, error: "Loyalty redemption requires a registered member account." };
     }
@@ -1645,13 +1667,13 @@ export async function logVisitBooking(
   // 1. Verify pricing server-side
   const priceCheck = await verifyBookingPricing(supabase, {
     serviceId: input.serviceId,
-    promoId: input.promoId,
+    promoId: effectivePromoId,
     manualDiscountType: input.manualDiscountType,
     manualDiscountValue: input.manualDiscountValue,
     addonIds: input.addonIds,
     amount: input.amount,
     servicePaidAmount: input.servicePaidAmount,
-    isRedemption: input.isRedemption,
+    isRedemption,
   });
   if (!priceCheck.ok) {
     return { ok: false, error: priceCheck.error };
@@ -1659,7 +1681,7 @@ export async function logVisitBooking(
 
   const { service, authoritativeAmount, authoritativeServicePaid } = priceCheck;
 
-  const earnedPoints = input.isRedemption
+  const earnedPoints = isRedemption
     ? null
     : await resolveEarnedPoints(
         supabase,
@@ -1775,8 +1797,11 @@ export async function logVisitBooking(
     therapist_id: input.therapistId,
     room_number: input.roomNumber,
   };
-  if (input.notes !== undefined) {
-    bookingUpdatePayload.notes = input.notes?.trim() || null;
+  const effectiveNotes = isRedemption
+    ? (input.notes?.trim() ? `${input.notes.trim()} (${redemptionTag})` : redemptionTag)
+    : (input.notes?.trim() || null);
+  if (effectiveNotes !== null || input.notes !== undefined) {
+    bookingUpdatePayload.notes = effectiveNotes;
   }
 
   const { error: bookingErr } = await (supabase.from("bookings") as any)
@@ -1828,7 +1853,7 @@ export async function logVisitBooking(
   let cashAmt = rawCashAmt;
   let gcashAmt = rawGcashAmt;
 
-  if (input.isRedemption && isSplit) {
+  if (isRedemption && isSplit) {
     if (authoritativeAmount === 0) {
       cashAmt = 0;
       gcashAmt = 0;
@@ -1843,6 +1868,10 @@ export async function logVisitBooking(
   let saleId: string | null = null;
 
   if (isSplit) {
+    const splitRef = isRedemption
+      ? (input.paymentRef ? `${redemptionTag} • Ref: ${input.paymentRef}` : redemptionTag)
+      : input.paymentRef;
+
     const saleRows = [
       {
         client_id: input.clientId,
@@ -1852,8 +1881,8 @@ export async function logVisitBooking(
         therapist_id: input.therapistId,
         amount: cashAmt,
         payment_method: "Cash",
-        payment_ref: null,
-        promo_id: input.promoId,
+        payment_ref: isRedemption ? redemptionTag : null,
+        promo_id: effectivePromoId,
         manual_discount_type: input.manualDiscountType,
         manual_discount_value: input.manualDiscountValue,
         processed_by: input.staffId,
@@ -1866,8 +1895,8 @@ export async function logVisitBooking(
         therapist_id: input.therapistId,
         amount: gcashAmt,
         payment_method: "GCash",
-        payment_ref: input.paymentRef,
-        promo_id: input.promoId,
+        payment_ref: splitRef,
+        promo_id: effectivePromoId,
         manual_discount_type: input.manualDiscountType,
         manual_discount_value: input.manualDiscountValue,
         processed_by: input.staffId,
@@ -1884,6 +1913,11 @@ export async function logVisitBooking(
     }
     saleId = insertedSales?.[0]?.id ?? null;
   } else {
+    const effectivePaymentMethod = isRedemption && authoritativeAmount === 0 ? "Points" : input.paymentMethod;
+    const effectivePaymentRef = isRedemption
+      ? (input.paymentRef ? `${redemptionTag} • Ref: ${input.paymentRef}` : redemptionTag)
+      : input.paymentRef;
+
     const { data: saleData, error: saleErr } = await supabase
       .from("sales")
       .insert({
@@ -1893,9 +1927,9 @@ export async function logVisitBooking(
         service_id: input.serviceId,
         therapist_id: input.therapistId,
         amount: authoritativeAmount,
-        payment_method: input.paymentMethod,
-        payment_ref: input.paymentRef,
-        promo_id: input.promoId,
+        payment_method: effectivePaymentMethod,
+        payment_ref: effectivePaymentRef,
+        promo_id: effectivePromoId,
         manual_discount_type: input.manualDiscountType,
         manual_discount_value: input.manualDiscountValue,
         processed_by: input.staffId,
@@ -1928,10 +1962,10 @@ export async function logVisitBooking(
 
   // 6. Insert Points Transaction (for registered clients)
   let ledgerId: string | null = null;
-  if (input.clientId && (input.isRedemption || earnedPoints !== null)) {
-    const pointsDelta = input.isRedemption ? -100 : (earnedPoints as number);
-    const entryType = input.isRedemption ? "REDEEM" : "EARN";
-    const notes = input.isRedemption
+  if (input.clientId && (isRedemption || earnedPoints !== null)) {
+    const pointsDelta = isRedemption ? -100 : (earnedPoints as number);
+    const entryType = isRedemption ? "REDEEM" : "EARN";
+    const notes = isRedemption
       ? `Redemption: ${service.name}${input.upgradeTo ? ` → ${input.upgradeTo} (upgrade)` : ""}`
       : `Visit: ${service.name}`;
 
@@ -1958,7 +1992,7 @@ export async function logVisitBooking(
 
   // 7. Insert Action Log
   const pointsLogNote =
-    input.clientId && !input.isRedemption
+    input.clientId && !isRedemption
       ? ` points_awarded=${earnedPoints === null ? "NONE:formula_not_configured" : earnedPoints}`
       : "";
   const payDetail = isSplit ? `split_cash=${cashAmt} split_gcash=${gcashAmt}` : `method=${input.paymentMethod}`;
@@ -1975,5 +2009,5 @@ export async function logVisitBooking(
   revalidatePath("/call-sheet");
   revalidatePath("/sales");
 
-  return { ok: true, saleId, ledgerId, pointsAwarded: input.isRedemption ? null : earnedPoints };
+  return { ok: true, saleId, ledgerId, pointsAwarded: isRedemption ? null : earnedPoints };
 }
