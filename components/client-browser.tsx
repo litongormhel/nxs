@@ -223,6 +223,7 @@ export function ClientBrowser({
   // Log visit modal state
   const [showLogVisit, setShowLogVisit] = useState(false);
   const [logVisitClient, setLogVisitClient] = useState<Client | null>(null);
+  const [logVisitIsRedemption, setLogVisitIsRedemption] = useState(false);
 
   // Claim actions and modal states
   const [approvingClaimId, setApprovingClaimId] = useState<string | null>(null);
@@ -1462,6 +1463,31 @@ export function ClientBrowser({
               </div>
             </div>
 
+            {/* Eligibility Banner / Points Status Callout */}
+            {selectedMemberForProfile.points_balance >= 100 ? (
+              <div className="rounded-lg border border-gold/60 bg-gold/10 p-2.5 flex items-center gap-2.5 shadow-[0_0_15px_rgba(200,155,60,0.18)]">
+                <span className="text-base select-none">✨</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-gold leading-tight">
+                    Eligible for Free Combination Massage (100 pts)
+                  </p>
+                  <p className="text-[10px] text-muted leading-tight mt-0.5">
+                    Redeem for free Combi Massage or upgrade to Signature
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-border/80 bg-surface-2/60 px-3 py-2 flex items-center justify-between text-[11px] text-muted">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-xs">🎁</span>
+                  <span>Free Massage Reward</span>
+                </span>
+                <span className="font-medium text-muted">
+                  Needs {100 - selectedMemberForProfile.points_balance} more pts
+                </span>
+              </div>
+            )}
+
             {/* Compact QR Code Container */}
             <div className="rounded-lg border border-border bg-surface-2 p-3.5 flex flex-col items-center gap-2.5">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted self-start">
@@ -1505,11 +1531,30 @@ export function ClientBrowser({
 
             {/* Action Group */}
             <div className="flex flex-col gap-2 pt-0.5">
-              {/* Primary button: + Log Visit for Member */}
+              {/* Primary button: Redeem 100 Points for Free Massage */}
+              {selectedMemberForProfile.points_balance >= 100 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLogVisitClient(selectedMemberForProfile);
+                    setLogVisitIsRedemption(true);
+                    setShowLogVisit(true);
+                    setSelectedMemberForProfile(null);
+                    setCopiedToken(false);
+                  }}
+                  disabled={services.length === 0 || staff.length === 0}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-md border border-gold bg-gold hover:bg-gold-hover text-background px-4 py-2.5 text-xs font-bold shadow-[0_0_15px_rgba(200,155,60,0.3)] transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span>🎁</span> Redeem 100 Points for Free Massage
+                </button>
+              )}
+
+              {/* Secondary button: + Log Visit for Member */}
               <button
                 type="button"
                 onClick={() => {
                   setLogVisitClient(selectedMemberForProfile);
+                  setLogVisitIsRedemption(false);
                   setShowLogVisit(true);
                   setSelectedMemberForProfile(null);
                   setCopiedToken(false);
@@ -1867,13 +1912,16 @@ export function ClientBrowser({
           addons={addons}
           lockers={lockers}
           initialClientId={(logVisitClient || clients[0]).id}
+          initialIsRedemption={logVisitIsRedemption}
           onClose={() => {
             setShowLogVisit(false);
             setLogVisitClient(null);
+            setLogVisitIsRedemption(false);
           }}
           onLogged={() => {
             setShowLogVisit(false);
             setLogVisitClient(null);
+            setLogVisitIsRedemption(false);
             router.refresh();
           }}
         />

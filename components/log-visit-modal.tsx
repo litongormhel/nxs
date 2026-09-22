@@ -56,6 +56,7 @@ export function LogVisitModal({
   initialBooking = null,
   initialClientId = null,
   initialServiceId = null,
+  initialIsRedemption = false,
   onClose,
   onLogged,
 }: {
@@ -69,6 +70,7 @@ export function LogVisitModal({
   initialBooking?: BookingOption | null;
   initialClientId?: string | null;
   initialServiceId?: string | null;
+  initialIsRedemption?: boolean;
   onClose: () => void;
   onLogged: () => void;
 }) {
@@ -126,9 +128,18 @@ export function LogVisitModal({
     }
   }
 
+  const combiService = services.find(
+    (s) => s.name === "Combi Massage" || s.name.toLowerCase().includes("combi")
+  ) ?? services[0];
+  const combiCredit = combiService?.price ?? 1100;
+  const initialSigService = services.find(
+    (s) => s.name === "Signature Massage" || s.name.toLowerCase().includes("signature")
+  );
+  const defaultUpgradeDiff = initialSigService ? Math.max(0, initialSigService.price - combiCredit) : 200;
+
   const [date, setDate] = useState(initialBooking?.booking_date ?? spaDayNow());
   const [serviceId, setServiceId] = useState<string>(
-    initialBooking?.service_id ?? initialServiceId ?? services[0]?.id ?? ""
+    initialBooking?.service_id ?? (initialIsRedemption ? combiService?.id : null) ?? initialServiceId ?? services[0]?.id ?? ""
   );
   const [therapistId, setTherapistId] = useState<string>(
     initialBooking?.therapist_id ?? ""
@@ -143,10 +154,10 @@ export function LogVisitModal({
   const [activeOccupancies, setActiveOccupancies] = useState<ActiveOccupancy[]>([]);
   const [maintenanceLockers, setMaintenanceLockers] = useState<Map<number, string | null>>(new Map());
 
-  const [isRedemption, setIsRedemption] = useState(false);
+  const [isRedemption, setIsRedemption] = useState(initialIsRedemption);
   const [isUpgraded, setIsUpgraded] = useState(false);
   const [upgradeTo, setUpgradeTo] = useState("Signature Massage");
-  const [upgradeCash, setUpgradeCash] = useState(300);
+  const [upgradeCash, setUpgradeCash] = useState(defaultUpgradeDiff);
 
   const [manualDiscountOn, setManualDiscountOn] = useState(false);
   const [discountType, setDiscountType] = useState<"pct" | "fixed">("pct");
@@ -362,9 +373,6 @@ export function LogVisitModal({
 
   const isPromoRedemption = promoId === "redeem_100_pts";
   const isEffectiveRedemption = isRedemption || isPromoRedemption;
-
-  const combiService = services.find((s) => s.name.toLowerCase().includes("combi"));
-  const combiCredit = combiService?.price ?? 1100;
 
   const computedAmount = useMemo(() => {
     if (isRedemption && !isUpgraded) return 0;
@@ -1012,7 +1020,14 @@ export function LogVisitModal({
                     <select
                       id="fUpgradeTo"
                       value={upgradeTo}
-                      onChange={(e) => setUpgradeTo(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setUpgradeTo(val);
+                        const target = services.find((s) => s.name.toLowerCase().includes(val.toLowerCase()));
+                        if (target) {
+                          setUpgradeCash(Math.max(0, target.price - combiCredit));
+                        }
+                      }}
                       className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
                     >
                       <option>Signature Massage</option>
