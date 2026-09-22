@@ -118,6 +118,7 @@ export function BookingFormModal({
   onClose: () => void;
   onCreated: (target?: SmsConfirmationTarget) => void;
 }) {
+  const [step, setStep] = useState<"form" | "review">("form");
   const [clientSelectValue, setClientSelectValue] = useState<string>("__walkin__");
   const [walkinName, setWalkinName] = useState("");
   const [serviceId, setServiceId] = useState(services[0]?.id ?? "");
@@ -589,6 +590,92 @@ export function BookingFormModal({
         roomNumber != null &&
         freeRooms.includes(roomNumber)));
 
+  function handleClose() {
+    setStep("form");
+    setError(null);
+    onClose();
+  }
+
+  function handleProceedToReview() {
+    setError(null);
+    if (isPastDate) {
+      setError("Cannot book a date in the past.");
+      return;
+    }
+    if (isWalkIn && !walkinName.trim()) {
+      setError("Please enter client name for walk-in.");
+      return;
+    }
+    if (!isWalkIn && !clientSelectValue) {
+      setError("Please select a client.");
+      return;
+    }
+    if (!serviceId) {
+      setError("Please select a service.");
+      return;
+    }
+    if (isMassageService && !useCustomTime && slotTime && pastSlots.has(slotTime)) {
+      setError("The selected time slot has already passed. Please select an available slot.");
+      return;
+    }
+    if (isMassageService && !useCustomTime && slotTime && takenSlots.has(slotTime)) {
+      setError("The selected time slot is already booked for this therapist.");
+      return;
+    }
+    if (isMassageService && useCustomTime && customTime && isPastCustomTime) {
+      setError("The selected custom time has already passed.");
+      return;
+    }
+    if (hasClientSlotConflict) {
+      setError(`This client already has a booking at ${fmtTime(time)}. Please select a different time.`);
+      return;
+    }
+    if (isMassageService && !time) {
+      setError("Please select an available time slot, or use a custom time.");
+      return;
+    }
+    if (isMassageService && therapistId && unavailableTherapists.has(therapistId)) {
+      setError(`That therapist is ${unavailableTherapists.get(therapistId)} on the selected date.`);
+      return;
+    }
+    if (isMassageService && (!therapistId || !therapistOk)) {
+      setError("Please select a therapist who is available at this time.");
+      return;
+    }
+    if (isMassageService && (roomNumber == null || !freeRooms.includes(roomNumber))) {
+      setError("Please select an available room.");
+      return;
+    }
+    if (!staffId) {
+      setError("Staff session is required to create a booking.");
+      return;
+    }
+
+    const isRedeeming = promoId === "redeem_100_pts";
+    const selectedPromo = promos.find((p) => p.id === promoId);
+    if (selectedPromo && !isRedeeming && promoId !== "none") {
+      const derivedPax =
+        selectedPromo?.min_pax && selectedPromo.min_pax > 1
+          ? selectedPromo.min_pax
+          : selectedPromo?.label.includes("3")
+          ? 3
+          : selectedPromo?.label.includes("4")
+          ? 4
+          : 1;
+      const eligibility = validatePromoEligibility(selectedPromo, {
+        bookingDate: date,
+        slotTime: isMassageService ? time : roundedNowTime(),
+        paxCount: derivedPax,
+      });
+      if (!eligibility.eligible) {
+        setError(eligibility.reason);
+        return;
+      }
+    }
+
+    setStep("review");
+  }
+
   function handleSubmit() {
     setError(null);
     if (isPastDate) {
@@ -720,6 +807,7 @@ export function BookingFormModal({
           room_number: resolvedRoomNumber,
         });
 
+        setStep("form");
         onCreated({
           clientName: resolvedClientName,
           phone: selectedClient?.phone ?? null,
@@ -744,11 +832,13 @@ export function BookingFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-        <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-base font-semibold text-foreground">New Booking</h2>
-        <p className="mt-0.5 text-xs text-muted">
-          Room assigns automatically — override manually if needed.
-        </p>
+      <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
+        {step === "form" ? (
+          <>
+            <h2 className="text-base font-semibold text-foreground">New Booking</h2>
+            <p className="mt-0.5 text-xs text-muted">
+              Room assigns automatically — override manually if needed.
+            </p>
 
         <div className="mt-5 space-y-4">
           {/* Client Select (Searchable Combobox) */}
@@ -1141,51 +1231,83 @@ export function BookingFormModal({
             />
           </div>
 
-          {/* Booking Summary Card */}
-          <div className="rounded-lg border border-[#292524] bg-[#0c0a09] p-3.5 sm:p-4 space-y-3 font-sans text-xs">
-            <div className="flex items-center justify-between border-b border-[#292524] pb-2.5">
-              <span className="font-semibold text-foreground tracking-wide uppercase text-[11px]">
-                Booking Summary
+          {/* Error Message */}
+          {error && (
+            <p
+              id="bookingError"
+              ref={errorRef}
+              className="rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm sm:text-xs text-red-300"
+            >
+              {error}
+            </p>
+          )}
+        </div>
+
+        {/* Modal Actions */}
+        <div className="sticky bottom-0 sm:static mt-6 -mx-4 sm:mx-0 -mb-4 sm:mb-0 flex gap-3 bg-surface px-4 sm:px-0 py-4 sm:py-0">
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={isPending}
+            className="flex-1 rounded-md border border-border px-4 py-2.5 text-sm text-foreground hover:border-gold/30 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleProceedToReview}
+            disabled={!canSubmit || isPending}
+            className="flex-[1.4] rounded-md border border-gold bg-gold px-4 py-2.5 text-sm font-semibold text-black hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Review Booking →
+          </button>
+        </div>
+      </>
+    ) : (
+      <>
+        <h2 className="text-base font-semibold text-foreground">Confirm Booking Details</h2>
+        <p className="mt-0.5 text-xs text-muted">
+          Review the booking receipt before saving.
+        </p>
+
+        <div className="mt-5 space-y-4">
+          {/* Dedicated Receipt Preview Card */}
+          <div className="rounded-lg border border-[#292524] bg-[#0c0a09] p-4 sm:p-5 space-y-3.5 font-sans text-xs">
+            <div className="flex items-center justify-between border-b border-[#292524] pb-3">
+              <span className="font-semibold text-foreground tracking-wide uppercase text-xs">
+                Confirm Booking Details
               </span>
-              <span className="rounded-md bg-gold/10 px-2 py-0.5 text-[10px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20">
+              <span className="rounded-md bg-gold/10 px-2.5 py-0.5 text-[10px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20">
                 Receipt Preview
               </span>
             </div>
 
-            <div className="flex items-center justify-between border-b border-[#292524] pb-2.5">
-              <span className="text-muted text-[11px]">Client</span>
-              <span className="font-bold text-accent-gold text-xs text-right">
+            <div className="flex items-center justify-between border-b border-[#292524] pb-3">
+              <span className="text-muted text-[11px]">Target Client</span>
+              <span className="font-bold text-accent-gold text-sm text-right">
                 {!isWalkIn && selectedClient
                   ? `${selectedClient.codename}${selectedClient.username ? ` (@${selectedClient.username})` : ""}${selectedClient.phone ? ` · ${selectedClient.phone}` : ""}`
                   : walkinName.trim() || "Walk-in Guest"}
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 border-b border-[#292524] pb-2.5">
-              <div>
-                <span className="text-muted block text-[11px]">Date & Time</span>
-                <span className="font-medium text-foreground">
-                  {fmtDate(date)} · {time ? fmtTime(time) : "—"}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted block text-[11px]">Therapist</span>
-                <span className="font-medium text-foreground">
+            <div className="border-b border-[#292524] pb-3">
+              <span className="text-muted block text-[11px] mb-1">Schedule</span>
+              <div className="font-medium text-foreground text-xs sm:text-sm">
+                {fmtDate(date)} · {time ? fmtTime(time) : "—"} ·{" "}
+                <span className="text-gold font-semibold">
                   {isMassageService ? (selectedTherapist?.name ?? "—") : "None (Wet Area)"}
                 </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 border-b border-[#292524] pb-2.5">
-              <div>
-                <span className="text-muted block text-[11px]">Room</span>
-                <span className="font-medium text-foreground">
+            <div className="border-b border-[#292524] pb-3">
+              <span className="text-muted block text-[11px] mb-1">Assignment</span>
+              <div className="flex items-center justify-between font-medium text-foreground">
+                <span className="font-semibold text-accent-gold">
                   {isMassageService ? (roomNumber != null ? `Room ${roomNumber}` : "—") : "None (Wet Area)"}
                 </span>
-              </div>
-              <div>
-                <span className="text-muted block text-[11px]">Service & Duration</span>
-                <span className="font-medium text-foreground">
+                <span className="text-muted">
                   {selectedService
                     ? `${selectedService.name}${selectedService.duration_minutes ? ` (${selectedService.duration_minutes} min)` : ""}`
                     : "—"}
@@ -1194,8 +1316,9 @@ export function BookingFormModal({
             </div>
 
             {/* Financial Breakdown */}
-            <div className="space-y-1.5 border-b border-[#292524] pb-2.5">
-              <div className="flex items-center justify-between text-muted text-[11px]">
+            <div className="space-y-2 border-b border-[#292524] pb-3">
+              <span className="text-muted block text-[11px] mb-1">Financial Breakdown</span>
+              <div className="flex items-center justify-between text-muted text-xs">
                 <span>Base Service Price</span>
                 <span className="font-mono text-foreground">
                   ₱{basePrice.toLocaleString()}
@@ -1203,7 +1326,7 @@ export function BookingFormModal({
               </div>
 
               {isRedeeming && (
-                <div className="flex items-center justify-between text-gold text-[11px]">
+                <div className="flex items-center justify-between text-gold text-xs">
                   <span>Loyalty Credit (100 pts)</span>
                   <span className="font-mono">
                     -₱{Math.min(basePrice, combiCredit).toLocaleString()}
@@ -1212,40 +1335,48 @@ export function BookingFormModal({
               )}
 
               {selectedPromo && !isRedeeming && (
-                <div className="flex items-center justify-between text-emerald-400 text-[11px]">
-                  <span>Promo ({selectedPromo.label})</span>
+                <div className="flex items-center justify-between text-emerald-400 text-xs">
+                  <span>Promo Discount ({selectedPromo.label})</span>
                   <span className="font-mono">
                     -₱{Math.min(basePrice, selectedPromo.discount).toLocaleString()}
                   </span>
                 </div>
               )}
+
+              <div className="flex items-center justify-between pt-1 border-t border-[#292524]/60">
+                <span className="text-muted text-xs">Calculated Total Price</span>
+                <span className="font-mono text-base font-bold text-accent-gold">
+                  ₱{estimatedTotalPrice.toLocaleString()}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between pt-0.5">
+                <span className="text-muted text-[11px]">
+                  {isRedeeming ? "Points Redeemed" : "Estimated Points to Earn"}
+                </span>
+                <span className="font-mono text-xs font-bold text-accent-gold">
+                  {isWalkIn ? (
+                    <span className="text-muted font-normal text-[11px]">— (Walk-in)</span>
+                  ) : selectedClient && !selectedClient.has_portal_account ? (
+                    <span className="text-amber-400 font-normal text-[11px]">0 pts (No portal account)</span>
+                  ) : isRedeeming ? (
+                    "-100 pts"
+                  ) : (
+                    `+${estPointsDelta ?? 0} pts`
+                  )}
+                </span>
+              </div>
             </div>
 
-            {/* Estimated Points to Earn */}
-            <div className="border-b border-[#292524] pb-2.5 flex items-center justify-between">
-              <span className="text-muted text-[11px]">
-                {isRedeeming ? "Points Redeemed" : "Estimated Points to Earn"}
-              </span>
-              <span className="font-mono text-xs font-bold text-accent-gold">
-                {isWalkIn ? (
-                  <span className="text-muted font-normal text-[11px]">— (Walk-in)</span>
-                ) : selectedClient && !selectedClient.has_portal_account ? (
-                  <span className="text-amber-400 font-normal text-[11px]">0 pts (No portal account)</span>
-                ) : isRedeeming ? (
-                  "-100 pts"
-                ) : (
-                  `+${estPointsDelta ?? 0} pts`
-                )}
-              </span>
-            </div>
-
-            {/* Calculated Total Price */}
-            <div className="flex items-center justify-between">
-              <span className="text-muted text-[11px]">Calculated Total Price</span>
-              <span className="font-mono text-base font-bold text-accent-gold">
-                ₱{estimatedTotalPrice.toLocaleString()}
-              </span>
-            </div>
+            {/* Notes / Vehicle Info */}
+            {notes.trim() && (
+              <div className="border-b border-[#292524] pb-3">
+                <span className="text-muted block text-[11px] mb-1">Notes / Vehicle Info</span>
+                <p className="text-foreground text-xs italic bg-background/50 rounded p-2.5 border border-border/50">
+                  {notes.trim()}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Error Message */}
@@ -1264,21 +1395,52 @@ export function BookingFormModal({
         <div className="sticky bottom-0 sm:static mt-6 -mx-4 sm:mx-0 -mb-4 sm:mb-0 flex gap-3 bg-surface px-4 sm:px-0 py-4 sm:py-0">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              setError(null);
+              setStep("form");
+            }}
             disabled={isPending}
             className="flex-1 rounded-md border border-border px-4 py-2.5 text-sm text-foreground hover:border-gold/30 disabled:opacity-50"
           >
-            Cancel
+            ← Back / Edit
           </button>
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={!canSubmit}
-            className="flex-[1.4] rounded-md border border-gold bg-gold px-4 py-2.5 text-sm font-semibold text-black hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isPending}
+            className="flex-[1.4] flex items-center justify-center gap-2 rounded-md border border-gold bg-gold px-4 py-2.5 text-sm font-semibold text-black hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isPending ? "Saving…" : "Save Booking"}
+            {isPending ? (
+              <>
+                <svg
+                  className="animate-spin -ml-1 mr-2 h-4 w-4 text-black"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                Saving…
+              </>
+            ) : (
+              "Confirm & Save Booking"
+            )}
           </button>
         </div>
+      </>
+    )}
       </div>
     </div>
   );
