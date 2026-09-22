@@ -7,6 +7,7 @@ import { useStaffSim } from "@/lib/staff-context";
 import { slotsOverlap, isSlotPastGracePeriod } from "@/lib/bookings/slots";
 import { spaDayNow } from "@/lib/analytics/spa-day";
 import { WEEKEND_SLOTS } from "@/components/therapist-card";
+import { computeLoyaltyPoints, WET_AREA_POINTS, type LoyaltyFormulaMode } from "@/lib/loyalty";
 import type {
   Addon,
   Client,
@@ -30,6 +31,11 @@ const ACTIVE_STATUSES: Database["public"]["Enums"]["booking_status"][] = [
   "Completed",
   "Needs Reassignment",
 ];
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
 
 function roundedNowTime(): string {
   const d = new Date();
@@ -438,6 +444,29 @@ export function QuickWalkinModal({
   const { sessionStaff } = useStaffSim();
   const actor = sessionStaff;
   const staffId = actor?.id ?? "";
+
+  const [loyaltySettings, setLoyaltySettings] = useState<{
+    mode: LoyaltyFormulaMode;
+    pesoPerPoint: number | null;
+  }>({ mode: "proportional", pesoPerPoint: null });
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("app_settings")
+      .select("loyalty_formula_mode, peso_per_point")
+      .eq("id", true)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setLoyaltySettings({
+            mode: (data.loyalty_formula_mode as LoyaltyFormulaMode) || "proportional",
+            pesoPerPoint: data.peso_per_point ?? null,
+          });
+        }
+      });
+  }, []);
+
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [unavailableTherapists, setUnavailableTherapists] = useState<Map<string, string>>(new Map());
   const [therapistBreaksMap, setTherapistBreaksMap] = useState<Map<string, Set<string>>>(new Map());
@@ -916,6 +945,38 @@ export function QuickWalkinModal({
   const numCash = typeof splitCashAmount === "number" ? splitCashAmount : (parseFloat(String(splitCashAmount)) || 0);
   const numGcash = typeof splitGcashAmount === "number" ? splitGcashAmount : (parseFloat(String(splitGcashAmount)) || 0);
   const isSplitValid = !isSplitPayment || (numCash >= 0 && numGcash >= 0 && Math.abs((numCash + numGcash) - amount) < 0.01);
+
+  const pointsDelta = useMemo(() => {
+    if (isLoyaltyRedemption) return -100;
+    if (!isMassageService) return WET_AREA_POINTS;
+    if (!selectedService) return 0;
+    return computeLoyaltyPoints(
+      loyaltySettings.mode,
+      servicePaidAmount,
+      selectedService.price,
+      selectedService.points_earned,
+      loyaltySettings.pesoPerPoint
+    );
+  }, [
+    isLoyaltyRedemption,
+    isMassageService,
+    selectedService,
+    loyaltySettings,
+    servicePaidAmount,
+  ]);
+
+  const manualDiscountAmount = useMemo(() => {
+    if (!manualDiscountOn) return 0;
+    const base = selectedService?.price ?? 0;
+    return discountType === "pct"
+      ? Math.round(base * (discountValue / 100))
+      : Math.min(base, discountValue);
+  }, [manualDiscountOn, selectedService, discountType, discountValue]);
+
+  const selectedAddons = useMemo(
+    () => addons.filter((a) => addonIds.includes(a.id)),
+    [addons, addonIds]
+  );
 
   function toggleAddon(id: string) {
     setAddonIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -1824,6 +1885,154 @@ export function QuickWalkinModal({
               onChange={(e) => setNotes(e.target.value)}
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-stone-500 focus:border-gold outline-none"
             />
+          </div>
+
+          {/* Booking Summary Card */}
+          <div className="rounded-lg border border-[#292524] bg-[#0c0a09] p-3.5 sm:p-4 space-y-3 font-sans text-xs">
+            <div className="flex items-center justify-between border-b border-[#292524] pb-2.5">
+              <span className="font-semibold text-foreground tracking-wide uppercase text-[11px]">
+                Booking Summary
+              </span>
+              <span className="rounded-md bg-gold/10 px-2 py-0.5 text-[10px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20">
+                Receipt Preview
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between border-b border-[#292524] pb-2.5">
+              <span className="text-muted text-[11px]">Client</span>
+              <span className="font-bold text-accent-gold text-xs text-right">
+                {selectedClient
+                  ? `${selectedClient.codename}${selectedClient.username ? ` (@${selectedClient.username})` : ""}${selectedClient.phone ? ` · ${selectedClient.phone}` : ""}`
+                  : guestName.trim() || "Walk-in Guest"}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 border-b border-[#292524] pb-2.5">
+              <div>
+                <span className="text-muted block text-[11px]">Schedule</span>
+                <span className="font-medium text-foreground">
+                  {fmtDate(date)} · {time ? fmtTime(time) : (isMassageService ? "—" : fmtTime(roundedNowTime()))}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted block text-[11px]">Therapist</span>
+                <span className="font-medium text-foreground">
+                  {isMassageService
+                    ? (therapists.find((t) => t.id === therapistId)?.name ?? "—")
+                    : "None (Wet Area)"}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 border-b border-[#292524] pb-2.5">
+              <div>
+                <span className="text-muted block text-[11px]">Locker</span>
+                <span className="font-medium text-foreground">
+                  {typeof lockerNumber === "number" ? `Locker ${lockerNumber}` : "—"}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted block text-[11px]">Room</span>
+                <span className="font-medium text-foreground">
+                  {isMassageService ? (roomNumber !== "" ? `Room ${roomNumber}` : "—") : "—"}
+                </span>
+              </div>
+            </div>
+
+            <div className="border-b border-[#292524] pb-2.5">
+              <span className="text-muted block text-[11px]">Service</span>
+              <span className="font-medium text-foreground">
+                {selectedService
+                  ? `${selectedService.name}${selectedService.duration_minutes ? ` (${selectedService.duration_minutes} min)` : ""}`
+                  : "—"}
+              </span>
+            </div>
+
+            {/* Financial Breakdown */}
+            <div className="space-y-1.5 border-b border-[#292524] pb-2.5">
+              <div className="flex items-center justify-between text-muted text-[11px]">
+                <span>Base Service Price</span>
+                <span className="font-mono text-foreground">
+                  ₱{(selectedService?.price ?? 0).toLocaleString()}
+                </span>
+              </div>
+
+              {isLoyaltyRedemption && (
+                <div className="flex items-center justify-between text-gold text-[11px]">
+                  <span>Loyalty Credit (100 pts)</span>
+                  <span className="font-mono">
+                    -₱{Math.min(selectedService?.price ?? 0, combiCredit).toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {selectedPromo && !isLoyaltyRedemption && (
+                <div className="flex items-center justify-between text-emerald-400 text-[11px]">
+                  <span>Promo ({selectedPromo.label})</span>
+                  <span className="font-mono">
+                    -₱{Math.min(selectedService?.price ?? 0, selectedPromo.discount).toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {manualDiscountOn && (
+                <div className="flex items-center justify-between text-emerald-400 text-[11px]">
+                  <span>
+                    Manual Discount ({discountType === "pct" ? `${discountValue}%` : "Fixed"})
+                  </span>
+                  <span className="font-mono">
+                    -₱{manualDiscountAmount.toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {selectedAddons.map((a) => (
+                <div key={a.id} className="flex items-center justify-between text-muted text-[11px]">
+                  <span>Add-on: {a.name}</span>
+                  <span className="font-mono text-foreground">
+                    +₱{a.price.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Points Delta */}
+            <div className="border-b border-[#292524] pb-2.5 flex items-center justify-between">
+              <span className="text-muted text-[11px]">
+                {isLoyaltyRedemption ? "Points Redeemed" : "Points Earned"}
+              </span>
+              <span className="font-mono text-xs font-bold text-accent-gold">
+                {!clientId ? (
+                  <span className="text-muted font-normal text-[11px]">— (Walk-in)</span>
+                ) : selectedClient && !selectedClient.has_portal_account ? (
+                  <span className="text-amber-400 font-normal text-[11px]">0 pts (No portal account)</span>
+                ) : isLoyaltyRedemption ? (
+                  "-100 pts"
+                ) : (
+                  `+${pointsDelta} pts`
+                )}
+              </span>
+            </div>
+
+            {/* Total Due & Payment Mode */}
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted text-[11px]">Total Due / To Collect</span>
+                <span className="font-mono text-base font-bold text-accent-gold">
+                  ₱{amount.toLocaleString()}
+                </span>
+              </div>
+              <div className="font-mono text-[11px] text-muted mt-1 text-right">
+                Payment Mode:{" "}
+                <span className="text-foreground font-medium">
+                  {paymentMethod === "Cash"
+                    ? "Cash"
+                    : paymentMethod === "GCash"
+                    ? `GCash${gcashRef.trim() ? ` (Ref: ${gcashRef.trim()})` : ""}`
+                    : `Split (Cash: ₱${numCash.toLocaleString()} | GCash: ₱${numGcash.toLocaleString()}${gcashRef.trim() ? ` · Ref: ${gcashRef.trim()}` : ""})`}
+                </span>
+              </div>
+            </div>
           </div>
 
           {error && (

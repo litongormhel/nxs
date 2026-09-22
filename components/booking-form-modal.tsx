@@ -9,6 +9,7 @@ import { spaDayNow } from "@/lib/analytics/spa-day";
 import { ClientCombobox } from "@/components/client-combobox";
 import { DEFAULT_SMS_TEMPLATE, interpolateSmsTemplate, formatSmsDate } from "@/lib/bookings/sms";
 import { validatePromoEligibility } from "@/lib/promos/validation";
+import { computeLoyaltyPoints, WET_AREA_POINTS, type LoyaltyFormulaMode } from "@/lib/loyalty";
 import type { Client, Promo, Service, Staff, Therapist, SmsConfirmationTarget } from "@/components/booking-browser";
 import type { Database } from "@/lib/types/database";
 
@@ -24,6 +25,11 @@ const ACTIVE_STATUSES: Database["public"]["Enums"]["booking_status"][] = [
   "Completed",
   "Needs Reassignment",
 ];
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
 
 function roundedNowTime(): string {
   const d = new Date();
@@ -205,6 +211,10 @@ export function BookingFormModal({
   const [servicesLoaded, setServicesLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeSmsTemplate, setActiveSmsTemplate] = useState<string>(DEFAULT_SMS_TEMPLATE);
+  const [loyaltySettings, setLoyaltySettings] = useState<{
+    mode: LoyaltyFormulaMode;
+    pesoPerPoint: number | null;
+  }>({ mode: "proportional", pesoPerPoint: null });
   const [isPending, startTransition] = useTransition();
   const errorRef = useRef<HTMLParagraphElement>(null);
 
@@ -216,12 +226,18 @@ export function BookingFormModal({
     const supabase = createClient();
     supabase
       .from("app_settings")
-      .select("sms_confirmation_template")
+      .select("sms_confirmation_template, loyalty_formula_mode, peso_per_point")
       .eq("id", true)
       .maybeSingle()
       .then(({ data, error: err }) => {
-        if (!err && data?.sms_confirmation_template) {
-          setActiveSmsTemplate(data.sms_confirmation_template);
+        if (!err && data) {
+          if (data.sms_confirmation_template) {
+            setActiveSmsTemplate(data.sms_confirmation_template);
+          }
+          setLoyaltySettings({
+            mode: (data.loyalty_formula_mode as LoyaltyFormulaMode) || "proportional",
+            pesoPerPoint: data.peso_per_point ?? null,
+          });
         }
       });
   }, []);
@@ -523,6 +539,38 @@ export function BookingFormModal({
   const isBookedSlot = isMassageService && !useCustomTime && !!slotTime && takenSlots.has(slotTime);
   const isPastCustomTime =
     isMassageService && useCustomTime && !!customTime && isSlotPastGracePeriod(customTime, date, currentTime, 20);
+
+  const isRedeeming = promoId === "redeem_100_pts";
+  const selectedPromo = promos.find((p) => p.id === promoId);
+  const basePrice = selectedService?.price ?? 0;
+  const estimatedTotalPrice = isRedeeming
+    ? Math.max(0, basePrice - combiCredit)
+    : selectedPromo
+    ? Math.max(basePrice - selectedPromo.discount, 0)
+    : basePrice;
+
+  const estPointsDelta = useMemo(() => {
+    if (isWalkIn) return null;
+    if (selectedClient && !selectedClient.has_portal_account) return 0;
+    if (isRedeeming) return -100;
+    if (!isMassageService) return WET_AREA_POINTS;
+    if (!selectedService) return 0;
+    return computeLoyaltyPoints(
+      loyaltySettings.mode,
+      estimatedTotalPrice,
+      selectedService.price,
+      selectedService.points_earned,
+      loyaltySettings.pesoPerPoint
+    );
+  }, [
+    isWalkIn,
+    selectedClient,
+    isRedeeming,
+    isMassageService,
+    selectedService,
+    loyaltySettings,
+    estimatedTotalPrice,
+  ]);
 
   const canSubmit =
     !isPending &&
@@ -1091,6 +1139,113 @@ export function BookingFormModal({
               onChange={(e) => setNotes(e.target.value)}
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-stone-500 focus:border-gold outline-none"
             />
+          </div>
+
+          {/* Booking Summary Card */}
+          <div className="rounded-lg border border-[#292524] bg-[#0c0a09] p-3.5 sm:p-4 space-y-3 font-sans text-xs">
+            <div className="flex items-center justify-between border-b border-[#292524] pb-2.5">
+              <span className="font-semibold text-foreground tracking-wide uppercase text-[11px]">
+                Booking Summary
+              </span>
+              <span className="rounded-md bg-gold/10 px-2 py-0.5 text-[10px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20">
+                Receipt Preview
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between border-b border-[#292524] pb-2.5">
+              <span className="text-muted text-[11px]">Client</span>
+              <span className="font-bold text-accent-gold text-xs text-right">
+                {!isWalkIn && selectedClient
+                  ? `${selectedClient.codename}${selectedClient.username ? ` (@${selectedClient.username})` : ""}${selectedClient.phone ? ` · ${selectedClient.phone}` : ""}`
+                  : walkinName.trim() || "Walk-in Guest"}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 border-b border-[#292524] pb-2.5">
+              <div>
+                <span className="text-muted block text-[11px]">Date & Time</span>
+                <span className="font-medium text-foreground">
+                  {fmtDate(date)} · {time ? fmtTime(time) : "—"}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted block text-[11px]">Therapist</span>
+                <span className="font-medium text-foreground">
+                  {isMassageService ? (selectedTherapist?.name ?? "—") : "None (Wet Area)"}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 border-b border-[#292524] pb-2.5">
+              <div>
+                <span className="text-muted block text-[11px]">Room</span>
+                <span className="font-medium text-foreground">
+                  {isMassageService ? (roomNumber != null ? `Room ${roomNumber}` : "—") : "None (Wet Area)"}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted block text-[11px]">Service & Duration</span>
+                <span className="font-medium text-foreground">
+                  {selectedService
+                    ? `${selectedService.name}${selectedService.duration_minutes ? ` (${selectedService.duration_minutes} min)` : ""}`
+                    : "—"}
+                </span>
+              </div>
+            </div>
+
+            {/* Financial Breakdown */}
+            <div className="space-y-1.5 border-b border-[#292524] pb-2.5">
+              <div className="flex items-center justify-between text-muted text-[11px]">
+                <span>Base Service Price</span>
+                <span className="font-mono text-foreground">
+                  ₱{basePrice.toLocaleString()}
+                </span>
+              </div>
+
+              {isRedeeming && (
+                <div className="flex items-center justify-between text-gold text-[11px]">
+                  <span>Loyalty Credit (100 pts)</span>
+                  <span className="font-mono">
+                    -₱{Math.min(basePrice, combiCredit).toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {selectedPromo && !isRedeeming && (
+                <div className="flex items-center justify-between text-emerald-400 text-[11px]">
+                  <span>Promo ({selectedPromo.label})</span>
+                  <span className="font-mono">
+                    -₱{Math.min(basePrice, selectedPromo.discount).toLocaleString()}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Estimated Points to Earn */}
+            <div className="border-b border-[#292524] pb-2.5 flex items-center justify-between">
+              <span className="text-muted text-[11px]">
+                {isRedeeming ? "Points Redeemed" : "Estimated Points to Earn"}
+              </span>
+              <span className="font-mono text-xs font-bold text-accent-gold">
+                {isWalkIn ? (
+                  <span className="text-muted font-normal text-[11px]">— (Walk-in)</span>
+                ) : selectedClient && !selectedClient.has_portal_account ? (
+                  <span className="text-amber-400 font-normal text-[11px]">0 pts (No portal account)</span>
+                ) : isRedeeming ? (
+                  "-100 pts"
+                ) : (
+                  `+${estPointsDelta ?? 0} pts`
+                )}
+              </span>
+            </div>
+
+            {/* Calculated Total Price */}
+            <div className="flex items-center justify-between">
+              <span className="text-muted text-[11px]">Calculated Total Price</span>
+              <span className="font-mono text-base font-bold text-accent-gold">
+                ₱{estimatedTotalPrice.toLocaleString()}
+              </span>
+            </div>
           </div>
 
           {/* Error Message */}
