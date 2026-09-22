@@ -1357,7 +1357,7 @@ export function QuickWalkinModal({
                 ) : (
                   availableServices.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} · {s.duration_minutes}min
+                      {s.name}
                     </option>
                   ))
                 )}
@@ -1942,9 +1942,7 @@ export function QuickWalkinModal({
             <div className="border-b border-[#292524] pb-2.5">
               <span className="text-muted block text-[11px]">Service</span>
               <span className="font-medium text-foreground">
-                {selectedService
-                  ? `${selectedService.name}${selectedService.duration_minutes ? ` (${selectedService.duration_minutes} min)` : ""}`
-                  : "—"}
+                {selectedService ? selectedService.name : "—"}
               </span>
             </div>
 

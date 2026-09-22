@@ -1438,7 +1438,7 @@ function EditBookingModal({
           >
             {services.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name} ({s.duration_minutes}m - ₱{s.price.toLocaleString()})
+                {s.name}
               </option>
             ))}
           </select>

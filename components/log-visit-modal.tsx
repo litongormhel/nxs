@@ -956,7 +956,7 @@ export function LogVisitModal({
             >
               {services.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name} (+{s.points_earned} pts)
+                  {s.name}
                 </option>
               ))}
             </select>

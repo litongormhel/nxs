@@ -891,7 +891,7 @@ export function BookingFormModal({
                 ) : (
                   availableServices.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} · {s.duration_minutes}min
+                      {s.name}
                     </option>
                   ))
                 )}
@@ -1325,9 +1325,7 @@ export function BookingFormModal({
                   {isMassageService ? (roomNumber != null ? `Room ${roomNumber}` : "—") : "None / Wet Area"}
                 </div>
                 <div className="text-[11px] text-muted">
-                  {selectedService
-                    ? `${selectedService.name}${selectedService.duration_minutes ? ` (${selectedService.duration_minutes} min)` : ""}`
-                    : "—"}
+                  {selectedService ? selectedService.name : "—"}
                 </div>
               </div>
             </div>
