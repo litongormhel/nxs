@@ -98,24 +98,10 @@ just local React state.
   → `addService`. Delete → `deleteService` (**soft delete**, sets
   `active = false`; Supervisor/Owner only). Numeric inputs commit on blur,
   not per keystroke.
-- **Promo Codes** (`ohm#3n7x9kwp`, 2026-09-01 — narrowed from
-  Supervisor/Owner to **Owner-only**, at all three layers: UI
-  (`canEditPromos`), server action (`requireOwner()` in
-  `app/(staff)/settings/actions.ts`, resolves role from
-  `auth.getUser() → staff.user_id → staff.position`, ignores the
-  client-supplied `staffId` param for the auth decision), and RLS
-  (`staff_insert`/`staff_update` on `promos` now `is_owner()`, was
-  `is_supervisor_or_above()` since 6C-4). `staff_select` stays `is_staff()`
-  — read access unchanged. No hardcoded fallback promos array anymore —
-  `app/(staff)/settings/page.tsx` passes `promosError` alongside
-  `initialPromos`; the UI shows a distinct "couldn't load" state vs. "no
-  promos configured yet" instead of ever substituting stale local data.
-  Discount edits (`updatePromoDiscount`) use per-row draft state with
-  explicit Save/Cancel (was auto-save-on-blur) — each row has its own
-  dirty flag, since promos are an independent-field list rather than one
-  settings object (contrast with the Loyalty Formula's single-object
-  draft/save below). `+ Add Promo` → `addPromo` and Delete → `deletePromo`
-  (**soft delete**) remain immediate, unchanged.
+- **Promo Codes** (`ohm#3n7x9kwp`, 2026-09-01; updated `ohm#7f1a3c8e`, 2026-09-22): Owner-only at all three layers (UI `canEditPromos`, server action `requireOwner()`, and RLS `is_owner()`).
+  - **Constraints Schema & Migration (`20260922110000_promos_constraints.sql`)**: Columns added to `public.promos`: `applicable_days text[] null` (`['Mon','Tue','Wed','Thu','Fri']`, `['Sat','Sun']`, custom subset, or `null` for anytime), `applicable_slots text[] null` (standard shift slots, or `null` for any slot), and `min_pax integer not null default 1`.
+  - **Configuration UI (`components/settings-browser.tsx`, `actions.ts`)**: "+ Add Promo" and "Edit" modal allows setting label, discount amount, Day restrictions ("Any Day", "Weekdays Only", "Weekends Only", custom day pills), Timeslot restrictions (7 standard shift slots: 04:00 PM to 01:00 AM, or "Any Slot"), and Minimum Guests (Pax count, default 1). Each promo row displays formatted condition badges (`formatPromoRuleSummary()`, e.g. `Weekdays · 4:00 PM, 5:30 PM · Min 2 pax`).
+  - **Enforcement Across Modals & Actions**: `BookingFormModal`, `QuickWalkinModal`, and `LogVisitModal` filter eligible options in dropdowns, appending rejection reasons to disabled items, render warning alert banners when invalid promos are selected, and guard client/server submissions (`createBooking`, `quickWalkin`, `logVisitBooking` verify constraints against booking date, time, and pax count). Server queries and mutations include fallback handling for schema cache reload periods.
 - **Weekend Fixed Time Slots**: list with 12-hour formatting, backed by a
   new `weekend_slots` table (`id`, `slot_time`, `created_at`) — nothing in
   the schema modeled this before `ohm#5x1p8m3v`. `+ Add Slot` →

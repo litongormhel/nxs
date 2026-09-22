@@ -9,6 +9,7 @@ import { spaDayNow } from "@/lib/analytics/spa-day";
 import { SmsPreviewModal } from "@/components/sms-preview-modal";
 import { ClientCombobox } from "@/components/client-combobox";
 import { DEFAULT_SMS_TEMPLATE, interpolateSmsTemplate, formatSmsDate } from "@/lib/bookings/sms";
+import { validatePromoEligibility } from "@/lib/promos/validation";
 import type { Client, Promo, Service, Staff, Therapist } from "@/components/booking-browser";
 import type { Database } from "@/lib/types/database";
 
@@ -64,15 +65,15 @@ export function showBookingToast({
   const container = document.createElement("div");
   container.id = "nxs-booking-toast";
   container.className =
-    "fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-1 rounded-xl border border-gold bg-surface-2 px-5 py-3 shadow-2xl transition-all duration-300 pointer-events-auto max-w-lg text-center animate-fade-in cursor-pointer";
+    "fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] rounded-xl border border-gold bg-surface-2 px-5 py-3 shadow-2xl animate-fade-in text-center max-w-sm w-full transition-all duration-300 pointer-events-auto cursor-pointer";
 
   const titleEl = document.createElement("div");
-  titleEl.className = "text-xs font-semibold font-mono text-accent-gold uppercase tracking-wider";
-  titleEl.textContent = title;
+  titleEl.className = "text-xs font-bold text-accent-gold tracking-wide";
+  titleEl.innerText = title;
 
   const descEl = document.createElement("div");
-  descEl.className = "text-xs font-sans text-foreground/90 font-medium";
-  descEl.textContent = description;
+  descEl.className = "text-[11px] text-foreground font-medium mt-0.5 truncate";
+  descEl.innerText = description;
 
   container.appendChild(titleEl);
   container.appendChild(descEl);
@@ -111,7 +112,7 @@ export function BookingFormModal({
   rooms: number[];
   staff: Staff[];
   timeSlots: string[];
-  defaultDate: string;
+  defaultDate?: string;
   initialTherapistId?: string;
   onClose: () => void;
   onCreated: () => void;
@@ -143,10 +144,29 @@ export function BookingFormModal({
     const supabase = createClient();
     supabase
       .from("promos")
-      .select("id, label, discount")
+      .select("id, label, discount, applicable_days, applicable_slots, min_pax")
       .eq("active", true)
-      .then(({ data }) => {
-        if (data) setPromos(data);
+      .then(({ data, error }) => {
+        if (error && (error.code === "42703" || error.code === "PGRST204" || error.message?.includes("applicable_days") || error.message?.includes("schema cache"))) {
+          supabase
+            .from("promos")
+            .select("id, label, discount")
+            .eq("active", true)
+            .then(({ data: fallbackData }) => {
+              if (fallbackData) {
+                setPromos(
+                  fallbackData.map((p) => ({
+                    ...p,
+                    applicable_days: null,
+                    applicable_slots: null,
+                    min_pax: 1,
+                  }))
+                );
+              }
+            });
+        } else if (data) {
+          setPromos(data);
+        }
       });
   }, []);
 
@@ -584,7 +604,26 @@ export function BookingFormModal({
       const isRedeeming = promoId === "redeem_100_pts";
       const selectedPromo = promos.find((p) => p.id === promoId);
       const effectivePromoId = isRedeeming || promoId === "none" ? null : promoId;
-      const derivedPax = selectedPromo?.label.includes("3") ? 3 : selectedPromo?.label.includes("4") ? 4 : null;
+      const derivedPax =
+        selectedPromo?.min_pax && selectedPromo.min_pax > 1
+          ? selectedPromo.min_pax
+          : selectedPromo?.label.includes("3")
+          ? 3
+          : selectedPromo?.label.includes("4")
+          ? 4
+          : null;
+
+      if (selectedPromo && !isRedeeming && promoId !== "none") {
+        const eligibility = validatePromoEligibility(selectedPromo, {
+          bookingDate: date,
+          slotTime: isMassageService ? time : roundedNowTime(),
+          paxCount: derivedPax ?? 1,
+        });
+        if (!eligibility.eligible) {
+          setError(eligibility.reason);
+          return;
+        }
+      }
 
       const result = await createBooking({
         clientId: isWalkIn ? null : clientSelectValue,
@@ -982,7 +1021,10 @@ export function BookingFormModal({
               <select
                 id="bPromo"
                 value={promoId}
-                onChange={(e) => setPromoId(e.target.value)}
+                onChange={(e) => {
+                  setPromoId(e.target.value);
+                  setError(null);
+                }}
                 className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
               >
                 <option value="none">No Promo</option>
@@ -998,11 +1040,23 @@ export function BookingFormModal({
                     Loyalty Reward: Redeem 100 pts (Requires 100 pts • Current: {clientPointsBalance ?? 0} pts)
                   </option>
                 )}
-                {promos.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label} (−₱{p.discount})
-                  </option>
-                ))}
+                {promos.map((p) => {
+                  const check = validatePromoEligibility(p, {
+                    bookingDate: date,
+                    slotTime: time,
+                    paxCount: p.min_pax ?? 1,
+                  });
+                  return (
+                    <option
+                      key={p.id}
+                      value={p.id}
+                      disabled={!check.eligible}
+                      className={!check.eligible ? "text-muted" : undefined}
+                    >
+                      {p.label} (−₱{p.discount}){!check.eligible ? ` — (${check.reason})` : ""}
+                    </option>
+                  );
+                })}
               </select>
               {promoId === "redeem_100_pts" && (
                 <div className="mt-1.5 flex items-center gap-1.5 text-xs text-gold font-medium">
@@ -1012,6 +1066,23 @@ export function BookingFormModal({
                   </span>
                 </div>
               )}
+              {promoId !== "none" && promoId !== "redeem_100_pts" && (() => {
+                const currentPromo = promos.find((p) => p.id === promoId);
+                if (!currentPromo) return null;
+                const check = validatePromoEligibility(currentPromo, {
+                  bookingDate: date,
+                  slotTime: time,
+                  paxCount: currentPromo.min_pax ?? 1,
+                });
+                if (!check.eligible) {
+                  return (
+                    <div className="mt-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-300 font-medium">
+                      ⚠ {check.reason}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
           )}
 

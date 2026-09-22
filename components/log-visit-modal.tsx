@@ -14,6 +14,7 @@ import type {
   Staff,
   Therapist,
 } from "@/components/booking-browser";
+import { validatePromoEligibility, type PromoValidationResult } from "@/lib/promos/validation";
 import type { Database } from "@/lib/types/database";
 
 type BookingOption = {
@@ -486,8 +487,20 @@ export function LogVisitModal({
 
   const canEarnRedeem = !clientId || !!selectedClient?.has_portal_account || !!scannedFallback;
 
+  const effectiveVisitTime = linkedBooking?.start_time ?? "16:00";
+
+  const promoCheck = useMemo((): PromoValidationResult => {
+    if (promoId === "none" || isPromoRedemption || !selectedPromo) return { eligible: true };
+    return validatePromoEligibility(selectedPromo, {
+      bookingDate: date,
+      slotTime: effectiveVisitTime,
+      paxCount: 1,
+    });
+  }, [promoId, isPromoRedemption, selectedPromo, date, effectiveVisitTime]);
+
   const canSubmit =
     !isPending &&
+    promoCheck.eligible &&
     (clientId ? true : (guestLabel && guestLabel.trim().length > 0)) &&
     !!serviceId &&
     (isWetArea || !!therapistId) &&
@@ -498,6 +511,10 @@ export function LogVisitModal({
 
   function handleConfirm() {
     setError(null);
+    if (!promoCheck.eligible) {
+      setError(promoCheck.reason || "The selected promo cannot be applied to this visit.");
+      return;
+    }
     if (!canEarnRedeem) {
       setError("Walang portal account — hindi pa mag-eearn/redeem ng points.");
       return;
@@ -1068,7 +1085,10 @@ export function LogVisitModal({
               id="fPromo"
               value={promoId}
               disabled={manualDiscountOn || isRedemption}
-              onChange={(e) => onPromoChange(e.target.value)}
+              onChange={(e) => {
+                onPromoChange(e.target.value);
+                setError(null);
+              }}
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none disabled:opacity-50"
             >
               <option value="none">None</option>
@@ -1084,11 +1104,23 @@ export function LogVisitModal({
                   Loyalty Reward: Redeem 100 pts (Requires 100 pts • Current: {clientPointsBalance ?? 0} pts)
                 </option>
               )}
-              {promos.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label} (−₱{p.discount})
-                </option>
-              ))}
+              {promos.map((p) => {
+                const check = validatePromoEligibility(p, {
+                  bookingDate: date,
+                  slotTime: effectiveVisitTime,
+                  paxCount: 1,
+                });
+                return (
+                  <option
+                    key={p.id}
+                    value={p.id}
+                    disabled={!check.eligible}
+                    className={!check.eligible ? "text-muted" : undefined}
+                  >
+                    {p.label} (−₱{p.discount}){!check.eligible ? ` — (${check.reason})` : ""}
+                  </option>
+                );
+              })}
             </select>
             {isPromoRedemption && (
               <div className="mt-1.5 flex items-center gap-1.5 text-xs text-gold font-medium">
@@ -1096,6 +1128,11 @@ export function LogVisitModal({
                 <span>
                   100 pts applied (-₱{combiCredit} credit). Upgrade fee: ₱{Math.max(0, (selectedService?.price ?? 0) - combiCredit)}
                 </span>
+              </div>
+            )}
+            {promoId !== "none" && !isPromoRedemption && !promoCheck.eligible && (
+              <div className="mt-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-300 font-medium">
+                ⚠ {promoCheck.reason}
               </div>
             )}
           </div>

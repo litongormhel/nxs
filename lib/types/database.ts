@@ -593,24 +593,33 @@ export type Database = {
       promos: {
         Row: {
           active: boolean
+          applicable_days: string[] | null
+          applicable_slots: string[] | null
           created_at: string
           discount: number
           id: string
           label: string
+          min_pax: number
         }
         Insert: {
           active?: boolean
+          applicable_days?: string[] | null
+          applicable_slots?: string[] | null
           created_at?: string
           discount: number
           id?: string
           label: string
+          min_pax?: number
         }
         Update: {
           active?: boolean
+          applicable_days?: string[] | null
+          applicable_slots?: string[] | null
           created_at?: string
           discount?: number
           id?: string
           label?: string
+          min_pax?: number
         }
         Relationships: []
       }

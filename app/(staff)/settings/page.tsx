@@ -20,11 +20,30 @@ export default async function SettingsPage() {
       .select("id, name, price, points_earned")
       .eq("active", true)
       .order("name", { ascending: true }),
-    supabase
-      .from("promos")
-      .select("id, label, discount")
-      .eq("active", true)
-      .order("label", { ascending: true }),
+    (async () => {
+      const fullRes = await supabase
+        .from("promos")
+        .select("id, label, discount, applicable_days, applicable_slots, min_pax")
+        .eq("active", true)
+        .order("label", { ascending: true });
+      if (fullRes.error && (fullRes.error.code === "42703" || fullRes.error.code === "PGRST204" || fullRes.error.message?.includes("applicable_days") || fullRes.error.message?.includes("schema cache"))) {
+        const fallbackRes = await supabase
+          .from("promos")
+          .select("id, label, discount")
+          .eq("active", true)
+          .order("label", { ascending: true });
+        return {
+          data: (fallbackRes.data ?? []).map((p) => ({
+            ...p,
+            applicable_days: null,
+            applicable_slots: null,
+            min_pax: 1,
+          })),
+          error: fallbackRes.error,
+        };
+      }
+      return fullRes;
+    })(),
     supabase
       .from("addons")
       .select("id, name, price")

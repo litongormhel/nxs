@@ -89,7 +89,14 @@ type Service = {
 type Staff = { id: string; name: string; position: string };
 
 type Therapist = { id: string; name: string };
-type Promo = { id: string; label: string; discount: number };
+type Promo = {
+  id: string;
+  label: string;
+  discount: number;
+  applicable_days?: string[] | null;
+  applicable_slots?: string[] | null;
+  min_pax?: number | null;
+};
 type Addon = { id: string; name: string; price: number };
 
 type GroupedWalkIn = {

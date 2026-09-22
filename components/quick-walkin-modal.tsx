@@ -15,6 +15,7 @@ import type {
   Staff,
   Therapist,
 } from "@/components/booking-browser";
+import { validatePromoEligibility, type PromoValidationResult } from "@/lib/promos/validation";
 import type { Database } from "@/lib/types/database";
 
 type ConflictRow = {
@@ -252,10 +253,29 @@ export function QuickWalkinModal({
     if (!propPromos) {
       supabase
         .from("promos")
-        .select("id, label, discount")
+        .select("id, label, discount, applicable_days, applicable_slots, min_pax")
         .eq("active", true)
-        .then(({ data }) => {
-          if (data) setPromos(data);
+        .then(({ data, error }) => {
+          if (error && (error.code === "42703" || error.code === "PGRST204" || error.message?.includes("applicable_days") || error.message?.includes("schema cache"))) {
+            supabase
+              .from("promos")
+              .select("id, label, discount")
+              .eq("active", true)
+              .then(({ data: fallbackData }) => {
+                if (fallbackData) {
+                  setPromos(
+                    fallbackData.map((p) => ({
+                      ...p,
+                      applicable_days: null,
+                      applicable_slots: null,
+                      min_pax: 1,
+                    }))
+                  );
+                }
+              });
+          } else if (data) {
+            setPromos(data);
+          }
         });
     }
     if (!propAddons) {
@@ -845,8 +865,20 @@ export function QuickWalkinModal({
   const isPastSlot = isMassageService && !useCustomTime && !!slotTime && pastSlots.has(slotTime);
   const isBookedSlot = isMassageService && !useCustomTime && !!slotTime && takenSlots.has(slotTime);
 
+  const effectiveWalkinTime = isMassageService ? time : roundedNowTime();
+
+  const promoCheck = useMemo((): PromoValidationResult => {
+    if (promoId === "none" || isLoyaltyRedemption || !selectedPromo) return { eligible: true };
+    return validatePromoEligibility(selectedPromo, {
+      bookingDate: date,
+      slotTime: effectiveWalkinTime,
+      paxCount: 1,
+    });
+  }, [promoId, isLoyaltyRedemption, selectedPromo, date, effectiveWalkinTime]);
+
   const canSubmit =
     !isPending &&
+    promoCheck.eligible &&
     !hasClientSlotConflict &&
     !isPastSlot &&
     !isBookedSlot &&
@@ -866,6 +898,10 @@ export function QuickWalkinModal({
 
   function handleSubmit() {
     setError(null);
+    if (!promoCheck.eligible) {
+      setError(promoCheck.reason || "The selected promo cannot be applied to this booking.");
+      return;
+    }
     if (isMassageService && !useCustomTime && slotTime && pastSlots.has(slotTime)) {
       setError("The selected time slot has already passed. Please select an available slot.");
       return;
@@ -1430,7 +1466,10 @@ export function QuickWalkinModal({
               <select
                 id="wk-promo"
                 value={promoId}
-                onChange={(e) => onPromoChange(e.target.value)}
+                onChange={(e) => {
+                  onPromoChange(e.target.value);
+                  setError(null);
+                }}
                 disabled={manualDiscountOn}
                 className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-50"
               >
@@ -1447,11 +1486,23 @@ export function QuickWalkinModal({
                     Loyalty Reward: Redeem 100 pts (Requires 100 pts • Current: {clientPointsBalance ?? 0} pts)
                   </option>
                 )}
-                {promos.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label} (−₱{p.discount})
-                  </option>
-                ))}
+                {promos.map((p) => {
+                  const check = validatePromoEligibility(p, {
+                    bookingDate: date,
+                    slotTime: effectiveWalkinTime,
+                    paxCount: 1,
+                  });
+                  return (
+                    <option
+                      key={p.id}
+                      value={p.id}
+                      disabled={!check.eligible}
+                      className={!check.eligible ? "text-muted" : undefined}
+                    >
+                      {p.label} (−₱{p.discount}){!check.eligible ? ` — (${check.reason})` : ""}
+                    </option>
+                  );
+                })}
               </select>
               {isLoyaltyRedemption && (
                 <div className="mt-1.5 flex items-center gap-1.5 text-xs text-gold font-medium">
@@ -1459,6 +1510,11 @@ export function QuickWalkinModal({
                   <span>
                     100 pts applied (-₱{combiCredit} credit). Upgrade fee: ₱{Math.max(0, (selectedService?.price ?? 0) - combiCredit)}
                   </span>
+                </div>
+              )}
+              {promoId !== "none" && !isLoyaltyRedemption && !promoCheck.eligible && (
+                <div className="mt-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-300 font-medium">
+                  ⚠ {promoCheck.reason}
                 </div>
               )}
             </div>

@@ -24,6 +24,7 @@ import {
   updateBrandingSettings,
   uploadBrandLogo,
   updateAppearanceSettings,
+  updatePromo,
 } from "@/app/(staff)/settings/actions";
 import {
   ACCENT_PALETTES,
@@ -33,6 +34,11 @@ import {
 import { compareSlotTimes } from "@/lib/bookings/slots";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useTheme } from "@/lib/theme-context";
+import {
+  STANDARD_SHIFT_SLOTS,
+  DAYS_OF_WEEK,
+  formatPromoRuleSummary,
+} from "@/lib/promos/validation";
 import { LoyaltyFormulaSettings } from "@/components/loyalty-formula-settings";
 import { VoidAuthCodeSettings } from "@/components/void-auth-code-settings";
 import { DEFAULT_SMS_TEMPLATE, SMS_TEMPLATE_VARIABLES } from "@/lib/bookings/sms";
@@ -48,6 +54,9 @@ export type Promo = {
   id: string;
   label: string;
   discount: number;
+  applicable_days?: string[] | null;
+  applicable_slots?: string[] | null;
+  min_pax?: number;
 };
 
 export type Addon = {
@@ -340,6 +349,34 @@ export function SettingsBrowser({
     onConfirm: () => void | Promise<void>;
   } | null>(null);
 
+  // Dedicated Promo Modal state (Add / Edit) with day, timeslot, and pax constraints
+  const [promoModal, setPromoModal] = useState<{
+    open: boolean;
+    mode: "add" | "edit";
+    promo?: Promo;
+    label: string;
+    discount: number;
+    dayType: "any" | "weekdays" | "weekends" | "custom";
+    selectedDays: string[];
+    slotType: "any" | "custom";
+    selectedSlots: string[];
+    minPax: number;
+    loading: boolean;
+    error: string | null;
+  }>({
+    open: false,
+    mode: "add",
+    label: "",
+    discount: 100,
+    dayType: "any",
+    selectedDays: [],
+    slotType: "any",
+    selectedSlots: [],
+    minPax: 1,
+    loading: false,
+    error: null,
+  });
+
   // Handlers for Services
   const handleUpdateServicePrice = async (index: number, val: string) => {
     const num = parseInt(val, 10) || 0;
@@ -454,33 +491,133 @@ export function SettingsBrowser({
     });
   };
 
-  const handleAddPromo = () => {
-    setPromptDialog({
-      type: "promo",
-      title: "Add New Promo Code",
-      fields: [
-        { name: "label", label: "Promo Name / Label", defaultValue: "" },
-        { name: "discount", label: "Discount Amount (₱)", defaultValue: "100", type: "number" },
-      ],
-      onConfirm: async (values) => {
-        const label = values.label.trim();
-        if (!label) return;
-        const discount = parseInt(values.discount, 10) || 100;
-        const res = await addPromo(label, discount, selectedStaffId);
-        if (!res.ok) {
-          showToast(`Failed to add ${label}: ${res.error}`);
-          return;
-        }
-        const newPromo: Promo = {
-          id: res.id!,
+  const handleOpenAddPromo = () => {
+    setPromoModal({
+      open: true,
+      mode: "add",
+      label: "",
+      discount: 100,
+      dayType: "any",
+      selectedDays: [],
+      slotType: "any",
+      selectedSlots: [],
+      minPax: 1,
+      loading: false,
+      error: null,
+    });
+  };
+
+  const handleOpenEditPromo = (promo: Promo) => {
+    const days = promo.applicable_days ?? [];
+    let dayType: "any" | "weekdays" | "weekends" | "custom" = "any";
+    if (days.length === 5 && ["Mon", "Tue", "Wed", "Thu", "Fri"].every((d) => days.includes(d))) {
+      dayType = "weekdays";
+    } else if (days.length === 2 && ["Sat", "Sun"].every((d) => days.includes(d))) {
+      dayType = "weekends";
+    } else if (days.length > 0 && days.length < 7) {
+      dayType = "custom";
+    }
+
+    const slots = promo.applicable_slots ?? [];
+    const slotType: "any" | "custom" = slots.length > 0 ? "custom" : "any";
+
+    setPromoModal({
+      open: true,
+      mode: "edit",
+      promo,
+      label: promo.label,
+      discount: promo.discount,
+      dayType,
+      selectedDays: days,
+      slotType,
+      selectedSlots: slots,
+      minPax: promo.min_pax ?? 1,
+      loading: false,
+      error: null,
+    });
+  };
+
+  const handleSavePromoModal = async () => {
+    const label = promoModal.label.trim();
+    if (!label) {
+      setPromoModal((prev) => ({ ...prev, error: "Please enter a promo name." }));
+      return;
+    }
+    const discount = Number(promoModal.discount) || 0;
+    const minPax = Math.max(1, Number(promoModal.minPax) || 1);
+
+    let applicableDays: string[] | null = null;
+    if (promoModal.dayType === "weekdays") {
+      applicableDays = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+    } else if (promoModal.dayType === "weekends") {
+      applicableDays = ["Sat", "Sun"];
+    } else if (promoModal.dayType === "custom") {
+      applicableDays = promoModal.selectedDays.length > 0 ? promoModal.selectedDays : null;
+    }
+
+    let applicableSlots: string[] | null = null;
+    if (promoModal.slotType === "custom") {
+      applicableSlots = promoModal.selectedSlots.length > 0 ? promoModal.selectedSlots : null;
+    }
+
+    setPromoModal((prev) => ({ ...prev, loading: true, error: null }));
+
+    if (promoModal.mode === "add") {
+      const res = await addPromo(label, discount, selectedStaffId, {
+        applicableDays,
+        applicableSlots,
+        minPax,
+      });
+      if (!res.ok) {
+        setPromoModal((prev) => ({ ...prev, loading: false, error: res.error }));
+        return;
+      }
+      const newPromo: Promo = {
+        id: res.id!,
+        label,
+        discount,
+        applicable_days: applicableDays,
+        applicable_slots: applicableSlots,
+        min_pax: minPax,
+      };
+      setPromos((prev) => [...prev, newPromo]);
+      setPromoModal((prev) => ({ ...prev, open: false, loading: false }));
+      showToast(`${label} added`);
+      router.refresh();
+    } else if (promoModal.promo) {
+      const res = await updatePromo(
+        promoModal.promo.id,
+        {
           label,
           discount,
-        };
-        setPromos((prev) => [...prev, newPromo]);
-        showToast(`${label} added`);
-        router.refresh();
-      },
-    });
+          applicableDays,
+          applicableSlots,
+          minPax,
+        },
+        selectedStaffId
+      );
+      if (!res.ok) {
+        setPromoModal((prev) => ({ ...prev, loading: false, error: res.error }));
+        return;
+      }
+      setPromos((prev) =>
+        prev.map((p) =>
+          p.id === promoModal.promo!.id
+            ? {
+                ...p,
+                label,
+                discount,
+                applicable_days: applicableDays,
+                applicable_slots: applicableSlots,
+                min_pax: minPax,
+              }
+            : p
+        )
+      );
+      setPromoModal((prev) => ({ ...prev, open: false, loading: false }));
+      showToast(`${label} updated`);
+      router.refresh();
+    }
   };
 
   const handleDeletePromo = (index: number) => {
@@ -1634,7 +1771,7 @@ export function SettingsBrowser({
           </div>
           {canEditPromos && (
             <button
-              onClick={handleAddPromo}
+              onClick={handleOpenAddPromo}
               className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold transition hover:bg-[#c89b3c]/10"
             >
               + Add Promo
@@ -1661,13 +1798,21 @@ export function SettingsBrowser({
             {promos.map((p, idx) => {
               const draft = promoDrafts[p.id];
               const isDirty = draft !== undefined && parseInt(draft, 10) !== p.discount;
+              const ruleSummary = formatPromoRuleSummary(p);
               return (
                 <div
                   key={p.id || idx}
                   className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 flex-wrap"
                 >
-                  <div className="flex-1 text-[12px] font-bold text-foreground">
-                    {p.label}
+                  <div className="flex-1 min-w-[140px]">
+                    <div className="text-[12px] font-bold text-foreground">
+                      {p.label}
+                    </div>
+                    <div className="mt-0.5 text-[10.5px] font-medium text-accent-gold/90 flex items-center gap-1.5 flex-wrap">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gold/10 border border-gold/20 text-[10px]">
+                        {ruleSummary}
+                      </span>
+                    </div>
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="text-[11px] text-muted">-₱</span>
@@ -1694,6 +1839,14 @@ export function SettingsBrowser({
                         Save
                       </button>
                     </>
+                  )}
+                  {canEditPromos && (
+                    <button
+                      onClick={() => handleOpenEditPromo(p)}
+                      className="rounded-lg border border-border px-2.5 py-1 text-[10px] font-bold text-foreground hover:border-gold hover:text-accent-gold"
+                    >
+                      Edit
+                    </button>
                   )}
                   {canEditPromos && (
                     <button
@@ -1972,6 +2125,246 @@ export function SettingsBrowser({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Dedicated Promo Configuration Modal (Add / Edit) */}
+      {promoModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto animate-fade-in">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div>
+                <h3 className="text-base font-bold text-foreground">
+                  {promoModal.mode === "add" ? "Add New Promo Code" : "Edit Promo Code"}
+                </h3>
+                <p className="text-[11px] text-muted mt-0.5">
+                  Set promo discount, day restrictions, shifts, and guest count requirements.
+                </p>
+              </div>
+              <span className="rounded-md bg-gold/10 px-2 py-0.5 text-[10px] font-semibold text-accent-gold uppercase tracking-wider border border-gold/20">
+                {promoModal.mode === "add" ? "New" : "Config"}
+              </span>
+            </div>
+
+            {promoModal.error && (
+              <div className="rounded-lg border border-[#5e3c3c] bg-surface-2 p-2.5 text-xs text-accent-red">
+                {promoModal.error}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {/* Promo Name / Label */}
+              <div>
+                <label className="block text-[10.5px] font-bold tracking-wider uppercase text-muted mb-1">
+                  Promo Name / Label
+                </label>
+                <input
+                  type="text"
+                  value={promoModal.label}
+                  placeholder="e.g. Early Bird Special or Barkada Pass"
+                  onChange={(e) =>
+                    setPromoModal((prev) => ({ ...prev, label: e.target.value, error: null }))
+                  }
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-gold"
+                />
+              </div>
+
+              {/* Discount Amount */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10.5px] font-bold tracking-wider uppercase text-muted mb-1">
+                    Discount Amount (₱)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={promoModal.discount}
+                    onChange={(e) =>
+                      setPromoModal((prev) => ({
+                        ...prev,
+                        discount: Number(e.target.value) || 0,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 font-mono text-sm text-foreground outline-none focus:border-gold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10.5px] font-bold tracking-wider uppercase text-muted mb-1">
+                    Minimum Guests (Pax)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={promoModal.minPax}
+                    onChange={(e) =>
+                      setPromoModal((prev) => ({
+                        ...prev,
+                        minPax: Math.max(1, Number(e.target.value) || 1),
+                      }))
+                    }
+                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 font-mono text-sm text-foreground outline-none focus:border-gold"
+                  />
+                  <div className="text-[10px] text-muted mt-1">Default 1 guest</div>
+                </div>
+              </div>
+
+              {/* Day Restriction Selector */}
+              <div className="border-t border-border pt-3">
+                <label className="block text-[10.5px] font-bold tracking-wider uppercase text-muted mb-2">
+                  Day Restriction
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2.5">
+                  {(
+                    [
+                      { id: "any", label: "Any Day" },
+                      { id: "weekdays", label: "Weekdays (Mon-Fri)" },
+                      { id: "weekends", label: "Weekends (Sat-Sun)" },
+                      { id: "custom", label: "Custom Days" },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() =>
+                        setPromoModal((prev) => ({
+                          ...prev,
+                          dayType: opt.id,
+                          selectedDays:
+                            opt.id === "weekdays"
+                              ? ["Mon", "Tue", "Wed", "Thu", "Fri"]
+                              : opt.id === "weekends"
+                              ? ["Sat", "Sun"]
+                              : opt.id === "any"
+                              ? []
+                              : prev.selectedDays,
+                        }))
+                      }
+                      className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition text-center ${
+                        promoModal.dayType === opt.id
+                          ? "border-[#a97e2e] bg-gold/15 text-accent-gold"
+                          : "border-border bg-surface-2 text-muted hover:text-foreground"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom Multi-select Day Pills */}
+                {promoModal.dayType === "custom" && (
+                  <div className="p-2.5 rounded-xl border border-border bg-surface-2 space-y-1.5">
+                    <div className="text-[10px] text-muted">Select applicable operating days:</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {DAYS_OF_WEEK.map((d) => {
+                        const isSelected = promoModal.selectedDays.includes(d);
+                        return (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() =>
+                              setPromoModal((prev) => {
+                                const next = isSelected
+                                  ? prev.selectedDays.filter((item) => item !== d)
+                                  : [...prev.selectedDays, d];
+                                return { ...prev, selectedDays: next };
+                              })
+                            }
+                            className={`px-2.5 py-1 rounded-md border text-xs font-semibold transition ${
+                              isSelected
+                                ? "border-gold bg-gold text-black font-bold shadow-sm"
+                                : "border-border bg-surface text-muted hover:text-foreground"
+                            }`}
+                          >
+                            {d}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Timeslot Restriction Selector */}
+              <div className="border-t border-border pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[10.5px] font-bold tracking-wider uppercase text-muted">
+                    Timeslot Restriction
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPromoModal((prev) => ({
+                        ...prev,
+                        slotType: prev.slotType === "any" ? "custom" : "any",
+                        selectedSlots: prev.slotType === "any" ? [...STANDARD_SHIFT_SLOTS] : [],
+                      }))
+                    }
+                    className="text-[11px] text-accent-gold underline hover:brightness-110"
+                  >
+                    {promoModal.slotType === "any" ? "Restrict to specific slots" : "Toggle Any Slot"}
+                  </button>
+                </div>
+
+                {promoModal.slotType === "any" ? (
+                  <div className="rounded-lg border border-border bg-surface-2 p-2.5 text-xs text-muted">
+                    ✓ Valid during any operating shift time slot (Any Slot).
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-xl border border-border bg-surface-2 space-y-2">
+                    <div className="text-[10px] text-muted">
+                      Select all standard shift slots where this promo applies:
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                      {STANDARD_SHIFT_SLOTS.map((slot) => {
+                        const isSelected = promoModal.selectedSlots.includes(slot);
+                        return (
+                          <button
+                            key={slot}
+                            type="button"
+                            onClick={() =>
+                              setPromoModal((prev) => {
+                                const next = isSelected
+                                  ? prev.selectedSlots.filter((s) => s !== slot)
+                                  : [...prev.selectedSlots, slot];
+                                return { ...prev, selectedSlots: next };
+                              })
+                            }
+                            className={`px-2 py-1.5 rounded-md border font-mono text-[11px] transition text-center ${
+                              isSelected
+                                ? "border-gold bg-gold text-black font-bold shadow-sm"
+                                : "border-border bg-surface text-muted hover:text-foreground"
+                            }`}
+                          >
+                            {slot.replace(/^0/, "")}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex gap-2.5 pt-3 border-t border-border">
+              <button
+                type="button"
+                disabled={promoModal.loading}
+                onClick={() => setPromoModal((prev) => ({ ...prev, open: false }))}
+                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={promoModal.loading}
+                onClick={handleSavePromoModal}
+                className="flex-1 rounded-lg bg-gold py-2 text-xs font-bold text-black hover:brightness-110 transition disabled:opacity-50"
+              >
+                {promoModal.loading ? "Saving..." : promoModal.mode === "add" ? "Create Promo" : "Save Changes"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/portal/service-client";
+import type { Database } from "@/lib/types/database";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -131,20 +132,104 @@ export async function deleteService(serviceId: string, staffId: string): Promise
 export async function addPromo(
   label: string,
   discount: number,
-  staffId: string
+  staffId: string,
+  constraints?: {
+    applicableDays?: string[] | null;
+    applicableSlots?: string[] | null;
+    minPax?: number | null;
+  }
 ): Promise<ActionResult & { id?: string }> {
   const supabase = await createClient();
   const ownerCheck = await requireOwner(supabase);
   if (ownerCheck) return ownerCheck;
-  const { data, error } = await supabase
+
+  const insertPayload: Record<string, any> = { label, discount };
+  if (constraints?.applicableDays !== undefined) {
+    insertPayload.applicable_days = constraints.applicableDays;
+  }
+  if (constraints?.applicableSlots !== undefined) {
+    insertPayload.applicable_slots = constraints.applicableSlots;
+  }
+  if (constraints?.minPax !== undefined) {
+    insertPayload.min_pax = constraints.minPax ?? 1;
+  }
+
+  let { data, error } = await (supabase as any)
     .from("promos")
-    .insert({ label, discount })
+    .insert(insertPayload)
     .select("id")
     .single();
+
+  // Fallback in case schema cache is pending column reload
+  if (error && (error.code === "42703" || error.code === "PGRST204" || error.message?.includes("applicable_days") || error.message?.includes("applicable_slots") || error.message?.includes("min_pax"))) {
+    const res = await supabase
+      .from("promos")
+      .insert({ label, discount })
+      .select("id")
+      .single();
+    data = res.data;
+    error = res.error;
+  }
+
   if (error) return fail(error);
-  await logAction(supabase, staffId, "settings_add_promo", `label=${label} discount=${discount}`);
+  await logAction(
+    supabase,
+    staffId,
+    "settings_add_promo",
+    `label=${label} discount=${discount} min_pax=${constraints?.minPax ?? 1}`
+  );
   revalidatePath("/settings");
   return { ok: true, id: data.id };
+}
+
+export async function updatePromo(
+  promoId: string,
+  updates: {
+    label?: string;
+    discount?: number;
+    applicableDays?: string[] | null;
+    applicableSlots?: string[] | null;
+    minPax?: number | null;
+  },
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const ownerCheck = await requireOwner(supabase);
+  if (ownerCheck) return ownerCheck;
+
+  const updatePayload: Database["public"]["Tables"]["promos"]["Update"] = {};
+  if (updates.label !== undefined) updatePayload.label = updates.label;
+  if (updates.discount !== undefined) updatePayload.discount = updates.discount;
+  if (updates.applicableDays !== undefined) updatePayload.applicable_days = updates.applicableDays;
+  if (updates.applicableSlots !== undefined) updatePayload.applicable_slots = updates.applicableSlots;
+  if (updates.minPax !== undefined) updatePayload.min_pax = typeof updates.minPax === "number" && updates.minPax > 0 ? updates.minPax : 1;
+
+  let { error } = await supabase
+    .from("promos")
+    .update(updatePayload)
+    .eq("id", promoId);
+
+  // Fallback in case columns are pending reload in schema cache
+  if (error && (error.code === "42703" || error.code === "PGRST204" || error.message?.includes("applicable_days") || error.message?.includes("applicable_slots") || error.message?.includes("min_pax"))) {
+    const safePayload: Database["public"]["Tables"]["promos"]["Update"] = {};
+    if (updates.label !== undefined) safePayload.label = updates.label;
+    if (updates.discount !== undefined) safePayload.discount = updates.discount;
+    const res = await supabase
+      .from("promos")
+      .update(safePayload)
+      .eq("id", promoId);
+    error = res.error;
+  }
+
+  if (error) return fail(error);
+  await logAction(
+    supabase,
+    staffId,
+    "settings_update_promo",
+    `promo=${promoId} updates=${JSON.stringify(updates)}`
+  );
+  revalidatePath("/settings");
+  return { ok: true };
 }
 
 export async function updatePromoDiscount(

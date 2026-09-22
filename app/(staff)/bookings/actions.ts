@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/types/database";
 import { computeLoyaltyPoints, WET_AREA_POINTS, type LoyaltyFormulaMode } from "@/lib/loyalty";
+import { validatePromoEligibility } from "@/lib/promos/validation";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 
@@ -93,10 +94,78 @@ function fmtTime(t: string): string {
   return `${hr}:${m} ${+h < 12 ? "AM" : "PM"}`;
 }
 
+async function verifyPromoConstraint(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  promoId: string,
+  bookingDate: string,
+  startTime: string,
+  paxCount: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  let promoData: any = null;
+  const { data: promo, error: promoError } = await supabase
+    .from("promos")
+    .select("id, label, discount, applicable_days, applicable_slots, min_pax, active")
+    .eq("id", promoId)
+    .maybeSingle();
+
+  if (
+    promoError &&
+    (promoError.code === "42703" ||
+      promoError.code === "PGRST204" ||
+      promoError.message?.includes("applicable_days") ||
+      promoError.message?.includes("schema cache"))
+  ) {
+    const { data: fallbackPromo } = await supabase
+      .from("promos")
+      .select("id, label, discount, active")
+      .eq("id", promoId)
+      .maybeSingle();
+    if (fallbackPromo) {
+      promoData = {
+        ...fallbackPromo,
+        applicable_days: null,
+        applicable_slots: null,
+        min_pax: 1,
+      };
+    }
+  } else {
+    promoData = promo;
+  }
+
+  if (!promoData || !promoData.active) {
+    return { ok: false, error: "The selected promo is inactive or invalid." };
+  }
+
+  const check = validatePromoEligibility(promoData, {
+    bookingDate,
+    slotTime: startTime,
+    paxCount,
+  });
+
+  if (!check.eligible) {
+    return { ok: false, error: check.reason || "The selected promo cannot be applied to this booking." };
+  }
+
+  return { ok: true };
+}
+
 export async function createBooking(
   input: CreateBookingInput
 ): Promise<CreateBookingResult> {
   const supabase = await createClient();
+
+  if (input.promoId) {
+    const promoCheck = await verifyPromoConstraint(
+      supabase,
+      input.promoId,
+      input.bookingDate,
+      input.startTime,
+      input.paxCount ?? 1
+    );
+    if (!promoCheck.ok) {
+      return { ok: false, error: promoCheck.error };
+    }
+  }
 
   if (input.roomNumber !== null) {
     const maxRoom = await getMaxRoomCapacity(supabase);
@@ -228,6 +297,19 @@ export async function quickWalkin(
   input: QuickWalkinInput
 ): Promise<QuickWalkinResult> {
   const supabase = await createClient();
+
+  if (input.promoId) {
+    const promoCheck = await verifyPromoConstraint(
+      supabase,
+      input.promoId,
+      input.bookingDate,
+      input.startTime,
+      1
+    );
+    if (!promoCheck.ok) {
+      return { ok: false, error: promoCheck.error };
+    }
+  }
 
   if (input.roomNumber !== null) {
     const maxRoom = await getMaxRoomCapacity(supabase);
@@ -1345,6 +1427,19 @@ export async function logVisitBooking(
       return { ok: false, error: res.error, field: res.field };
     }
     return { ok: true, saleId: null, ledgerId: null, pointsAwarded: res.pointsAwarded };
+  }
+
+  if (input.promoId) {
+    const promoCheck = await verifyPromoConstraint(
+      supabase,
+      input.promoId,
+      input.bookingDate,
+      input.startTime,
+      1
+    );
+    if (!promoCheck.ok) {
+      return { ok: false, error: promoCheck.error };
+    }
   }
 
   if (input.isRedemption) {
