@@ -125,6 +125,66 @@ function normalizeServiceNames(list: string[]): string[] {
   return list.map((name) => (name === "Scrub + Massage" ? "Scrub" : name));
 }
 
+function formatBreakError(error: unknown): string | null {
+  if (!error) return null;
+
+  if (typeof error === "string") {
+    const trimmed = error.trim();
+    if (!trimmed || trimmed === "[object Object]") return null;
+    return trimmed;
+  }
+
+  if (error instanceof Error) {
+    return error.message ? error.message : String(error);
+  }
+
+  if (typeof error === "object") {
+    const obj = error as Record<string, any>;
+
+    // Conflict object (e.g. { bookingId, clientName, slot })
+    if ("bookingId" in obj || ("clientName" in obj && ("slot" in obj || "time" in obj))) {
+      const client = obj.clientName || "customer";
+      const slot = obj.slot || obj.time;
+      const formattedSlot = slot ? fmtTime(slot) : "selected slot";
+      return `Conflict: Booked for ${client} at ${formattedSlot}`;
+    }
+
+    // Generic action return: { ok: false, error: ... }
+    if ("error" in obj && obj.error) {
+      if (typeof obj.error === "string") {
+        const trimmed = obj.error.trim();
+        return trimmed !== "[object Object]" && trimmed.length > 0
+          ? trimmed
+          : "Failed to update break times. Please try again.";
+      }
+      return formatBreakError(obj.error);
+    }
+
+    // Generic error object with message
+    if (typeof obj.message === "string" && obj.message.trim().length > 0 && obj.message !== "[object Object]") {
+      return obj.message.trim();
+    }
+
+    // Generic error object with error_description or details
+    if (typeof obj.error_description === "string" && obj.error_description.trim().length > 0) {
+      return obj.error_description.trim();
+    }
+    if (typeof obj.details === "string" && obj.details.trim().length > 0) {
+      return obj.details.trim();
+    }
+
+    try {
+      const json = JSON.stringify(error);
+      if (json && json !== "{}") return json;
+    } catch {
+      // ignore
+    }
+  }
+
+  const str = String(error);
+  return str && str !== "[object Object]" ? str : null;
+}
+
 export function TherapistBrowser({
   initialTherapists,
   initialDayOff = {},
@@ -415,7 +475,7 @@ export function TherapistBrowser({
   } | null;
   const [breakModal, setBreakModal] = useState<BreakModalState>(null);
   const [isSubmittingBreak, setIsSubmittingBreak] = useState<boolean>(false);
-  const [breakError, setBreakError] = useState<string | null>(null);
+  const [breakError, setBreakError] = useState<unknown | null>(null);
 
   const handleOpenBreakModal = (therapistName: string, initialSlot?: string) => {
     const currentBreaks = getTherapistBreaks(therapistName, viewDate).map((s) => s.slice(0, 5));
@@ -505,7 +565,7 @@ export function TherapistBrowser({
         sessionStaff.id
       );
       if (!res.ok) {
-        setBreakError(res.error);
+        setBreakError((res as any).error || res);
         return;
       }
 
@@ -538,8 +598,8 @@ export function TherapistBrowser({
 
       setBreakModal(null);
       router.refresh();
-    } catch (err: any) {
-      setBreakError(err?.message || "Failed to update break times");
+    } catch (err: unknown) {
+      setBreakError(err);
     } finally {
       setIsSubmittingBreak(false);
     }
@@ -2043,8 +2103,18 @@ export function TherapistBrowser({
                   </div>
                   <p className="leading-relaxed">
                     <strong>{t}</strong> already has an active booking with{" "}
-                    <span className="font-semibold text-white">{conflictBooking.clientName}</span> (
-                    {conflictBooking.service}) at <strong>{fmtTime(conflictBooking.time)}</strong>.
+                    <span className="font-semibold text-white">
+                      {typeof conflictBooking.clientName === "string"
+                        ? conflictBooking.clientName
+                        : (conflictBooking.clientName as any)?.codename ||
+                          (conflictBooking.clientName as any)?.name ||
+                          "customer"}
+                    </span>{" "}
+                    (
+                    {typeof conflictBooking.service === "string"
+                      ? conflictBooking.service
+                      : (conflictBooking.service as any)?.name || "Massage"}
+                    ) at <strong>{fmtTime(conflictBooking.time)}</strong>.
                   </p>
                   <p className="text-[11px] text-muted">
                     You must reassign or cancel this booking before confirming the break time slot.
@@ -2114,11 +2184,26 @@ export function TherapistBrowser({
                 </div>
               )}
 
-              {breakError && (
-                <div className="text-[11.5px] text-rose-400 font-medium px-1">
-                  {breakError}
-                </div>
-              )}
+              {(() => {
+                const errorMessage = formatBreakError(breakError);
+                if (!Boolean(errorMessage)) return null;
+                return (
+                  <div className="p-3 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs flex items-start gap-2">
+                    <svg
+                      className="w-4 h-4 text-rose-400 shrink-0 mt-0.5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <span className="leading-relaxed font-medium">{errorMessage}</span>
+                  </div>
+                );
+              })()}
 
               <div className="flex gap-2 pt-1">
                 <button

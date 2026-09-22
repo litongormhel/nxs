@@ -22,7 +22,31 @@ async function logAction(
 }
 
 function fail(error: unknown): { ok: false; error: string } {
-  return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  if (typeof error === "string") return { ok: false, error };
+  if (error instanceof Error) return { ok: false, error: error.message };
+  if (error && typeof error === "object") {
+    const errObj = error as Record<string, any>;
+    if (typeof errObj.message === "string" && errObj.message.trim().length > 0) {
+      return { ok: false, error: errObj.message };
+    }
+    if (typeof errObj.error_description === "string" && errObj.error_description.trim().length > 0) {
+      return { ok: false, error: errObj.error_description };
+    }
+    if (typeof errObj.details === "string" && errObj.details.trim().length > 0) {
+      return { ok: false, error: errObj.details };
+    }
+    if (typeof errObj.hint === "string" && errObj.hint.trim().length > 0) {
+      return { ok: false, error: errObj.hint };
+    }
+    try {
+      const json = JSON.stringify(error);
+      if (json && json !== "{}") return { ok: false, error: json };
+    } catch {
+      // ignore
+    }
+  }
+  const str = String(error);
+  return { ok: false, error: str !== "[object Object]" ? str : "An unexpected error occurred." };
 }
 
 export async function createTherapist(
@@ -540,8 +564,15 @@ export async function syncTherapistBreaks(
   const supabase = await createClient();
   const normalizedSlots = Array.from(new Set(selectedSlots.map((s) => s.slice(0, 5))));
 
+  let mutationClient = supabase;
+  try {
+    mutationClient = createStaffServiceClient() as any;
+  } catch {
+    mutationClient = supabase;
+  }
+
   // Fetch current breaks for this therapist on this date
-  const { data: currentBreaks, error: fetchErr } = await (supabase
+  const { data: currentBreaks, error: fetchErr } = await (mutationClient
     .from("therapist_breaks" as any) as any)
     .select("slot_time")
     .eq("therapist_id", therapistId)
@@ -583,12 +614,6 @@ export async function syncTherapistBreaks(
     }
   }
 
-  let mutationClient = supabase;
-  try {
-    mutationClient = createStaffServiceClient() as any;
-  } catch {
-    mutationClient = supabase;
-  }
 
   // Remove deselected slots
   if (slotsToRemove.length > 0) {
