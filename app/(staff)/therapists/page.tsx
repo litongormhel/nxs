@@ -12,6 +12,7 @@ export default async function TherapistsPage() {
     { data: dbLeave },
     { data: dbServices },
     { data: dbTherapistServices },
+    { data: dbBreaks },
   ] = await Promise.all([
     supabase
       .from("therapists")
@@ -31,6 +32,9 @@ export default async function TherapistsPage() {
       .order("created_at", { ascending: false }),
     supabase.from("services").select("id, name"),
     supabase.from("therapist_services").select("therapist_id, service_id"),
+    (supabase
+      .from("therapist_breaks" as any) as any)
+      .select("therapist_id, break_date, slot_time"),
   ]);
 
   const therapists =
@@ -100,6 +104,14 @@ export default async function TherapistsPage() {
     (servicesByTherapist[row.therapist_id] ??= []).push(service.name);
   });
 
+  const breaksByTherapist: Record<string, Record<string, string[]>> = {};
+  (dbBreaks ?? []).forEach((row: any) => {
+    if (!row.therapist_id || !row.break_date || !row.slot_time) return;
+    breaksByTherapist[row.therapist_id] ??= {};
+    breaksByTherapist[row.therapist_id][row.break_date] ??= [];
+    breaksByTherapist[row.therapist_id][row.break_date].push(row.slot_time.slice(0, 5));
+  });
+
   const bookings: BookingInfo[] = (dbBookings ?? []).map((b: any) => {
     const activeOcc = (b.locker_occupancy ?? []).find(
       (o: any) => !o.checked_out_at
@@ -137,6 +149,7 @@ export default async function TherapistsPage() {
         initialLeave={leaveByTherapist}
         initialArchived={archivedByTherapist}
         initialServices={servicesByTherapist}
+        initialBreaks={breaksByTherapist}
         serviceIds={serviceIds}
       />
     </div>

@@ -52,6 +52,7 @@ export interface TherapistCardProps {
   viewDate: string;
   currentTime: Date;
   bookings: BookingInfo[];
+  breakSlots?: string[];
   isTop?: boolean;
   selectedSlot?: string;
   onSelectSlot?: (slot: string) => void;
@@ -64,6 +65,7 @@ export interface TherapistCardProps {
   onUnarchive: () => void;
   onRequestEdit: () => void;
   onViewSchedule: () => void;
+  onRequestBreak?: (slot?: string) => void;
   isMenuOpen?: boolean;
   onToggleMenu?: () => void;
   onBookSlot: (slot: string) => void;
@@ -76,6 +78,7 @@ export function TherapistCard({
   viewDate,
   currentTime,
   bookings,
+  breakSlots = [],
   isTop = false,
   selectedSlot,
   onSelectSlot,
@@ -90,6 +93,7 @@ export function TherapistCard({
   onUnarchive,
   onRequestEdit,
   onViewSchedule,
+  onRequestBreak,
   onBookSlot,
 }: TherapistCardProps) {
   const [localMenuOpen, setLocalMenuOpen] = useState<boolean>(false);
@@ -148,15 +152,17 @@ export function TherapistCard({
     });
   };
 
-  // Slot classification: free, taken (future AND booked), or past
+  // Slot classification: free, taken (future AND booked), break, or past
   const classifiedSlots = WEEKEND_SLOTS.map((slot) => {
     const isPast = isSlotPastGracePeriod(slot, viewDate, currentTime, 20);
     const isBooked = isTherapistBusy(slot, 90);
-    const isFree = !isPast && !isBooked;
+    const isBreak = (breakSlots ?? []).includes(slot);
+    const isFree = !isPast && !isBooked && !isBreak;
     return {
       slot,
       isPast,
       isBooked,
+      isBreak,
       isFree,
     };
   });
@@ -213,7 +219,9 @@ export function TherapistCard({
   }).length;
 
   const totalSlots = WEEKEND_SLOTS.length;
-  const progressPct = Math.min(100, Math.round((bookedToday / totalSlots) * 100));
+  const breakCount = (breakSlots ?? []).length;
+  const bookableCapacity = Math.max(0, totalSlots - breakCount);
+  const progressPct = bookableCapacity > 0 ? Math.min(100, Math.round((bookedToday / bookableCapacity) * 100)) : 100;
 
   return (
     <div
@@ -359,6 +367,32 @@ export function TherapistCard({
                         </button>
                       )}
 
+                      {isAvailable && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            closeMenu();
+                            onRequestBreak?.();
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-foreground/5 transition-colors flex items-center gap-2 text-amber-300"
+                        >
+                          <svg
+                            width="13"
+                            height="13"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                          </svg>
+                          Set Break Time
+                        </button>
+                      )}
+
                       <hr className="border-t border-border my-1 mx-1" />
 
                       <button
@@ -409,7 +443,7 @@ export function TherapistCard({
             <div className="flex justify-between items-center text-xs text-muted mb-1.5">
               <span>Booked today</span>
               <span className="text-accent-gold font-medium">
-                {bookedToday} / {totalSlots} slots
+                {bookedToday} / {bookableCapacity} slots
               </span>
             </div>
             <div className="h-1.5 rounded-full bg-border overflow-hidden">
@@ -435,7 +469,7 @@ export function TherapistCard({
               isAvailable ? "" : "opacity-40 pointer-events-none"
             }`}
           >
-            {classifiedSlots.map(({ slot, isPast, isBooked, isFree }) => {
+            {classifiedSlots.map(({ slot, isPast, isBooked, isBreak, isFree }) => {
               const isSelected = isAvailable && slot === activeSlot;
 
               if (!isAvailable) {
@@ -446,6 +480,20 @@ export function TherapistCard({
                   >
                     {fmtTime(slot)}
                   </span>
+                );
+              }
+
+              if (isBreak) {
+                return (
+                  <button
+                    key={slot}
+                    type="button"
+                    onClick={() => onRequestBreak?.(slot)}
+                    className="text-center text-[10.5px] py-1.5 px-1 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-300 font-medium cursor-pointer hover:bg-amber-500/20 transition-colors shadow-sm"
+                    title={`${fmtTime(slot)} (Break) — Click to manage break`}
+                  >
+                    {fmtTime(slot)} (Break)
+                  </button>
                 );
               }
 

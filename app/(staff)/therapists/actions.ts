@@ -412,3 +412,121 @@ export async function toggleTherapistService(
   revalidatePath("/bookings");
   return { ok: true };
 }
+
+export async function setTherapistBreak(
+  therapistId: string,
+  date: string,
+  slotTime: string,
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const normalizedSlot = slotTime.slice(0, 5);
+
+  // Guard against existing bookings on this slot
+  const { data: activeBookings, error: bookingErr } = await supabase
+    .from("bookings")
+    .select("id, start_time, status")
+    .eq("therapist_id", therapistId)
+    .eq("booking_date", date)
+    .neq("status", "Cancelled");
+
+  if (bookingErr) {
+    console.error("[setTherapistBreak] Error checking existing bookings:", bookingErr);
+  }
+
+  const hasConflict = (activeBookings ?? []).some(
+    (b) => b.start_time.slice(0, 5) === normalizedSlot
+  );
+
+  if (hasConflict) {
+    return {
+      ok: false,
+      error: "Therapist has an existing booking on this slot. Please reassign or cancel the booking first.",
+    };
+  }
+
+  let mutationClient = supabase;
+  try {
+    mutationClient = createStaffServiceClient() as any;
+  } catch {
+    mutationClient = supabase;
+  }
+
+  const { error: insertError } = await (mutationClient
+    .from("therapist_breaks" as any) as any)
+    .upsert(
+      {
+        therapist_id: therapistId,
+        break_date: date,
+        slot_time: normalizedSlot,
+        created_by: staffId || null,
+      },
+      { onConflict: "therapist_id,break_date,slot_time", ignoreDuplicates: true }
+    );
+
+  if (insertError) {
+    return fail(insertError);
+  }
+
+  if (staffId) {
+    try {
+      await logAction(
+        supabase,
+        staffId,
+        "therapist_set_break",
+        `therapist=${therapistId} date=${date} slot=${normalizedSlot}`
+      );
+    } catch (logErr) {
+      console.warn("Failed to log therapist_set_break action:", logErr);
+    }
+  }
+
+  revalidatePath("/therapists");
+  revalidatePath("/bookings");
+  return { ok: true };
+}
+
+export async function removeTherapistBreak(
+  therapistId: string,
+  date: string,
+  slotTime: string,
+  staffId: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const normalizedSlot = slotTime.slice(0, 5);
+
+  let mutationClient = supabase;
+  try {
+    mutationClient = createStaffServiceClient() as any;
+  } catch {
+    mutationClient = supabase;
+  }
+
+  const { error: deleteError } = await (mutationClient
+    .from("therapist_breaks" as any) as any)
+    .delete()
+    .eq("therapist_id", therapistId)
+    .eq("break_date", date)
+    .eq("slot_time", normalizedSlot);
+
+  if (deleteError) {
+    return fail(deleteError);
+  }
+
+  if (staffId) {
+    try {
+      await logAction(
+        supabase,
+        staffId,
+        "therapist_remove_break",
+        `therapist=${therapistId} date=${date} slot=${normalizedSlot}`
+      );
+    } catch (logErr) {
+      console.warn("Failed to log therapist_remove_break action:", logErr);
+    }
+  }
+
+  revalidatePath("/therapists");
+  revalidatePath("/bookings");
+  return { ok: true };
+}

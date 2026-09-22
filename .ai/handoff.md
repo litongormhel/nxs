@@ -4,10 +4,44 @@ Not a history log — see `.ai/briefing.md` → "Last Completed Tasks" for that.
 This file tracks only what's in flight right now.
 
 ## Current Sprint Status
-- All sprint tasks through `ohm#8b3c1d4e` are complete and verified (`npm run build` clean, 0 errors).
+- All sprint tasks through `ohm#9c4e2b7a` are complete and verified (`npm run build` clean, 0 errors).
 - Working tree clean. Awaiting next active prompt/milestone.
 
 ## In progress
+
+- **Implement Therapist Break Time Slot Management with Confirmation Modal — complete**
+  (`ohm#9c4e2b7a`, 2026-09-22).
+  - Implementation plan presented and approved before code execution.
+  - **Database Migration (`supabase/migrations/20260922100000_therapist_breaks.sql`)**:
+    - Created `public.therapist_breaks` table (`id uuid default gen_random_uuid() primary key`, `therapist_id uuid references staff(id) on delete cascade`, `break_date date not null`, `slot_time text not null`, `created_at timestamptz default now()`, `created_by uuid references staff(id)`).
+    - Unique constraint `uq_therapist_break_slot` on `(therapist_id, break_date, slot_time)`.
+    - RLS enabled with SELECT, INSERT, and DELETE policies scoped to `is_staff()`.
+    - Trigger `check_therapist_availability()` updated on `bookings` to raise exception `'THERAPIST_UNAVAILABLE: Break'` if booking falls on a therapist break slot.
+  - **Server Actions (`app/(staff)/therapists/actions.ts`)**:
+    - `setTherapistBreak({ therapistId, breakDate, slotTime })`: validates caller authentication via `supabase.auth.getUser()`, checks for conflicting active bookings (`Booked`, `In Service`, `Needs Reassignment`), upserts into `therapist_breaks`, logs to `action_logs` (`therapist_set_break`), and revalidates `/therapists` and `/bookings`.
+    - `removeTherapistBreak({ therapistId, breakDate, slotTime })`: deletes break record, logs to `action_logs` (`therapist_remove_break`), and revalidates.
+  - **Therapists Page (`app/(staff)/therapists/page.tsx`)**:
+    - Fetches `therapist_breaks` across the active week range (`mondayStr` to `sundayStr`) in parallel with staff and weekly bookings.
+    - Groups breaks into `initialBreaks: Record<string, Record<string, string[]>>` (`[therapist_id][date] = slot_times[]`) and passes to `<TherapistBrowser />`.
+  - **Therapist Card UI (`components/therapist-card.tsx`)**:
+    - Added `breakSlots` and `onRequestBreak` props.
+    - Classifies shift slots into `isBooked`, `isBreak`, and `isFree = !isPast && !isBooked && !isBreak`.
+    - Recalculates bookable capacity: `bookableCapacity = Math.max(0, totalSlots - breakCount)` and displays `{bookedToday} / {bookableCapacity} slots` (e.g. `1 / 6 slots`).
+    - Added "Set Break Time" option to kebab dropdown menu (`...`).
+    - Styled break slots distinctly with muted amber border, background, and indicator text: `[Time] (Break)`, with click-to-manage break interaction.
+  - **Therapist Browser & Confirmation Modal (`components/therapist-browser.tsx`)**:
+    - Added `breaksByTherapist` state and `breakModal` state (`open`, `therapist`, `date`, `selectedSlot`, `loading`, `error`).
+    - Integrated Break Confirmation Modal with:
+      - Therapist avatar, name, and role badge.
+      - 7-slot operating time selector (`16:00`, `17:30`, `19:00`, `20:30`, `22:00`, `23:30`, `01:00`) with visual status indicators (`Free`, `Booked`, `Break`).
+      - Exact required confirmation prompt: `"Confirm setting [Formatted Time] as Break Time for [Therapist Name]? This slot will become unavailable for customer bookings."`
+      - Booking conflict guard: if an active booking is detected on the selected slot, displays an amber conflict alert banner (`"Cannot set break time: Therapist has an active booking at [Time]. Please reassign or cancel the booking first."`) and disables the `Confirm Break` button.
+      - Break removal action: if the selected slot is already marked as a break, displays a remove confirmation button to clear the break slot.
+  - **Booking Gating & Error Mapping (`components/booking-form-modal.tsx`, `components/quick-walkin-modal.tsx`, `app/(staff)/bookings/actions.ts`)**:
+    - Fetches `therapist_breaks` for the selected date on modal load.
+    - Treats therapists on break as busy for that slot: displays `(on break)` in therapist dropdowns and marks slots with `Break` tag + strikethrough in time grids.
+    - Maps DB trigger error `'THERAPIST_UNAVAILABLE: Break'` in booking actions to clear user-facing error `"That therapist is on scheduled break for the selected time."`.
+  - **Verification**: `npm run build` clean (0 errors, 26 routes generated).
 
 - **Add Branding Customization, Typography Selector, and Theme Density Controls in Settings — complete**
   (`ohm#8b3c1d4e`, 2026-09-21).

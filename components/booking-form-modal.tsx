@@ -184,6 +184,7 @@ export function BookingFormModal({
   const staffId = actor?.id ?? "";
   const [conflicts, setConflicts] = useState<ConflictRow[]>([]);
   const [unavailableTherapists, setUnavailableTherapists] = useState<Map<string, string>>(new Map());
+  const [therapistBreaksMap, setTherapistBreaksMap] = useState<Map<string, Set<string>>>(new Map());
   const [serviceTherapistMap, setServiceTherapistMap] = useState<Map<string, Set<string>>>(new Map());
   const [therapistServicesMap, setTherapistServicesMap] = useState<Map<string, Set<string>>>(new Map());
   const [servicesLoaded, setServicesLoaded] = useState(false);
@@ -259,7 +260,11 @@ export function BookingFormModal({
         .lte("start_date", date)
         .gte("end_date", date),
       supabase.from("therapist_services").select("therapist_id, service_id"),
-    ]).then(([dayOff, absence, leave, servicesOffered]) => {
+      (supabase
+        .from("therapist_breaks" as any) as any)
+        .select("therapist_id, slot_time")
+        .eq("break_date", date),
+    ]).then(([dayOff, absence, leave, servicesOffered, breaks]) => {
       const map = new Map<string, string>();
       for (const row of dayOff.data ?? []) {
         if (row.weekday === weekday) map.set(row.therapist_id, "Day Off");
@@ -271,6 +276,16 @@ export function BookingFormModal({
         map.set(row.therapist_id, "On Leave");
       }
       setUnavailableTherapists(map);
+
+      const brMap = new Map<string, Set<string>>();
+      for (const row of breaks.data ?? []) {
+        if (!row.therapist_id || !row.slot_time) continue;
+        if (!brMap.has(row.therapist_id)) {
+          brMap.set(row.therapist_id, new Set());
+        }
+        brMap.get(row.therapist_id)!.add(row.slot_time.slice(0, 5));
+      }
+      setTherapistBreaksMap(brMap);
 
       const stMap = new Map<string, Set<string>>();
       const tsMap = new Map<string, Set<string>>();
@@ -330,17 +345,20 @@ export function BookingFormModal({
     return set;
   }, [timeSlots, date, currentTime]);
 
-  // Taken slots in the slot grid (therapist busy or no rooms available)
+  // Taken slots in the slot grid (therapist busy, on break, or no rooms available)
   const takenSlots = useMemo(() => {
     const taken = new Set<string>();
+    const therapistBreaks = therapistId ? therapistBreaksMap.get(therapistId) : undefined;
     for (const slot of timeSlots) {
+      const isBreak = therapistBreaks?.has(slot.slice(0, 5));
       const therapistBusy =
         !!therapistId &&
-        conflicts.some(
-          (c) =>
-            c.therapist_id === therapistId &&
-            slotsOverlap(slot, duration, c.start_time, c.duration_minutes ?? duration ?? 60)
-        );
+        (isBreak ||
+          conflicts.some(
+            (c) =>
+              c.therapist_id === therapistId &&
+              slotsOverlap(slot, duration, c.start_time, c.duration_minutes ?? duration ?? 60)
+          ));
 
       const takenRooms = new Set<number>();
       for (const row of conflicts) {
@@ -356,20 +374,26 @@ export function BookingFormModal({
       }
     }
     return taken;
-  }, [conflicts, therapistId, duration, effectiveRooms, timeSlots]);
+  }, [conflicts, therapistId, duration, effectiveRooms, timeSlots, therapistBreaksMap]);
 
   // Conflicting therapists at current time
   const conflictingTherapists = useMemo(() => {
     const taken = new Set<string>();
     if (!time) return taken;
+    const normTime = time.slice(0, 5);
     for (const row of conflicts) {
       if (!row.therapist_id) continue;
       if (slotsOverlap(time, duration, row.start_time, row.duration_minutes ?? duration ?? 60)) {
         taken.add(row.therapist_id);
       }
     }
+    therapistBreaksMap.forEach((breakSet, tId) => {
+      if (breakSet.has(normTime)) {
+        taken.add(tId);
+      }
+    });
     return taken;
-  }, [conflicts, time, duration]);
+  }, [conflicts, time, duration, therapistBreaksMap]);
 
   // Free rooms at current time
   const freeRooms = useMemo(() => {
@@ -407,9 +431,11 @@ export function BookingFormModal({
     const fullyBooked = new Set<string>();
     if (timeSlots.length === 0) return fullyBooked;
     for (const t of qualifiedTherapists) {
+      const tBreaks = therapistBreaksMap.get(t.id);
       const hasFreeSlot = timeSlots.some(
         (slot) =>
           !pastSlots.has(slot) &&
+          !tBreaks?.has(slot.slice(0, 5)) &&
           !conflicts.some(
             (c) =>
               c.therapist_id === t.id &&
@@ -419,7 +445,7 @@ export function BookingFormModal({
       if (!hasFreeSlot) fullyBooked.add(t.id);
     }
     return fullyBooked;
-  }, [qualifiedTherapists, timeSlots, pastSlots, conflicts, duration]);
+  }, [qualifiedTherapists, timeSlots, pastSlots, conflicts, duration, therapistBreaksMap]);
 
   // Effective room number: manual override if still free, otherwise first free room
   const roomNumber = useMemo(() => {
@@ -738,6 +764,7 @@ export function BookingFormModal({
                     const unavailableReason = unavailableTherapists.get(t.id);
                     const fullyBooked = fullyBookedTherapists.has(t.id);
                     const conflictNow = conflictingTherapists.has(t.id);
+                    const isOnBreakNow = !!time && !!therapistBreaksMap.get(t.id)?.has(time.slice(0, 5));
                     const disabled = !!unavailableReason || fullyBooked || conflictNow;
                     return (
                       <option
@@ -749,6 +776,8 @@ export function BookingFormModal({
                         {t.name}
                         {unavailableReason
                           ? ` — ${unavailableReason}`
+                          : isOnBreakNow
+                          ? " (on break)"
                           : fullyBooked
                           ? " — Fully Booked"
                           : conflictNow
@@ -795,7 +824,8 @@ export function BookingFormModal({
               )}
               <div className="mt-1.5 grid grid-cols-3 sm:grid-cols-4 gap-2" id="slotGrid">
                 {timeSlots.map((s) => {
-                  const isBooked = isTherapistSelected && takenSlots.has(s);
+                  const isBreak = isTherapistSelected && !!therapistBreaksMap.get(therapistId)?.has(s.slice(0, 5));
+                  const isBooked = isTherapistSelected && (takenSlots.has(s) || isBreak);
                   const isPast = pastSlots.has(s);
                   const selected = slotTime === s && !useCustomTime;
                   const disabled = !isTherapistSelected || isPast || isBooked || useCustomTime;
@@ -816,6 +846,8 @@ export function BookingFormModal({
                             : "border-border bg-background text-foreground/40 opacity-40 cursor-not-allowed"
                           : isPast
                           ? "border-border/40 bg-background/50 text-foreground/30 opacity-25 cursor-not-allowed"
+                          : isBreak
+                          ? "border-amber-500/30 bg-amber-500/10 text-amber-400 line-through opacity-70 cursor-not-allowed"
                           : isBooked
                           ? "border-dashed border-red-500/30 bg-red-950/10 text-red-400/60 line-through opacity-60 cursor-not-allowed"
                           : selected
@@ -824,11 +856,15 @@ export function BookingFormModal({
                       }`}
                     >
                       <span className={isBooked ? "line-through" : undefined}>{fmtTime(s)}</span>
-                      {isBooked && (
+                      {isBreak ? (
+                        <span className="text-[9px] no-underline font-sans text-amber-400 leading-none mt-0.5">
+                          Break
+                        </span>
+                      ) : isBooked ? (
                         <span className="text-[9px] no-underline font-sans text-red-400/80 leading-none mt-0.5">
                           Booked
                         </span>
-                      )}
+                      ) : null}
                     </button>
                   );
                 })}
@@ -839,7 +875,7 @@ export function BookingFormModal({
                 </p>
               ) : (
                 <p className="mt-1.5 text-[11px] text-muted">
-                  Struck-through slots are already booked. Past slots are disabled.
+                  Struck-through slots are already booked or on break. Past slots are disabled.
                 </p>
               )}
             </div>

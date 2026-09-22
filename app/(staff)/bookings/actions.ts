@@ -70,6 +70,9 @@ const EXCLUSION_VIOLATION = "23P01";
 function therapistUnavailableError(message: string): string | null {
   const match = message.match(/THERAPIST_UNAVAILABLE: (.+)$/);
   if (!match) return null;
+  if (match[1].trim() === "Break") {
+    return "That therapist is on scheduled break for the selected time.";
+  }
   return `That therapist is ${match[1]} on the selected date.`;
 }
 

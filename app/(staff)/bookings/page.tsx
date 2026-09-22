@@ -30,6 +30,7 @@ export default async function BookingsPage() {
     { data: dbAbsences },
     { data: dbLeaves },
     { data: dbDaysOff },
+    { data: dbBreaks },
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -102,6 +103,10 @@ export default async function BookingsPage() {
     supabase
       .from("therapist_day_off")
       .select("therapist_id, weekday"),
+    (supabase
+      .from("therapist_breaks" as any) as any)
+      .select("therapist_id, break_date, slot_time")
+      .gte("break_date", currentSpaDate),
   ]);
 
   let effectiveFlaggedStatus = dbFlaggedStatus;
@@ -239,8 +244,16 @@ export default async function BookingsPage() {
 
     if (!isActiveBooking) continue;
 
+    const isBreakOnSlot = (dbBreaks ?? []).some(
+      (br: any) =>
+        normId(br.therapist_id) === nid &&
+        normDate(br.break_date) === ndate &&
+        String(br.slot_time).slice(0, 5) === String(b.start_time || "").slice(0, 5)
+    );
+
     if (
       isAbsentToday ||
+      isBreakOnSlot ||
       isTherapistUnavailable(b.therapist_id, b.booking_date, b.therapists?.archived)
     ) {
       mapById.set(b.id, b);
