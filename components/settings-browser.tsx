@@ -119,7 +119,7 @@ export function SettingsBrowser({
   initialPesoPerPoint,
   initialVoidAuthCodeConfigured,
   initialSmsTemplate,
-  initialAllowWalkinClaims = true,
+  initialAllowWalkinClaims = false,
   initialSpaName = "NXS Spa",
   initialLogoUrl = null,
   initialAccentColor = "gold",
@@ -226,7 +226,7 @@ export function SettingsBrowser({
 
   // Walk-in Claims Toggle state
   const [allowWalkinClaims, setAllowWalkinClaims] = useState<boolean>(
-    initialAllowWalkinClaims ?? true
+    initialAllowWalkinClaims ?? false
   );
   const [isSavingWalkinToggle, setIsSavingWalkinToggle] = useState(false);
 

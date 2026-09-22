@@ -98,7 +98,7 @@ export default async function SettingsPage() {
           data: {
             ...(fallbackRes.data ?? {}),
             sms_confirmation_template: null,
-            allow_walkin_claims: true,
+            allow_walkin_claims: false,
             spa_name: "NXS Spa",
             logo_url: null,
             accent_color: "gold",
@@ -146,7 +146,7 @@ export default async function SettingsPage() {
         initialPesoPerPoint={appSettings?.peso_per_point ?? null}
         initialVoidAuthCodeConfigured={!!appSettings?.void_auth_code_hash}
         initialSmsTemplate={appSettings?.sms_confirmation_template ?? null}
-        initialAllowWalkinClaims={appSettings?.allow_walkin_claims ?? true}
+        initialAllowWalkinClaims={appSettings?.allow_walkin_claims ?? false}
         initialSpaName={appSettings?.spa_name ?? "NXS Spa"}
         initialLogoUrl={appSettings?.logo_url ?? null}
         initialAccentColor={appSettings?.accent_color ?? "gold"}

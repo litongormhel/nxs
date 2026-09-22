@@ -77,6 +77,7 @@ export type Database = {
       app_settings: {
         Row: {
           allow_receptionist_manual_points: boolean
+          allow_walkin_claims: boolean
           id: boolean
           loyalty_formula_mode: string | null
           peso_per_point: number | null
@@ -85,6 +86,7 @@ export type Database = {
         }
         Insert: {
           allow_receptionist_manual_points?: boolean
+          allow_walkin_claims?: boolean
           id?: boolean
           loyalty_formula_mode?: string | null
           peso_per_point?: number | null
@@ -93,6 +95,7 @@ export type Database = {
         }
         Update: {
           allow_receptionist_manual_points?: boolean
+          allow_walkin_claims?: boolean
           id?: boolean
           loyalty_formula_mode?: string | null
           peso_per_point?: number | null

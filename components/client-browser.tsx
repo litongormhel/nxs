@@ -153,7 +153,7 @@ export function ClientBrowser({
   walkInVisits = [],
   pendingClaims = [],
   loyaltySettings = { mode: "proportional", pesoPerPoint: null },
-  allowWalkinClaims = true,
+  allowWalkinClaims = false,
   memberTransactions = [],
   memberBookings = [],
   services = [],

@@ -484,7 +484,7 @@ export default async function ClientsPage() {
             mode: appSettings?.loyalty_formula_mode ?? "proportional",
             pesoPerPoint: appSettings?.peso_per_point ?? null,
           }}
-          allowWalkinClaims={appSettings?.allow_walkin_claims ?? true}
+          allowWalkinClaims={appSettings?.allow_walkin_claims ?? false}
           memberTransactions={(rawMemberTransactions ?? []) as any[]}
           memberBookings={(rawMemberBookings ?? []) as any[]}
           services={services ?? []}
