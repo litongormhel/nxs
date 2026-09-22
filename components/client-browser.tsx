@@ -6,11 +6,13 @@ import { createClient } from "@/lib/supabase/client";
 import { LogVisitModal } from "@/components/log-visit-modal";
 import { useStaffSim } from "@/lib/staff-context";
 import { computeLoyaltyPoints, WET_AREA_POINTS, type LoyaltyFormulaMode } from "@/lib/loyalty";
+import { showBookingToast } from "@/components/booking-form-modal";
 import {
   requestWalkinClaim,
   approveWalkinClaim,
   approveAllWalkinClaims,
   rejectWalkinClaim,
+  adjustClientPoints,
 } from "@/app/(staff)/clients/actions";
 
 export type PendingClaim = {
@@ -182,6 +184,7 @@ export function ClientBrowser({
   const router = useRouter();
   const { currentRole, sessionStaff } = useStaffSim();
   const canReviewClaims = currentRole === "Supervisor" || currentRole === "Owner";
+  const isOwner = currentRole === "Owner" || currentRole?.toLowerCase() === "owner" || sessionStaff?.position?.toLowerCase() === "owner";
 
   const [activeTab, setActiveTab] = useState<"members" | "walkins" | "claims">("members");
   const [search, setSearch] = useState("");
@@ -203,6 +206,16 @@ export function ClientBrowser({
     client: Client;
     visits: MemberVisit[];
   } | null>(null);
+
+  // Manual points adjustment modal states (Owner only)
+  const [showAdjustPointsModal, setShowAdjustPointsModal] = useState(false);
+  const [adjustTargetClient, setAdjustTargetClient] = useState<Client | null>(null);
+  const [adjustMode, setAdjustMode] = useState<"add" | "deduct">("add");
+  const [adjustPointsInput, setAdjustPointsInput] = useState<string>("");
+  const [adjustRemarks, setAdjustRemarks] = useState<string>("");
+  const [adjustStep, setAdjustStep] = useState<"input" | "confirm">("input");
+  const [isSubmittingAdjust, setIsSubmittingAdjust] = useState(false);
+  const [adjustError, setAdjustError] = useState<string | null>(null);
 
   // Modal state for Walk-In history drawer
   const [selectedWalkInCodename, setSelectedWalkInCodename] = useState<string | null>(null);
@@ -627,6 +640,88 @@ export function ClientBrowser({
       setIsSubmittingClaim(false);
     }
   }
+
+  const handleOpenAdjustPoints = (client: Client) => {
+    setAdjustTargetClient(client);
+    setAdjustMode("add");
+    setAdjustPointsInput("");
+    setAdjustRemarks("");
+    setAdjustStep("input");
+    setAdjustError(null);
+    setShowAdjustPointsModal(true);
+  };
+
+  const handleCloseAdjustPoints = () => {
+    if (isSubmittingAdjust) return;
+    setShowAdjustPointsModal(false);
+    setAdjustTargetClient(null);
+    setAdjustPointsInput("");
+    setAdjustRemarks("");
+    setAdjustStep("input");
+    setAdjustError(null);
+  };
+
+  const handleReviewAdjustment = () => {
+    const parsed = parseInt(adjustPointsInput, 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      setAdjustError("Please enter a valid positive number of points.");
+      return;
+    }
+    const currentBal = adjustTargetClient?.points_balance ?? 0;
+    if (adjustMode === "deduct" && parsed > currentBal) {
+      setAdjustError(`Cannot deduct more than available balance (${currentBal} pts). Balance cannot be negative.`);
+      return;
+    }
+    setAdjustError(null);
+    setAdjustStep("confirm");
+  };
+
+  const handleConfirmAdjustment = async () => {
+    if (!adjustTargetClient) return;
+    const parsed = parseInt(adjustPointsInput, 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      setAdjustError("Invalid points amount.");
+      return;
+    }
+    const delta = adjustMode === "add" ? parsed : -parsed;
+
+    setIsSubmittingAdjust(true);
+    setAdjustError(null);
+
+    try {
+      const res = await adjustClientPoints({
+        clientId: adjustTargetClient.id,
+        pointsDelta: delta,
+        remarks: adjustRemarks.trim() || undefined,
+      });
+
+      if (!res.ok) {
+        setAdjustError(res.error);
+        setIsSubmittingAdjust(false);
+        return;
+      }
+
+      showBookingToast({
+        title: "Points Adjusted",
+        description: `Successfully adjusted points for ${adjustTargetClient.codename}: ${delta > 0 ? `+${delta}` : delta} pts (New balance: ${res.newBalance} pts).`,
+      });
+
+      // Update in selectedMemberForProfile so open drawer immediately reflects new balance
+      if (selectedMemberForProfile && selectedMemberForProfile.id === adjustTargetClient.id) {
+        setSelectedMemberForProfile({
+          ...selectedMemberForProfile,
+          points_balance: res.newBalance,
+        });
+      }
+
+      handleCloseAdjustPoints();
+      router.refresh();
+    } catch (err: any) {
+      setAdjustError(err?.message || "An unexpected error occurred while adjusting points.");
+    } finally {
+      setIsSubmittingAdjust(false);
+    }
+  };
 
   return (
     <div className="mt-6 flex flex-col gap-5">
@@ -1332,9 +1427,20 @@ export function ClientBrowser({
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
                   Available Points
                 </p>
-                <p className="text-base font-bold text-gold mt-1">
-                  {selectedMemberForProfile.points_balance} pts
-                </p>
+                <div className="mt-1 flex items-center justify-between gap-1.5 flex-wrap">
+                  <p className="text-base font-bold text-gold">
+                    {selectedMemberForProfile.points_balance} pts
+                  </p>
+                  {isOwner && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAdjustPoints(selectedMemberForProfile)}
+                      className="rounded border border-gold/40 bg-gold/10 px-2 py-0.5 text-[10px] font-semibold text-accent-gold hover:bg-gold/20 hover:text-gold transition-colors cursor-pointer shrink-0"
+                    >
+                      Adjust Points
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Right Card: Current Status */}
@@ -2006,6 +2112,279 @@ export function ClientBrowser({
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* OWNER MANUAL POINTS ADJUSTMENT MODAL */}
+      {showAdjustPointsModal && adjustTargetClient && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4 animate-fade-in"
+          onClick={handleCloseAdjustPoints}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-border bg-surface p-5 space-y-4 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-border/80 pb-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gold">
+                  Owner Management
+                </p>
+                <h2 className="text-base font-bold text-foreground mt-0.5">
+                  Manual Points Adjustment
+                </h2>
+                <p className="text-xs text-muted">
+                  Member: <span className="font-semibold text-foreground">{adjustTargetClient.codename}</span>{" "}
+                  <span className="font-mono text-muted">(@{adjustTargetClient.username})</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseAdjustPoints}
+                disabled={isSubmittingAdjust}
+                className="rounded-md p-1 text-muted hover:text-foreground transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Error Banner */}
+            {adjustError && (
+              <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-xs text-rose-400">
+                {adjustError}
+              </div>
+            )}
+
+            {adjustStep === "input" ? (
+              /* STEP 1: INPUT & PREVIEW */
+              <div className="space-y-4">
+                {/* Mode Selector */}
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1.5">
+                    Adjustment Type
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 p-1 rounded-lg bg-surface-2 border border-border">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdjustMode("add");
+                        setAdjustError(null);
+                      }}
+                      className={`py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                        adjustMode === "add"
+                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm"
+                          : "text-muted hover:text-foreground"
+                      }`}
+                    >
+                      + Add Points
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdjustMode("deduct");
+                        setAdjustError(null);
+                      }}
+                      className={`py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                        adjustMode === "deduct"
+                          ? "bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-sm"
+                          : "text-muted hover:text-foreground"
+                      }`}
+                    >
+                      - Deduct Points
+                    </button>
+                  </div>
+                </div>
+
+                {/* Points Input */}
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1.5">
+                    Points Amount
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={adjustPointsInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "" || /^\d+$/.test(val)) {
+                          setAdjustPointsInput(val);
+                          setAdjustError(null);
+                        }
+                      }}
+                      placeholder="e.g., 50"
+                      className="w-full rounded-lg border border-border bg-surface-2 py-2 px-3 text-sm font-semibold text-foreground placeholder:text-muted focus:border-gold/50 focus:outline-none"
+                    />
+                    <span className="absolute right-3 top-2.5 text-xs text-muted font-medium pointer-events-none">
+                      pts
+                    </span>
+                  </div>
+                </div>
+
+                {/* Optional Remarks */}
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted mb-1.5">
+                    Remarks / Reason <span className="normal-case font-normal text-muted/80">(optional)</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={adjustRemarks}
+                    onChange={(e) => setAdjustRemarks(e.target.value)}
+                    placeholder="e.g., Customer service bonus, correction (optional)"
+                    className="w-full rounded-lg border border-border bg-surface-2 py-2 px-3 text-xs text-foreground placeholder:text-muted focus:border-gold/50 focus:outline-none resize-none"
+                  />
+                </div>
+
+                {/* Live Preview Card */}
+                {(() => {
+                  const parsed = parseInt(adjustPointsInput, 10);
+                  const valid = !isNaN(parsed) && parsed > 0 ? parsed : 0;
+                  const cur = adjustTargetClient.points_balance ?? 0;
+                  const delta = adjustMode === "add" ? valid : -valid;
+                  const newBal = cur + delta;
+                  const isInsufficient = adjustMode === "deduct" && valid > cur;
+
+                  return (
+                    <div className="rounded-lg border border-border/80 bg-surface-2 p-3 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted">Balance Preview:</span>
+                        <span className="font-mono text-xs">
+                          <span className="text-muted">{cur} pts</span>
+                          <span className="text-muted mx-1.5">→</span>
+                          <span className={`font-bold ${newBal < 0 ? "text-rose-400" : "text-gold"}`}>
+                            {newBal} pts
+                          </span>
+                        </span>
+                      </div>
+
+                      {isInsufficient && (
+                        <p className="text-[11px] text-rose-400 font-medium">
+                          ⚠ Deducting {valid} pts exceeds available balance ({cur} pts).
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleCloseAdjustPoints}
+                    className="flex-1 rounded-md border border-border py-2 px-3 text-xs font-medium text-muted hover:text-foreground hover:bg-surface-2 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  {(() => {
+                    const parsed = parseInt(adjustPointsInput, 10);
+                    const valid = !isNaN(parsed) && parsed > 0;
+                    const cur = adjustTargetClient.points_balance ?? 0;
+                    const isInsufficient = adjustMode === "deduct" && (parsed || 0) > cur;
+                    const canReview = valid && !isInsufficient;
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={handleReviewAdjustment}
+                        disabled={!canReview}
+                        className="flex-1 rounded-md border border-gold bg-gold/15 py-2 px-3 text-xs font-semibold text-accent-gold hover:bg-gold/25 disabled:cursor-not-allowed disabled:opacity-40 transition-colors cursor-pointer"
+                      >
+                        Review Adjustment →
+                      </button>
+                    );
+                  })()}
+                </div>
+              </div>
+            ) : (
+              /* STEP 2: CONFIRMATION GATE */
+              <div className="space-y-4">
+                <div className="rounded-lg border border-gold/30 bg-gold/5 p-4 space-y-3">
+                  <p className="text-xs text-foreground font-medium">
+                    Please confirm the points adjustment details below:
+                  </p>
+
+                  <div className="space-y-2 text-xs border-t border-border/60 pt-2.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted">Target Member:</span>
+                      <span className="font-semibold text-foreground">
+                        {adjustTargetClient.codename}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted">Adjustment:</span>
+                      {(() => {
+                        const parsed = parseInt(adjustPointsInput, 10) || 0;
+                        return adjustMode === "add" ? (
+                          <span className="inline-flex items-center rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-400">
+                            +{parsed} points
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-xs font-bold text-rose-400">
+                            -{parsed} points
+                          </span>
+                        );
+                      })()}
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted">New Total Balance:</span>
+                      {(() => {
+                        const parsed = parseInt(adjustPointsInput, 10) || 0;
+                        const delta = adjustMode === "add" ? parsed : -parsed;
+                        const newBal = (adjustTargetClient.points_balance ?? 0) + delta;
+                        return (
+                          <span className="font-bold text-gold text-sm">
+                            {newBal} pts
+                          </span>
+                        );
+                      })()}
+                    </div>
+
+                    <div className="flex justify-between items-start gap-4">
+                      <span className="text-muted shrink-0">Remarks:</span>
+                      <span className="font-medium text-foreground text-right italic">
+                        {adjustRemarks.trim() || "(None - standard reason will be recorded)"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdjustStep("input");
+                      setAdjustError(null);
+                    }}
+                    disabled={isSubmittingAdjust}
+                    className="flex-1 rounded-md border border-border py-2 px-3 text-xs font-medium text-muted hover:text-foreground hover:bg-surface-2 disabled:opacity-50 transition-colors cursor-pointer"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmAdjustment}
+                    disabled={isSubmittingAdjust}
+                    className="flex-1 rounded-md border border-gold bg-gold py-2 px-3 text-xs font-bold text-black hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    {isSubmittingAdjust ? (
+                      <>
+                        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-black border-t-transparent" />
+                        Applying...
+                      </>
+                    ) : (
+                      "Confirm & Apply"
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

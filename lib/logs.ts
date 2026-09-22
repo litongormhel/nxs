@@ -79,6 +79,7 @@ export const ACTION_LABELS: Record<string, string> = {
   settings_update_sms_template: "Update SMS Template",
   settings_reset_sms_template: "Reset SMS Template",
   settings_update_void_auth_code: "Update Void Auth Code",
+  manual_points_adjustment: "Manual Points Adjustment",
   auto_cancel_lapsed_booking: "Auto Cancel Booking",
   auto_checkout_stale_locker: "Auto Checkout Locker",
 };
@@ -614,6 +615,10 @@ export function formatActionLog(
   }
   if (action === "settings_update_void_auth_code") {
     const sentence = "Updated void authorization code";
+    return { actionLabel, details: sentence, sentence, technicalIds: [] };
+  }
+  if (action === "manual_points_adjustment") {
+    const sentence = detail || "Manual points adjustment by Owner";
     return { actionLabel, details: sentence, sentence, technicalIds: [] };
   }
 

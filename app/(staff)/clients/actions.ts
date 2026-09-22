@@ -535,3 +535,121 @@ export async function rejectWalkinClaim(claimId: string): Promise<ClaimActionRes
   revalidatePath("/clients");
   return { ok: true };
 }
+
+// -------------------------------------------------------------
+// Manual Points Adjustment (Owner Only)
+// -------------------------------------------------------------
+
+export type AdjustClientPointsInput = {
+  clientId: string;
+  pointsDelta: number;
+  remarks?: string;
+};
+
+export type AdjustClientPointsResult =
+  | { ok: true; newBalance: number }
+  | { ok: false; error: string };
+
+export async function adjustClientPoints(
+  input: AdjustClientPointsInput
+): Promise<AdjustClientPointsResult> {
+  const supabase = await createClient();
+
+  // 1. Authenticate caller
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Not authenticated." };
+  }
+
+  // 2. Strictly enforce role: verify caller is Owner
+  const { data: staffRow } = await supabase
+    .from("staff")
+    .select("id, name, position")
+    .eq("user_id", user.id)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (!staffRow || staffRow.position.toLowerCase() !== "owner") {
+    return { ok: false, error: "Unauthorized. Only the Owner can manually adjust points." };
+  }
+
+  // 3. Validate pointsDelta !== 0
+  const delta = Math.round(Number(input.pointsDelta));
+  if (isNaN(delta) || delta === 0) {
+    return { ok: false, error: "Points adjustment must be a non-zero integer." };
+  }
+
+  let db: any = supabase;
+  try {
+    db = createServiceClient();
+  } catch {
+    db = supabase;
+  }
+
+  // 4. Fetch target client to check existence and prevent negative balance
+  const { data: client, error: clientErr } = await db
+    .from("clients")
+    .select("id, codename, points_balance")
+    .eq("id", input.clientId)
+    .maybeSingle();
+
+  if (clientErr || !client) {
+    return { ok: false, error: "Target client not found." };
+  }
+
+  const currentBalance = Number(client.points_balance) || 0;
+  const newBalance = currentBalance + delta;
+  if (newBalance < 0) {
+    return {
+      ok: false,
+      error: `Insufficient points. Client currently has ${currentBalance} pts, cannot deduct ${Math.abs(delta)} pts.`,
+    };
+  }
+
+  // 5. Execute ledger adjustment
+  const reason =
+    input.remarks?.trim() ||
+    (delta > 0
+      ? "Manual points addition by Owner"
+      : "Manual points deduction by Owner");
+
+  const { error: ledgerErr } = await db.from("point_transactions").insert({
+    client_id: input.clientId,
+    points_delta: delta,
+    entry_type: "ADJUSTMENT",
+    source: "ADJUSTMENT",
+    processed_by: staffRow.id,
+    notes: reason,
+  });
+
+  if (ledgerErr) {
+    return {
+      ok: false,
+      error: `Failed to record points transaction: ${ledgerErr.message}`,
+    };
+  }
+
+  // 6. Record in action_logs with human-readable detail
+  const signStr = delta > 0 ? `+${delta}` : `${delta}`;
+  const logDetail = input.remarks?.trim()
+    ? `Owner adjusted points for ${client.codename}: ${signStr} pts (Reason: ${input.remarks.trim()})`
+    : `Owner adjusted points for ${client.codename}: ${signStr} pts`;
+
+  try {
+    await db.from("action_logs").insert({
+      action: "manual_points_adjustment",
+      staff_id: staffRow.id,
+      detail: logDetail,
+    });
+  } catch (logErr) {
+    console.warn("Failed to write action_log for points adjustment:", logErr);
+  }
+
+  // 7. Revalidate paths
+  revalidatePath("/clients");
+  revalidatePath("/portal");
+
+  return { ok: true, newBalance };
+}
