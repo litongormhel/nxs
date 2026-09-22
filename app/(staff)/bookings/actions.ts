@@ -293,10 +293,200 @@ export type QuickWalkinResult =
 
 const UNIQUE_VIOLATION = "23505";
 
+type VerifyPricingInput = {
+  serviceId: string;
+  promoId: string | null;
+  manualDiscountType: "pct" | "fixed" | null;
+  manualDiscountValue: number | null;
+  addonIds: string[];
+  amount: number;
+  servicePaidAmount: number;
+  isRedemption?: boolean;
+};
+
+type VerifyPricingResult =
+  | {
+      ok: true;
+      service: { id: string; name: string; price: number; points_earned: number };
+      authoritativeAmount: number;
+      authoritativeServicePaid: number;
+    }
+  | { ok: false; error: string };
+
+async function verifyBookingPricing(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  input: VerifyPricingInput
+): Promise<VerifyPricingResult> {
+  // Disallow negative amounts
+  if (input.amount < 0 || input.servicePaidAmount < 0) {
+    return { ok: false, error: "Total amount and service paid amount cannot be negative." };
+  }
+
+  // Fetch service info
+  const { data: service, error: svcErr } = await supabase
+    .from("services")
+    .select("id, name, price, points_earned")
+    .eq("id", input.serviceId)
+    .single();
+
+  if (svcErr || !service) {
+    return { ok: false, error: svcErr?.message ?? "Service not found." };
+  }
+
+  // Redemption visits: authoritative calculation from Combi credit
+  if (input.isRedemption) {
+    const { data: allServices } = await supabase
+      .from("services")
+      .select("id, name, price")
+      .eq("active", true);
+
+    const combiService = (allServices ?? []).find((s) =>
+      s.name.toLowerCase().includes("combi")
+    );
+    const combiCredit = combiService?.price ?? 1100;
+    const selectedService = (allServices ?? []).find((s) => s.id === input.serviceId) ?? service;
+    const selectedServicePrice = selectedService?.price ?? 0;
+    const authoritativeServicePaid = Math.max(0, selectedServicePrice - combiCredit);
+
+    let addonsTotal = 0;
+    if (input.addonIds && input.addonIds.length > 0) {
+      const { data: addonsData, error: addonsErr } = await supabase
+        .from("addons")
+        .select("id, price")
+        .in("id", input.addonIds);
+      if (addonsErr) {
+        return { ok: false, error: addonsErr.message };
+      }
+      const addonPriceMap = new Map((addonsData ?? []).map((a) => [a.id, a.price]));
+      addonsTotal = input.addonIds.reduce((sum, id) => sum + (addonPriceMap.get(id) ?? 0), 0);
+    }
+    const authoritativeAmount = authoritativeServicePaid + addonsTotal;
+
+    if (authoritativeAmount < 0) {
+      return { ok: false, error: "Total amount cannot be negative." };
+    }
+
+    return {
+      ok: true,
+      service,
+      authoritativeAmount,
+      authoritativeServicePaid,
+    };
+  }
+
+  // Non-redemption visits: recalculate base price, promo/manual discount, and add-ons server-side
+  const basePrice = service.price;
+  let recalculatedServicePaid = basePrice;
+
+  if (input.promoId && input.promoId !== "none" && input.promoId !== "redeem_100_pts") {
+    let promoData: any = null;
+    const { data: promo, error: promoError } = await supabase
+      .from("promos")
+      .select("id, discount, active")
+      .eq("id", input.promoId)
+      .maybeSingle();
+
+    if (
+      promoError &&
+      (promoError.code === "42703" ||
+        promoError.code === "PGRST204" ||
+        promoError.message?.includes("applicable_days") ||
+        promoError.message?.includes("schema cache"))
+    ) {
+      const { data: fallbackPromo } = await supabase
+        .from("promos")
+        .select("id, discount, active")
+        .eq("id", input.promoId)
+        .maybeSingle();
+      promoData = fallbackPromo;
+    } else {
+      promoData = promo;
+    }
+
+    if (!promoData || !promoData.active) {
+      return { ok: false, error: "The selected promo is inactive or invalid." };
+    }
+
+    recalculatedServicePaid = Math.max(0, basePrice - (promoData.discount ?? 0));
+  } else if (
+    input.manualDiscountType &&
+    input.manualDiscountValue !== null &&
+    input.manualDiscountValue !== undefined
+  ) {
+    if (input.manualDiscountValue < 0) {
+      return { ok: false, error: "Manual discount value cannot be negative." };
+    }
+    if (input.manualDiscountType === "pct") {
+      recalculatedServicePaid = Math.max(
+        0,
+        Math.round(basePrice * (1 - input.manualDiscountValue / 100))
+      );
+    } else if (input.manualDiscountType === "fixed") {
+      recalculatedServicePaid = Math.max(0, basePrice - input.manualDiscountValue);
+    }
+  }
+
+  let addonsTotal = 0;
+  if (input.addonIds && input.addonIds.length > 0) {
+    const { data: addonsData, error: addonsErr } = await supabase
+      .from("addons")
+      .select("id, price")
+      .in("id", input.addonIds);
+    if (addonsErr) {
+      return { ok: false, error: addonsErr.message };
+    }
+    const addonPriceMap = new Map((addonsData ?? []).map((a) => [a.id, a.price]));
+    addonsTotal = input.addonIds.reduce((sum, id) => sum + (addonPriceMap.get(id) ?? 0), 0);
+  }
+
+  const recalculatedTotal = recalculatedServicePaid + addonsTotal;
+
+  if (recalculatedTotal < 0) {
+    return { ok: false, error: "Total amount cannot be negative." };
+  }
+
+  if (input.servicePaidAmount !== recalculatedServicePaid) {
+    return {
+      ok: false,
+      error: `Price verification failed: Service paid amount (₱${input.servicePaidAmount}) does not match server calculation (₱${recalculatedServicePaid}).`,
+    };
+  }
+
+  if (input.amount !== recalculatedTotal) {
+    return {
+      ok: false,
+      error: `Price verification failed: Total amount (₱${input.amount}) does not match server calculation (₱${recalculatedTotal}).`,
+    };
+  }
+
+  return {
+    ok: true,
+    service,
+    authoritativeAmount: recalculatedTotal,
+    authoritativeServicePaid: recalculatedServicePaid,
+  };
+}
+
 export async function quickWalkin(
   input: QuickWalkinInput
 ): Promise<QuickWalkinResult> {
   const supabase = await createClient();
+
+  const priceCheck = await verifyBookingPricing(supabase, {
+    serviceId: input.serviceId,
+    promoId: input.promoId,
+    manualDiscountType: input.manualDiscountType,
+    manualDiscountValue: input.manualDiscountValue,
+    addonIds: input.addonIds,
+    amount: input.amount,
+    servicePaidAmount: input.servicePaidAmount,
+    isRedemption: input.isRedemption,
+  });
+  if (!priceCheck.ok) {
+    return { ok: false, error: priceCheck.error };
+  }
+
+  const { service, authoritativeAmount, authoritativeServicePaid } = priceCheck;
 
   if (input.promoId) {
     const promoCheck = await verifyPromoConstraint(
@@ -391,18 +581,10 @@ export async function quickWalkin(
       .maybeSingle();
 
     if (portalAccount) {
-      const { data: service, error: svcErr } = await supabase
-        .from("services")
-        .select("name, price, points_earned")
-        .eq("id", input.serviceId)
-        .single();
-      if (svcErr || !service) {
-        return { ok: false, error: svcErr?.message ?? "Service not found." };
-      }
       pointsAwarded = await resolveEarnedPoints(
         supabase,
         service.name,
-        input.servicePaidAmount,
+        authoritativeServicePaid,
         service.price,
         service.points_earned
       );
@@ -413,33 +595,6 @@ export async function quickWalkin(
       pointsAwarded = null;
       pointsReason = "no_portal_account";
     }
-  }
-
-  // Authoritatively derive paid_amount when redeeming loyalty reward
-  let authoritativeAmount = input.amount;
-  if (input.isRedemption) {
-    const { data: allServices } = await supabase
-      .from("services")
-      .select("id, name, price")
-      .eq("active", true);
-
-    const combiService = (allServices ?? []).find((s) =>
-      s.name.toLowerCase().includes("combi")
-    );
-    const combiCredit = combiService?.price ?? 1100;
-    const selectedService = (allServices ?? []).find((s) => s.id === input.serviceId);
-    const selectedServicePrice = selectedService?.price ?? 0;
-    const authoritativeServicePaid = Math.max(0, selectedServicePrice - combiCredit);
-
-    let addonsTotal = 0;
-    if (input.addonIds && input.addonIds.length > 0) {
-      const { data: addonsData } = await supabase
-        .from("addons")
-        .select("id, price")
-        .in("id", input.addonIds);
-      addonsTotal = (addonsData ?? []).reduce((sum, a) => sum + a.price, 0);
-    }
-    authoritativeAmount = authoritativeServicePaid + addonsTotal;
   }
 
   // Audit active occupancy on the requested locker
@@ -478,6 +633,18 @@ export async function quickWalkin(
   const rawAmount1 = isSplit ? (input.splitCashAmount ?? input.splitAmount1 ?? 0) : authoritativeAmount;
   const method2 = input.splitMethod2 ?? "GCash";
   const rawAmount2 = isSplit ? (input.splitGcashAmount ?? input.splitAmount2 ?? 0) : 0;
+
+  if (isSplit) {
+    if (rawAmount1 < 0 || rawAmount2 < 0) {
+      return { ok: false, error: "Split payment amounts cannot be negative." };
+    }
+    if (rawAmount1 + rawAmount2 !== authoritativeAmount) {
+      return {
+        ok: false,
+        error: `Sum of split payments (₱${rawAmount1 + rawAmount2}) must equal total amount (₱${authoritativeAmount}).`,
+      };
+    }
+  }
 
   let amount1 = rawAmount1;
   let amount2 = rawAmount2;
@@ -1475,23 +1642,29 @@ export async function logVisitBooking(
     }
   }
 
-  // 1. Fetch service info
-  const { data: service, error: svcErr } = await supabase
-    .from("services")
-    .select("name, price, points_earned")
-    .eq("id", input.serviceId)
-    .single();
-
-  if (svcErr || !service) {
-    return { ok: false, error: svcErr?.message ?? "Service not found." };
+  // 1. Verify pricing server-side
+  const priceCheck = await verifyBookingPricing(supabase, {
+    serviceId: input.serviceId,
+    promoId: input.promoId,
+    manualDiscountType: input.manualDiscountType,
+    manualDiscountValue: input.manualDiscountValue,
+    addonIds: input.addonIds,
+    amount: input.amount,
+    servicePaidAmount: input.servicePaidAmount,
+    isRedemption: input.isRedemption,
+  });
+  if (!priceCheck.ok) {
+    return { ok: false, error: priceCheck.error };
   }
+
+  const { service, authoritativeAmount, authoritativeServicePaid } = priceCheck;
 
   const earnedPoints = input.isRedemption
     ? null
     : await resolveEarnedPoints(
         supabase,
         service.name,
-        input.servicePaidAmount,
+        authoritativeServicePaid,
         service.price,
         service.points_earned
       );
@@ -1635,37 +1808,22 @@ export async function logVisitBooking(
     return { ok: false, error: bookingErr.message };
   }
 
-  // Authoritatively derive paid_amount when redeeming loyalty reward
-  let authoritativeAmount = input.amount;
-  if (input.isRedemption) {
-    const { data: allServices } = await supabase
-      .from("services")
-      .select("id, name, price")
-      .eq("active", true);
-
-    const combiService = (allServices ?? []).find((s) =>
-      s.name.toLowerCase().includes("combi")
-    );
-    const combiCredit = combiService?.price ?? 1100;
-    const selectedService = (allServices ?? []).find((s) => s.id === input.serviceId) ?? service;
-    const selectedServicePrice = selectedService?.price ?? 0;
-    const authoritativeServicePaid = Math.max(0, selectedServicePrice - combiCredit);
-
-    let addonsTotal = 0;
-    if (input.addonIds && input.addonIds.length > 0) {
-      const { data: addonsData } = await supabase
-        .from("addons")
-        .select("id, price")
-        .in("id", input.addonIds);
-      addonsTotal = (addonsData ?? []).reduce((sum, a) => sum + a.price, 0);
-    }
-    authoritativeAmount = authoritativeServicePaid + addonsTotal;
-  }
-
   // 4. Insert Sale (1 row for standard Cash/GCash, 2 rows for Split Payment)
   const isSplit = input.paymentMethod === "Split (Cash + GCash)";
   const rawCashAmt = isSplit ? (input.splitCashAmount ?? 0) : authoritativeAmount;
   const rawGcashAmt = isSplit ? (input.splitGcashAmount ?? 0) : 0;
+
+  if (isSplit) {
+    if (rawCashAmt < 0 || rawGcashAmt < 0) {
+      return { ok: false, error: "Split payment amounts cannot be negative." };
+    }
+    if (rawCashAmt + rawGcashAmt !== authoritativeAmount) {
+      return {
+        ok: false,
+        error: `Sum of split payments (₱${rawCashAmt + rawGcashAmt}) must equal total amount (₱${authoritativeAmount}).`,
+      };
+    }
+  }
 
   let cashAmt = rawCashAmt;
   let gcashAmt = rawGcashAmt;
@@ -1807,7 +1965,7 @@ export async function logVisitBooking(
   await supabase.from("action_logs").insert({
     staff_id: input.staffId,
     action: "log_visit",
-    detail: `client=${input.clientId ?? input.guestLabel} service=${service.name} amount=${input.amount} ${payDetail} sale_id=${saleId} booking_id=${input.bookingId}${pointsLogNote}`,
+    detail: `client=${input.clientId ?? input.guestLabel} service=${service.name} amount=${authoritativeAmount} ${payDetail} sale_id=${saleId} booking_id=${input.bookingId}${pointsLogNote}`,
   });
 
   revalidatePath("/bookings");

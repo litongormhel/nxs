@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { logVisitBooking } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
 import { ScanMemberQrModal, type ScannedClient } from "@/components/scan-member-qr-modal";
+import { showBookingToast } from "@/components/booking-form-modal";
+import { spaDayNow } from "@/lib/analytics/spa-day";
 import { computeLoyaltyPoints, WET_AREA_POINTS, type LoyaltyFormulaMode } from "@/lib/loyalty";
 import type {
   Addon,
@@ -30,10 +32,6 @@ type BookingOption = {
   status: Database["public"]["Enums"]["booking_status"];
   notes?: string | null;
 };
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function fmtDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
@@ -128,7 +126,7 @@ export function LogVisitModal({
     }
   }
 
-  const [date, setDate] = useState(initialBooking?.booking_date ?? todayIso());
+  const [date, setDate] = useState(initialBooking?.booking_date ?? spaDayNow());
   const [serviceId, setServiceId] = useState<string>(
     initialBooking?.service_id ?? initialServiceId ?? services[0]?.id ?? ""
   );
@@ -542,46 +540,59 @@ export function LogVisitModal({
   function handleFinalizeSubmit() {
     setError(null);
     startTransition(async () => {
-      const result = await logVisitBooking({
-        bookingId: selectedBookingId,
-        clientId,
-        guestLabel,
-        serviceId,
-        therapistId: isWetArea ? null : therapistId,
-        roomNumber: linkedBooking?.room_number ?? null,
-        bookingDate: date,
-        startTime: linkedBooking?.start_time ?? "16:00",
-        lockerNumber: Number(lockerNumber),
-        promoId: promoId === "none" || isPromoRedemption ? null : promoId,
-        manualDiscountType: manualDiscountOn ? discountType : null,
-        manualDiscountValue: manualDiscountOn ? discountValue : null,
-        addonIds,
-        amount: computedAmount,
-        servicePaidAmount,
-        paymentMethod,
-        splitCashAmount: isSplit ? numCash : null,
-        splitGcashAmount: isSplit ? numGcash : null,
-        paymentRef: (paymentMethod === "GCash" || (isSplit && numGcash > 0)) ? gcashRef.trim() || null : null,
-        isRedemption: isEffectiveRedemption,
-        upgradeTo: isUpgraded ? upgradeTo : null,
-        upgradeCash: isUpgraded ? upgradeCash : null,
-        staffId,
-        notes: notes.trim() || undefined,
-      });
+      try {
+        const result = await logVisitBooking({
+          bookingId: selectedBookingId,
+          clientId,
+          guestLabel,
+          serviceId,
+          therapistId: isWetArea ? null : therapistId,
+          roomNumber: linkedBooking?.room_number ?? null,
+          bookingDate: date,
+          startTime: linkedBooking?.start_time ?? "16:00",
+          lockerNumber: Number(lockerNumber),
+          promoId: promoId === "none" || isPromoRedemption ? null : promoId,
+          manualDiscountType: manualDiscountOn ? discountType : null,
+          manualDiscountValue: manualDiscountOn ? discountValue : null,
+          addonIds,
+          amount: computedAmount,
+          servicePaidAmount,
+          paymentMethod,
+          splitCashAmount: isSplit ? numCash : null,
+          splitGcashAmount: isSplit ? numGcash : null,
+          paymentRef: (paymentMethod === "GCash" || (isSplit && numGcash > 0)) ? gcashRef.trim() || null : null,
+          isRedemption: isEffectiveRedemption,
+          upgradeTo: isUpgraded ? upgradeTo : null,
+          upgradeCash: isUpgraded ? upgradeCash : null,
+          staffId,
+          notes: notes.trim() || undefined,
+        });
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          showBookingToast({
+            title: "Log Visit Failed",
+            description: result.error,
+          });
+          return;
+        }
+
+        if (clientId && !isEffectiveRedemption && result.pointsAwarded === null) {
+          setPointsWarning(
+            "Visit logged, pero WALANG POINTS na-award — hindi pa naka-configure ang loyalty formula sa Settings."
+          );
+          return;
+        }
+
+        onLogged();
+      } catch (err: any) {
+        const errorMsg = err?.message || "An unexpected error occurred while logging visit.";
+        setError(errorMsg);
+        showBookingToast({
+          title: "Log Visit Failed",
+          description: errorMsg,
+        });
       }
-
-      if (clientId && !isEffectiveRedemption && result.pointsAwarded === null) {
-        setPointsWarning(
-          "Visit logged, pero WALANG POINTS na-award — hindi pa naka-configure ang loyalty formula sa Settings."
-        );
-        return;
-      }
-
-      onLogged();
     });
   }
 

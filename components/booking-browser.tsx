@@ -11,6 +11,7 @@ import { QuickWalkinModal } from "@/components/quick-walkin-modal";
 import { LogVisitModal } from "@/components/log-visit-modal";
 import { ScanMemberQrModal, type ScannedClient } from "@/components/scan-member-qr-modal";
 import { SmsConfirmationModal } from "@/components/sms-confirmation-modal";
+import { spaDayNow } from "@/lib/analytics/spa-day";
 import type { Database } from "@/lib/types/database";
 
 export type Client = {
@@ -141,10 +142,6 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "checkout", label: "Check-out" },
 ];
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function fmtTime(t: string): string {
   if (!t || !t.includes(":")) return t;
   const [h, m] = t.split(":");
@@ -206,7 +203,7 @@ export function BookingBrowser({
 }) {
   const router = useRouter();
   const { sessionStaff } = useStaffSim();
-  const [date, setDate] = useState(todayIso());
+  const [date, setDate] = useState(() => spaDayNow());
   const [tab, setTab] = useState<TabKey>("upcoming");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>("all");

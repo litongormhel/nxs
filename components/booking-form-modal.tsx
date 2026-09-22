@@ -25,10 +25,6 @@ const ACTIVE_STATUSES: Database["public"]["Enums"]["booking_status"][] = [
   "Needs Reassignment",
 ];
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function roundedNowTime(): string {
   const d = new Date();
   let h = d.getHours();
@@ -585,103 +581,116 @@ export function BookingFormModal({
     }
 
     startTransition(async () => {
-      const isRedeeming = promoId === "redeem_100_pts";
-      const selectedPromo = promos.find((p) => p.id === promoId);
-      const effectivePromoId = isRedeeming || promoId === "none" ? null : promoId;
-      const derivedPax =
-        selectedPromo?.min_pax && selectedPromo.min_pax > 1
-          ? selectedPromo.min_pax
-          : selectedPromo?.label.includes("3")
-          ? 3
-          : selectedPromo?.label.includes("4")
-          ? 4
-          : null;
+      try {
+        const isRedeeming = promoId === "redeem_100_pts";
+        const selectedPromo = promos.find((p) => p.id === promoId);
+        const effectivePromoId = isRedeeming || promoId === "none" ? null : promoId;
+        const derivedPax =
+          selectedPromo?.min_pax && selectedPromo.min_pax > 1
+            ? selectedPromo.min_pax
+            : selectedPromo?.label.includes("3")
+            ? 3
+            : selectedPromo?.label.includes("4")
+            ? 4
+            : null;
 
-      if (selectedPromo && !isRedeeming && promoId !== "none") {
-        const eligibility = validatePromoEligibility(selectedPromo, {
+        if (selectedPromo && !isRedeeming && promoId !== "none") {
+          const eligibility = validatePromoEligibility(selectedPromo, {
+            bookingDate: date,
+            slotTime: isMassageService ? time : roundedNowTime(),
+            paxCount: derivedPax ?? 1,
+          });
+          if (!eligibility.eligible) {
+            setError(eligibility.reason);
+            return;
+          }
+        }
+
+        const result = await createBooking({
+          clientId: isWalkIn ? null : clientSelectValue,
+          guestLabel: isWalkIn ? walkinName.trim() : null,
+          serviceId,
+          therapistId: isMassageService ? therapistId : null,
+          roomNumber: isMassageService ? roomNumber : null,
           bookingDate: date,
-          slotTime: isMassageService ? time : roundedNowTime(),
-          paxCount: derivedPax ?? 1,
+          startTime: isMassageService ? time : roundedNowTime(),
+          status: "Booked",
+          paxCount: derivedPax,
+          promoId: effectivePromoId,
+          createdBy: staffId,
+          notes: notes.trim() || undefined,
         });
-        if (!eligibility.eligible) {
-          setError(eligibility.reason);
+
+        if (!result.ok) {
+          setError(result.error);
+          showBookingToast({
+            title: "Booking Failed",
+            description: result.error,
+          });
           return;
         }
+
+        const resolvedClientName = isWalkIn
+          ? walkinName.trim() || "Guest"
+          : selectedClient?.codename ?? "Client";
+        const formattedSlot = time ? fmtTime(time) : "";
+        const dateSlotText = [date, formattedSlot].filter(Boolean).join(", ");
+        const resolvedServiceName = selectedService?.name ?? "Service";
+        const resolvedTherapistName =
+          isMassageService && therapistId
+            ? therapists.find((t) => t.id === therapistId)?.name ?? null
+            : null;
+        const serviceTherapistText = `${resolvedServiceName}${resolvedTherapistName ? ` (${resolvedTherapistName})` : ""}`;
+
+        const toastSubtitle = [resolvedClientName, dateSlotText, serviceTherapistText]
+          .filter(Boolean)
+          .join(" • ");
+
+        const successToastData = {
+          title: "Booking created successfully!",
+          description: toastSubtitle,
+        };
+
+        const basePrice = selectedService?.price ?? 0;
+        const servicePrice = isRedeeming
+          ? Math.max(0, basePrice - combiCredit)
+          : selectedPromo
+          ? Math.max(basePrice - selectedPromo.discount, 0)
+          : basePrice;
+        const serviceName = selectedService?.name ?? "Service";
+        const formattedBookingDate = formatSmsDate(date);
+        const resolvedRoomNumber = isMassageService && roomNumber ? roomNumber : null;
+
+        showBookingToast(successToastData);
+        const interpolated = interpolateSmsTemplate(activeSmsTemplate, {
+          booking_date: formattedBookingDate,
+          client_name: resolvedClientName,
+          slot_time: formattedSlot || time,
+          therapist_name: resolvedTherapistName ?? "—",
+          service_name: serviceName,
+          amount: servicePrice,
+          room_number: resolvedRoomNumber,
+        });
+
+        onCreated({
+          clientName: resolvedClientName,
+          phone: selectedClient?.phone ?? null,
+          timeSlot: formattedSlot || time,
+          date: formattedBookingDate,
+          service: serviceName,
+          price: servicePrice,
+          therapistName: resolvedTherapistName,
+          roomNumber: resolvedRoomNumber,
+          message: interpolated,
+        });
+      } catch (err: any) {
+        const errorMsg = err?.message || "An unexpected error occurred while creating booking.";
+        setError(errorMsg);
+        showBookingToast({
+          title: "Booking Failed",
+          description: errorMsg,
+        });
       }
-
-      const result = await createBooking({
-        clientId: isWalkIn ? null : clientSelectValue,
-        guestLabel: isWalkIn ? walkinName.trim() : null,
-        serviceId,
-        therapistId: isMassageService ? therapistId : null,
-        roomNumber: isMassageService ? roomNumber : null,
-        bookingDate: date,
-        startTime: isMassageService ? time : roundedNowTime(),
-        status: "Booked",
-        paxCount: derivedPax,
-        promoId: effectivePromoId,
-        createdBy: staffId,
-        notes: notes.trim() || undefined,
-      });
-
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-
-      const resolvedClientName = isWalkIn
-        ? walkinName.trim() || "Guest"
-        : selectedClient?.codename ?? "Client";
-      const formattedSlot = time ? fmtTime(time) : "";
-      const dateSlotText = [date, formattedSlot].filter(Boolean).join(", ");
-      const resolvedServiceName = selectedService?.name ?? "Service";
-      const resolvedTherapistName =
-        isMassageService && therapistId
-          ? therapists.find((t) => t.id === therapistId)?.name ?? null
-          : null;
-      const serviceTherapistText = `${resolvedServiceName}${resolvedTherapistName ? ` (${resolvedTherapistName})` : ""}`;
-
-      const toastSubtitle = [resolvedClientName, dateSlotText, serviceTherapistText]
-        .filter(Boolean)
-        .join(" • ");
-
-      const successToastData = {
-        title: "Booking created successfully!",
-        description: toastSubtitle,
-      };
-
-      const basePrice = selectedService?.price ?? 0;
-      const servicePrice = isRedeeming
-        ? Math.max(0, basePrice - combiCredit)
-        : selectedPromo
-        ? Math.max(basePrice - selectedPromo.discount, 0)
-        : basePrice;
-      const serviceName = selectedService?.name ?? "Service";
-      const formattedBookingDate = formatSmsDate(date);
-      const resolvedRoomNumber = isMassageService && roomNumber ? roomNumber : null;
-
-      showBookingToast(successToastData);
-      const interpolated = interpolateSmsTemplate(activeSmsTemplate, {
-        booking_date: formattedBookingDate,
-        client_name: resolvedClientName,
-        slot_time: formattedSlot || time,
-        therapist_name: resolvedTherapistName ?? "—",
-        service_name: serviceName,
-        amount: servicePrice,
-        room_number: resolvedRoomNumber,
-      });
-
-      onCreated({
-        clientName: resolvedClientName,
-        phone: selectedClient?.phone ?? null,
-        timeSlot: formattedSlot || time,
-        date: formattedBookingDate,
-        service: serviceName,
-        price: servicePrice,
-        therapistName: resolvedTherapistName,
-        roomNumber: resolvedRoomNumber,
-        message: interpolated,
-      });
     });
   }
 

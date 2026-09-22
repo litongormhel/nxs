@@ -31,10 +31,6 @@ const ACTIVE_STATUSES: Database["public"]["Enums"]["booking_status"][] = [
   "Needs Reassignment",
 ];
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function roundedNowTime(): string {
   const d = new Date();
   let h = d.getHours();
@@ -933,76 +929,89 @@ export function QuickWalkinModal({
     }
 
     startTransition(async () => {
-      const showRefField = paymentMethod !== "Cash" && (paymentMethod !== "Split (Cash + GCash)" || numGcash > 0);
-      const result = await quickWalkin({
-        clientId,
-        guestLabel: clientId ? null : guestName.trim(),
-        serviceId,
-        therapistId: isMassageService ? therapistId : null,
-        roomNumber: isMassageService ? (roomNumber as number) : null,
-        bookingDate: date,
-        startTime: isMassageService ? time : roundedNowTime(),
-        lockerNumber: lockerNumber as number,
-        promoId: promoId === "none" || isLoyaltyRedemption ? null : promoId,
-        manualDiscountType: manualDiscountOn ? discountType : null,
-        manualDiscountValue: manualDiscountOn ? discountValue : null,
-        addonIds,
-        amount,
-        servicePaidAmount,
-        paymentMethod,
-        isRedemption: isLoyaltyRedemption,
-        isSplitPayment,
-        splitMethod1: "Cash",
-        splitAmount1: numCash,
-        splitMethod2: "GCash",
-        splitAmount2: numGcash,
-        splitCashAmount: isSplitPayment ? numCash : null,
-        splitGcashAmount: isSplitPayment ? numGcash : null,
-        paymentRef: showRefField ? gcashRef.trim() || null : null,
-        staffId,
-        notes: notes.trim() || undefined,
-      });
+      try {
+        const showRefField = paymentMethod !== "Cash" && (paymentMethod !== "Split (Cash + GCash)" || numGcash > 0);
+        const result = await quickWalkin({
+          clientId,
+          guestLabel: clientId ? null : guestName.trim(),
+          serviceId,
+          therapistId: isMassageService ? therapistId : null,
+          roomNumber: isMassageService ? (roomNumber as number) : null,
+          bookingDate: date,
+          startTime: isMassageService ? time : roundedNowTime(),
+          lockerNumber: lockerNumber as number,
+          promoId: promoId === "none" || isLoyaltyRedemption ? null : promoId,
+          manualDiscountType: manualDiscountOn ? discountType : null,
+          manualDiscountValue: manualDiscountOn ? discountValue : null,
+          addonIds,
+          amount,
+          servicePaidAmount,
+          paymentMethod,
+          isRedemption: isLoyaltyRedemption,
+          isSplitPayment,
+          splitMethod1: "Cash",
+          splitAmount1: numCash,
+          splitMethod2: "GCash",
+          splitAmount2: numGcash,
+          splitCashAmount: isSplitPayment ? numCash : null,
+          splitGcashAmount: isSplitPayment ? numGcash : null,
+          paymentRef: showRefField ? gcashRef.trim() || null : null,
+          staffId,
+          notes: notes.trim() || undefined,
+        });
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
+        if (!result.ok) {
+          setError(result.error);
+          showBookingToast({
+            title: "Walk-in Failed",
+            description: result.error,
+          });
+          return;
+        }
+
+        const resolvedClientName = clientId
+          ? clients.find((c) => c.id === clientId)?.codename ?? "Client"
+          : guestName.trim() || "Guest";
+        const resolvedServiceName = services.find((s) => s.id === serviceId)?.name ?? "Service";
+        const resolvedTherapistName =
+          isMassageService && therapistId
+            ? therapists.find((t) => t.id === therapistId)?.name ?? null
+            : null;
+        const lockerText = typeof lockerNumber === "number" ? `Locker #${lockerNumber}` : null;
+        const roomText = isMassageService && roomNumber ? `Room ${roomNumber}` : null;
+
+        const toastSubtitle = [
+          resolvedClientName,
+          `${resolvedServiceName}${resolvedTherapistName ? ` (${resolvedTherapistName})` : ""}`,
+          lockerText,
+          roomText,
+        ]
+          .filter(Boolean)
+          .join(" • ");
+
+        const successToastData = {
+          title: "Walk-in logged successfully!",
+          description: toastSubtitle,
+        };
+
+        if (clientId && result.pointsReason === "unconfigured_formula") {
+          setPendingSuccessToast(successToastData);
+          setPointsWarning(
+            "Walk-in logged, pero WALANG POINTS na-award — hindi pa naka-configure ang loyalty formula sa Settings."
+          );
+          return;
+        }
+
+        showBookingToast(successToastData);
+        onCreated();
+      } catch (err: any) {
+        const errorMsg = err?.message || "An unexpected error occurred during quick walk-in.";
+        setError(errorMsg);
+        showBookingToast({
+          title: "Walk-in Failed",
+          description: errorMsg,
+        });
       }
-
-      const resolvedClientName = clientId
-        ? clients.find((c) => c.id === clientId)?.codename ?? "Client"
-        : guestName.trim() || "Guest";
-      const resolvedServiceName = services.find((s) => s.id === serviceId)?.name ?? "Service";
-      const resolvedTherapistName =
-        isMassageService && therapistId
-          ? therapists.find((t) => t.id === therapistId)?.name ?? null
-          : null;
-      const lockerText = typeof lockerNumber === "number" ? `Locker #${lockerNumber}` : null;
-      const roomText = isMassageService && roomNumber ? `Room ${roomNumber}` : null;
-
-      const toastSubtitle = [
-        resolvedClientName,
-        `${resolvedServiceName}${resolvedTherapistName ? ` (${resolvedTherapistName})` : ""}`,
-        lockerText,
-        roomText,
-      ]
-        .filter(Boolean)
-        .join(" • ");
-
-      const successToastData = {
-        title: "Walk-in logged successfully!",
-        description: toastSubtitle,
-      };
-
-      if (clientId && result.pointsReason === "unconfigured_formula") {
-        setPendingSuccessToast(successToastData);
-        setPointsWarning(
-          "Walk-in logged, pero WALANG POINTS na-award — hindi pa naka-configure ang loyalty formula sa Settings."
-        );
-        return;
-      }
-
-      showBookingToast(successToastData);
-      onCreated();
     });
   }
 
