@@ -152,11 +152,15 @@ export function TherapistCard({
     });
   };
 
+  // Normalized break slots (HH:MM)
+  const normalizedBreakSlots = (breakSlots ?? []).map((s) => s.slice(0, 5));
+
   // Slot classification: free, taken (future AND booked), break, or past
   const classifiedSlots = WEEKEND_SLOTS.map((slot) => {
+    const normSlot = slot.slice(0, 5);
     const isPast = isSlotPastGracePeriod(slot, viewDate, currentTime, 20);
     const isBooked = isTherapistBusy(slot, 90);
-    const isBreak = (breakSlots ?? []).includes(slot);
+    const isBreak = normalizedBreakSlots.includes(normSlot);
     const isFree = !isPast && !isBooked && !isBreak;
     return {
       slot,
@@ -219,9 +223,14 @@ export function TherapistCard({
   }).length;
 
   const totalSlots = WEEKEND_SLOTS.length;
-  const breakCount = (breakSlots ?? []).length;
+  const breakCount = normalizedBreakSlots.filter((b) =>
+    WEEKEND_SLOTS.some((s) => s.slice(0, 5) === b)
+  ).length;
   const bookableCapacity = Math.max(0, totalSlots - breakCount);
-  const progressPct = bookableCapacity > 0 ? Math.min(100, Math.round((bookedToday / bookableCapacity) * 100)) : 100;
+  const progressPct =
+    bookableCapacity > 0
+      ? Math.min(100, Math.round((bookedToday / bookableCapacity) * 100))
+      : 100;
 
   return (
     <div

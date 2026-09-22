@@ -530,3 +530,117 @@ export async function removeTherapistBreak(
   revalidatePath("/bookings");
   return { ok: true };
 }
+
+export async function syncTherapistBreaks(
+  therapistId: string,
+  date: string,
+  selectedSlots: string[],
+  staffId?: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const normalizedSlots = Array.from(new Set(selectedSlots.map((s) => s.slice(0, 5))));
+
+  // Fetch current breaks for this therapist on this date
+  const { data: currentBreaks, error: fetchErr } = await (supabase
+    .from("therapist_breaks" as any) as any)
+    .select("slot_time")
+    .eq("therapist_id", therapistId)
+    .eq("break_date", date);
+
+  if (fetchErr) {
+    return fail(fetchErr);
+  }
+
+  const existingSlots: string[] = (currentBreaks ?? []).map((b: any) =>
+    (b.slot_time as string).slice(0, 5)
+  );
+
+  const slotsToAdd = normalizedSlots.filter((s) => !existingSlots.includes(s));
+  const slotsToRemove = existingSlots.filter((s) => !normalizedSlots.includes(s));
+
+  // If there are new break slots to add, ensure none conflict with active bookings
+  if (slotsToAdd.length > 0) {
+    const { data: activeBookings, error: bookingErr } = await supabase
+      .from("bookings")
+      .select("id, start_time, status")
+      .eq("therapist_id", therapistId)
+      .eq("booking_date", date)
+      .neq("status", "Cancelled");
+
+    if (bookingErr) {
+      console.error("[syncTherapistBreaks] Error checking existing bookings:", bookingErr);
+    }
+
+    const conflictingSlots = (activeBookings ?? [])
+      .filter((b) => slotsToAdd.includes(b.start_time.slice(0, 5)))
+      .map((b) => b.start_time.slice(0, 5));
+
+    if (conflictingSlots.length > 0) {
+      return {
+        ok: false,
+        error: `Therapist has active booking(s) on slot(s): ${conflictingSlots.join(", ")}. Please reassign or cancel the booking first.`,
+      };
+    }
+  }
+
+  let mutationClient = supabase;
+  try {
+    mutationClient = createStaffServiceClient() as any;
+  } catch {
+    mutationClient = supabase;
+  }
+
+  // Remove deselected slots
+  if (slotsToRemove.length > 0) {
+    const { error: delError } = await (mutationClient
+      .from("therapist_breaks" as any) as any)
+      .delete()
+      .eq("therapist_id", therapistId)
+      .eq("break_date", date)
+      .in("slot_time", slotsToRemove);
+
+    if (delError) {
+      return fail(delError);
+    }
+  }
+
+  // Insert newly added slots
+  if (slotsToAdd.length > 0) {
+    const rowsToInsert = slotsToAdd.map((s) => ({
+      therapist_id: therapistId,
+      break_date: date,
+      slot_time: s,
+      created_by: staffId || null,
+    }));
+
+    const { error: insertError } = await (mutationClient
+      .from("therapist_breaks" as any) as any)
+      .upsert(rowsToInsert, {
+        onConflict: "therapist_id,break_date,slot_time",
+        ignoreDuplicates: true,
+      });
+
+    if (insertError) {
+      return fail(insertError);
+    }
+  }
+
+  // Audit logging
+  if (staffId && (slotsToAdd.length > 0 || slotsToRemove.length > 0)) {
+    try {
+      await logAction(
+        supabase,
+        staffId,
+        "therapist_sync_breaks",
+        `therapist=${therapistId} date=${date} added=[${slotsToAdd.join(",")}] removed=[${slotsToRemove.join(",")}] total=${normalizedSlots.length}`
+      );
+    } catch (logErr) {
+      console.warn("Failed to log therapist_sync_breaks action:", logErr);
+    }
+  }
+
+  revalidatePath("/therapists");
+  revalidatePath("/bookings");
+  return { ok: true };
+}
+

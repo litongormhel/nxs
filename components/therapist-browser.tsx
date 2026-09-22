@@ -15,6 +15,7 @@ import {
   toggleTherapistService as toggleTherapistServiceAction,
   setTherapistBreak as setTherapistBreakAction,
   removeTherapistBreak as removeTherapistBreakAction,
+  syncTherapistBreaks as syncTherapistBreaksAction,
 } from "@/app/(staff)/therapists/actions";
 import { spaDayNow } from "@/lib/analytics/spa-day";
 import { TherapistCard, WEEKEND_SLOTS } from "@/components/therapist-card";
@@ -409,31 +410,60 @@ export function TherapistBrowser({
 
   type BreakModalState = {
     therapist: string;
-    slot: string;
+    originalBreaks: string[];
+    selectedSlots: string[];
   } | null;
   const [breakModal, setBreakModal] = useState<BreakModalState>(null);
   const [isSubmittingBreak, setIsSubmittingBreak] = useState<boolean>(false);
   const [breakError, setBreakError] = useState<string | null>(null);
 
   const handleOpenBreakModal = (therapistName: string, initialSlot?: string) => {
-    const currentBreaks = getTherapistBreaks(therapistName, viewDate);
-    const chosenSlot =
-      initialSlot ||
-      WEEKEND_SLOTS.find((s) => !currentBreaks.includes(s)) ||
-      WEEKEND_SLOTS[0];
+    const currentBreaks = getTherapistBreaks(therapistName, viewDate).map((s) => s.slice(0, 5));
+    let initialSelected = [...currentBreaks];
+    if (initialSlot) {
+      const norm = initialSlot.slice(0, 5);
+      if (!initialSelected.includes(norm)) {
+        initialSelected.push(norm);
+      }
+    }
     setBreakError(null);
     setBreakModal({
       therapist: therapistName,
-      slot: chosenSlot,
+      originalBreaks: currentBreaks,
+      selectedSlots: initialSelected,
     });
   };
 
-  const activeConflictBooking = useMemo(() => {
+  const handleToggleSlotInModal = (slot: string) => {
+    if (!breakModal) return;
+    setBreakError(null);
+    const norm = slot.slice(0, 5);
+    setBreakModal((prev) => {
+      if (!prev) return null;
+      const exists = prev.selectedSlots.includes(norm);
+      return {
+        ...prev,
+        selectedSlots: exists
+          ? prev.selectedSlots.filter((s) => s !== norm)
+          : [...prev.selectedSlots, norm],
+      };
+    });
+  };
+
+  const modalChanges = useMemo(() => {
     if (!breakModal) return null;
-    const t = breakModal.therapist;
+    const { originalBreaks, selectedSlots, therapist: t } = breakModal;
     const therapistId = therapistIds[t];
-    const slot = breakModal.slot;
-    return bookings.find((b) => {
+
+    const addedSlots = selectedSlots
+      .filter((s) => !originalBreaks.includes(s))
+      .sort((a, b) => spaSortMin(a) - spaSortMin(b));
+    const removedSlots = originalBreaks
+      .filter((s) => !selectedSlots.includes(s))
+      .sort((a, b) => spaSortMin(a) - spaSortMin(b));
+
+    // Check if any newly added slot conflicts with active bookings
+    const conflictBooking = bookings.find((b) => {
       const matchTherapist =
         b.therapist === t ||
         (therapistId && b.therapist === therapistId) ||
@@ -441,21 +471,24 @@ export function TherapistBrowser({
         (b as any).therapistId === therapistId;
       const matchDate =
         b.date === viewDate || (b as any).booking_date === viewDate;
-      const matchTime = b.time.slice(0, 5) === slot.slice(0, 5);
       const isActive = b.status !== "Cancelled";
-      return matchTherapist && matchDate && matchTime && isActive;
+      const matchTime = addedSlots.includes(b.time.slice(0, 5));
+      return matchTherapist && matchDate && isActive && matchTime;
     });
+
+    const hasChanges = addedSlots.length > 0 || removedSlots.length > 0;
+
+    return {
+      addedSlots,
+      removedSlots,
+      conflictBooking,
+      hasChanges,
+    };
   }, [breakModal, bookings, therapistIds, viewDate]);
 
-  const isCurrentSlotAlreadyBreak = useMemo(() => {
-    if (!breakModal) return false;
-    const currentBreaks = getTherapistBreaks(breakModal.therapist, viewDate);
-    return currentBreaks.includes(breakModal.slot);
-  }, [breakModal, breaksByTherapist, therapistIds, viewDate]);
-
-  const handleConfirmBreak = async () => {
-    if (!breakModal || isSubmittingBreak || activeConflictBooking) return;
-    const { therapist: t, slot } = breakModal;
+  const handleSaveBreaks = async () => {
+    if (!breakModal || isSubmittingBreak || modalChanges?.conflictBooking) return;
+    const { therapist: t, selectedSlots } = breakModal;
     const therapistId = therapistIds[t];
     if (!therapistId || !sessionStaff) {
       setBreakError("Missing staff session or therapist ID.");
@@ -465,10 +498,10 @@ export function TherapistBrowser({
     setIsSubmittingBreak(true);
     setBreakError(null);
     try {
-      const res = await setTherapistBreakAction(
+      const res = await syncTherapistBreaksAction(
         therapistId,
         viewDate,
-        slot,
+        selectedSlots,
         sessionStaff.id
       );
       if (!res.ok) {
@@ -476,68 +509,37 @@ export function TherapistBrowser({
         return;
       }
 
-      setBreaksByTherapist((prev) => {
-        const next = { ...prev };
-        next[therapistId] ??= {};
-        const currentList = next[therapistId][viewDate] ?? [];
-        if (!currentList.includes(slot)) {
-          next[therapistId] = {
-            ...next[therapistId],
-            [viewDate]: [...currentList, slot],
-          };
-        }
-        return next;
-      });
+      setBreaksByTherapist((prev) => ({
+        ...prev,
+        [therapistId]: {
+          ...(prev[therapistId] ?? {}),
+          [viewDate]: selectedSlots.slice(),
+        },
+      }));
 
-      showToast(`Set ${fmtTime(slot)} as Break Time for ${t}`);
-      setBreakModal(null);
-      router.refresh();
-    } catch (err: any) {
-      setBreakError(err?.message || "Failed to set break time");
-    } finally {
-      setIsSubmittingBreak(false);
-    }
-  };
+      const addedCount = modalChanges?.addedSlots.length ?? 0;
+      const removedCount = modalChanges?.removedSlots.length ?? 0;
 
-  const handleRemoveBreak = async () => {
-    if (!breakModal || isSubmittingBreak) return;
-    const { therapist: t, slot } = breakModal;
-    const therapistId = therapistIds[t];
-    if (!therapistId || !sessionStaff) {
-      setBreakError("Missing staff session or therapist ID.");
-      return;
-    }
-
-    setIsSubmittingBreak(true);
-    setBreakError(null);
-    try {
-      const res = await removeTherapistBreakAction(
-        therapistId,
-        viewDate,
-        slot,
-        sessionStaff.id
-      );
-      if (!res.ok) {
-        setBreakError(res.error);
-        return;
+      if (addedCount > 0 && removedCount === 0) {
+        showToast(
+          addedCount === 1
+            ? `Set ${fmtTime(modalChanges!.addedSlots[0])} as Break Time for ${t}`
+            : `Set ${addedCount} Break Times for ${t}`
+        );
+      } else if (removedCount > 0 && addedCount === 0) {
+        showToast(
+          removedCount === 1
+            ? `Removed Break Time (${fmtTime(modalChanges!.removedSlots[0])}) for ${t}`
+            : `Removed ${removedCount} Break Times for ${t}`
+        );
+      } else if (addedCount > 0 && removedCount > 0) {
+        showToast(`Updated Break Times for ${t}`);
       }
 
-      setBreaksByTherapist((prev) => {
-        const next = { ...prev };
-        if (next[therapistId]?.[viewDate]) {
-          next[therapistId] = {
-            ...next[therapistId],
-            [viewDate]: next[therapistId][viewDate].filter((s) => s !== slot),
-          };
-        }
-        return next;
-      });
-
-      showToast(`Removed Break Time (${fmtTime(slot)}) for ${t}`);
       setBreakModal(null);
       router.refresh();
     } catch (err: any) {
-      setBreakError(err?.message || "Failed to remove break time");
+      setBreakError(err?.message || "Failed to update break times");
     } finally {
       setIsSubmittingBreak(false);
     }
@@ -1137,7 +1139,9 @@ export function TherapistBrowser({
       const booked = counts[idx];
       const isTop = booked === maxCount && booked > 0 && !isOff;
       const isTimePast = isSlotPastGracePeriod(viewTime, viewDate, currentTime, 20);
-      const busyNow = isTherapistBusy(t, viewDate, viewTime, 90) || isTimePast;
+      const therapistBreaks = (getTherapistBreaks(t, viewDate) ?? []).map((b) => b.slice(0, 5));
+      const isBreakNow = therapistBreaks.includes(viewTime.slice(0, 5));
+      const busyNow = isTherapistBusy(t, viewDate, viewTime, 90) || isTimePast || isBreakNow;
       const slotStatus = meta.archived
         ? "off"
         : isOff
@@ -1148,7 +1152,8 @@ export function TherapistBrowser({
       const openSlots = WEEKEND_SLOTS.filter(
         (s) =>
           !isSlotPastGracePeriod(s, viewDate, currentTime, 20) &&
-          !isTherapistBusy(t, viewDate, s, 90)
+          !isTherapistBusy(t, viewDate, s, 90) &&
+          !therapistBreaks.includes(s.slice(0, 5))
       );
       return { t, meta, isOff, onLeave, booked, isTop, slotStatus, openSlots };
     })
@@ -1886,7 +1891,13 @@ export function TherapistBrowser({
 
       {/* MODAL: Set / Manage Break Time Confirmation */}
       {breakModal && (() => {
-        const currentModalBreaks = getTherapistBreaks(breakModal.therapist, viewDate);
+        const { therapist: t, originalBreaks, selectedSlots } = breakModal;
+        const addedSlots = modalChanges?.addedSlots ?? [];
+        const removedSlots = modalChanges?.removedSlots ?? [];
+        const conflictBooking = modalChanges?.conflictBooking ?? null;
+        const hasChanges = modalChanges?.hasChanges ?? false;
+        const isExistingBreaks = originalBreaks.length > 0;
+
         return (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-fade-in"
@@ -1916,65 +1927,111 @@ export function TherapistBrowser({
                     </svg>
                   </span>
                   <h3 className="text-base font-serif font-bold text-foreground">
-                    {isCurrentSlotAlreadyBreak ? "Manage Break Time" : "Set Break Time"}
+                    {isExistingBreaks ? "Manage Break Times" : "Set Break Times"}
                   </h3>
                 </div>
                 <p className="text-[11.5px] text-muted mt-1">
-                  Therapist: <span className="font-semibold text-foreground">{breakModal.therapist}</span> · {fmtDate(viewDate)}
+                  Therapist: <span className="font-semibold text-foreground">{t}</span> · {fmtDate(viewDate)}
                 </p>
               </div>
 
               {/* Time Slot Picker */}
               <div>
-                <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1.5">
-                  Select Shift Time Slot
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[10px] font-bold tracking-wider uppercase text-muted">
+                    Select Shift Time Slots (Multi-Select)
+                  </label>
+                  <span className="text-[10.5px] text-accent-gold font-medium">
+                    {selectedSlots.length} break slot{selectedSlots.length === 1 ? "" : "s"} selected
+                  </span>
+                </div>
                 <div className="grid grid-cols-4 gap-1.5">
                   {WEEKEND_SLOTS.map((s) => {
-                    const isSelected = s === breakModal.slot;
-                    const isSlotBreak = currentModalBreaks.includes(s);
+                    const norm = s.slice(0, 5);
+                    const isSelected = selectedSlots.includes(norm);
+                    const wasBreak = originalBreaks.includes(norm);
+                    const isDeselected = wasBreak && !isSelected;
+
                     const isBooked = bookings.some((b) => {
                       const matchTherapist =
-                        b.therapist === breakModal.therapist ||
-                        (therapistIds[breakModal.therapist] &&
-                          (b.therapist === therapistIds[breakModal.therapist] ||
-                            (b as any).therapist_id === therapistIds[breakModal.therapist]));
+                        b.therapist === t ||
+                        (therapistIds[t] &&
+                          (b.therapist === therapistIds[t] ||
+                            (b as any).therapist_id === therapistIds[t] ||
+                            (b as any).therapistId === therapistIds[t]));
                       const matchDate =
                         b.date === viewDate || (b as any).booking_date === viewDate;
-                      const matchTime = b.time.slice(0, 5) === s.slice(0, 5);
+                      const matchTime = b.time.slice(0, 5) === norm;
                       return matchTherapist && matchDate && matchTime && b.status !== "Cancelled";
                     });
+
+                    if (isBooked) {
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          disabled
+                          className="text-center text-xs py-2 px-1 rounded-lg border border-dashed border-border text-muted/60 opacity-50 cursor-not-allowed font-medium"
+                          title={`${fmtTime(s)} (Booked) — Unavailable for break`}
+                        >
+                          <div>{fmtTime(s)}</div>
+                          <div className="text-[9.5px] opacity-75 mt-0.5">(Booked)</div>
+                        </button>
+                      );
+                    }
+
+                    if (isDeselected) {
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => handleToggleSlotInModal(s)}
+                          className="text-center text-xs py-2 px-1 rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-300 font-medium transition-all cursor-pointer hover:bg-rose-500/20 shadow-sm"
+                          title={`${fmtTime(s)} — Break marked for removal (click to restore)`}
+                        >
+                          <div className="line-through">{fmtTime(s)}</div>
+                          <div className="text-[9.5px] opacity-90 mt-0.5 font-semibold text-rose-400">
+                            (Remove)
+                          </div>
+                        </button>
+                      );
+                    }
+
+                    if (isSelected) {
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => handleToggleSlotInModal(s)}
+                          className="text-center text-xs py-2 px-1 rounded-lg border border-amber-500 bg-amber-500/20 text-amber-300 font-semibold shadow-sm transition-all cursor-pointer hover:bg-amber-500/30"
+                          title={`${fmtTime(s)} (Break) — Click to toggle off`}
+                        >
+                          <div>{fmtTime(s)}</div>
+                          <div className="text-[9.5px] opacity-90 mt-0.5 font-semibold">
+                            (Break)
+                          </div>
+                        </button>
+                      );
+                    }
 
                     return (
                       <button
                         key={s}
                         type="button"
-                        onClick={() => {
-                          setBreakError(null);
-                          setBreakModal((prev) => (prev ? { ...prev, slot: s } : null));
-                        }}
-                        className={`text-center text-xs py-2 px-1 rounded-lg border font-medium transition-all cursor-pointer ${
-                          isSelected
-                            ? "border-amber-500 bg-amber-500/20 text-amber-300 font-semibold shadow-sm"
-                            : isSlotBreak
-                            ? "border-amber-500/30 bg-amber-500/5 text-amber-400"
-                            : isBooked
-                            ? "border-dashed border-border text-muted"
-                            : "border-border text-foreground hover:border-gold/50"
-                        }`}
+                        onClick={() => handleToggleSlotInModal(s)}
+                        className="text-center text-xs py-2 px-1 rounded-lg border border-border text-foreground hover:border-gold/50 font-medium transition-all cursor-pointer"
+                        title={`${fmtTime(s)} (Free) — Click to select as break`}
                       >
                         <div>{fmtTime(s)}</div>
-                        <div className="text-[9.5px] opacity-75 mt-0.5">
-                          {isSlotBreak ? "(Break)" : isBooked ? "(Booked)" : "(Free)"}
-                        </div>
+                        <div className="text-[9.5px] opacity-75 mt-0.5 text-muted">(Free)</div>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Conflict Warning Alert or Confirmation Prompt */}
-              {activeConflictBooking ? (
+              {/* Dynamic Confirmation Text or Conflict Alert */}
+              {conflictBooking ? (
                 <div className="p-3.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs space-y-1.5">
                   <div className="font-semibold flex items-center gap-1.5 text-rose-400">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -1985,28 +2042,75 @@ export function TherapistBrowser({
                     Booking Conflict Detected
                   </div>
                   <p className="leading-relaxed">
-                    <strong>{breakModal.therapist}</strong> already has an active booking with{" "}
-                    <span className="font-semibold text-white">{activeConflictBooking.clientName}</span> (
-                    {activeConflictBooking.service}) at <strong>{fmtTime(breakModal.slot)}</strong>.
+                    <strong>{t}</strong> already has an active booking with{" "}
+                    <span className="font-semibold text-white">{conflictBooking.clientName}</span> (
+                    {conflictBooking.service}) at <strong>{fmtTime(conflictBooking.time)}</strong>.
                   </p>
                   <p className="text-[11px] text-muted">
                     You must reassign or cancel this booking before confirming the break time slot.
                   </p>
                 </div>
-              ) : isCurrentSlotAlreadyBreak ? (
-                <div className="p-3.5 rounded-xl border border-border bg-surface-2 text-xs space-y-1 text-muted">
+              ) : addedSlots.length > 0 && removedSlots.length === 0 ? (
+                <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-xs leading-relaxed">
+                  {addedSlots.length === 1 ? (
+                    <>
+                      Confirm setting <strong>{fmtTime(addedSlots[0])}</strong> as Break Time for{" "}
+                      <strong>{t}</strong>? This slot will become unavailable for customer bookings.
+                    </>
+                  ) : (
+                    <>
+                      Confirm setting{" "}
+                      <strong>{addedSlots.map(fmtTime).join(", ")}</strong> as Break Times for{" "}
+                      <strong>{t}</strong>? These slots will become unavailable for customer bookings.
+                    </>
+                  )}
+                </div>
+              ) : removedSlots.length > 0 && addedSlots.length === 0 ? (
+                <div className="p-3.5 rounded-xl border border-rose-500/30 bg-surface-2 text-xs space-y-1 text-muted">
                   <p className="text-foreground leading-relaxed">
-                    <strong>{fmtTime(breakModal.slot)}</strong> is currently set as Break Time for{" "}
-                    <span className="font-semibold text-gold">{breakModal.therapist}</span>.
+                    {removedSlots.length === 1 ? (
+                      <>
+                        <strong>{fmtTime(removedSlots[0])}</strong> is currently set as Break Time for{" "}
+                        <span className="font-semibold text-gold">{t}</span>.
+                      </>
+                    ) : (
+                      <>
+                        <strong>{removedSlots.map(fmtTime).join(", ")}</strong> are currently set as Break Times for{" "}
+                        <span className="font-semibold text-gold">{t}</span>.
+                      </>
+                    )}
+                  </p>
+                  <p className="text-[11px] text-rose-300">
+                    {removedSlots.length === 1 ? (
+                      <>Confirm removing this break? This slot will become available again for customer bookings.</>
+                    ) : (
+                      <>Confirm removing these breaks? These slots will become available again for customer bookings.</>
+                    )}
+                  </p>
+                </div>
+              ) : addedSlots.length > 0 && removedSlots.length > 0 ? (
+                <div className="p-3.5 rounded-xl border border-amber-500/30 bg-surface-2 text-xs space-y-2 text-muted">
+                  <p className="text-foreground leading-relaxed">
+                    Confirm setting{" "}
+                    <strong className="text-amber-300">{addedSlots.map(fmtTime).join(", ")}</strong> as Break Time
+                    {addedSlots.length > 1 ? "s" : ""} and removing{" "}
+                    <strong className="text-rose-400">{removedSlots.map(fmtTime).join(", ")}</strong> for{" "}
+                    <span className="font-semibold text-gold">{t}</span>?
                   </p>
                   <p className="text-[11px]">
-                    Confirm removing this break? This slot will become available again for customer bookings.
+                    Newly selected slots will become unavailable, and deselected slots will become available again for customer bookings.
                   </p>
                 </div>
               ) : (
-                <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-xs leading-relaxed">
-                  Confirm setting <strong>{fmtTime(breakModal.slot)}</strong> as Break Time for{" "}
-                  <strong>{breakModal.therapist}</strong>? This slot will become unavailable for customer bookings.
+                <div className="p-3.5 rounded-xl border border-border bg-surface-2 text-xs text-muted leading-relaxed">
+                  {selectedSlots.length > 0 ? (
+                    <>
+                      Currently scheduled break times:{" "}
+                      <strong className="text-foreground">{selectedSlots.map(fmtTime).join(", ")}</strong>. Click any slot to toggle it.
+                    </>
+                  ) : (
+                    <>No break times scheduled. Select one or more free slots above to set break times.</>
+                  )}
                 </div>
               )}
 
@@ -2026,25 +2130,28 @@ export function TherapistBrowser({
                   Cancel
                 </button>
 
-                {isCurrentSlotAlreadyBreak ? (
-                  <button
-                    type="button"
-                    disabled={isSubmittingBreak}
-                    onClick={handleRemoveBreak}
-                    className="flex-1 rounded-lg bg-rose-500 hover:bg-rose-600 text-white py-2 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-sm"
-                  >
-                    {isSubmittingBreak ? "Removing..." : "Remove Break"}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={!!activeConflictBooking || isSubmittingBreak}
-                    onClick={handleConfirmBreak}
-                    className="flex-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black py-2 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm"
-                  >
-                    {isSubmittingBreak ? "Saving..." : "Confirm Break"}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={!hasChanges || !!conflictBooking || isSubmittingBreak}
+                  onClick={handleSaveBreaks}
+                  className={`flex-1 rounded-lg py-2 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm ${
+                    removedSlots.length > 0 && addedSlots.length === 0
+                      ? "bg-rose-500 hover:bg-rose-600 text-white"
+                      : "bg-amber-500 hover:bg-amber-400 text-black"
+                  }`}
+                >
+                  {isSubmittingBreak
+                    ? "Saving..."
+                    : removedSlots.length > 0 && addedSlots.length === 0
+                    ? removedSlots.length > 1
+                      ? "Remove Breaks"
+                      : "Remove Break"
+                    : addedSlots.length > 0 && removedSlots.length === 0
+                    ? addedSlots.length > 1
+                      ? "Confirm Breaks"
+                      : "Confirm Break"
+                    : "Confirm Changes"}
+                </button>
               </div>
             </div>
           </div>
