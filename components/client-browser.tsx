@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { LogVisitModal } from "@/components/log-visit-modal";
+import { QuickWalkinModal } from "@/components/quick-walkin-modal";
 import { useStaffSim } from "@/lib/staff-context";
 import { computeLoyaltyPoints, WET_AREA_POINTS, type LoyaltyFormulaMode } from "@/lib/loyalty";
 import { showBookingToast } from "@/components/booking-form-modal";
@@ -223,7 +224,10 @@ export function ClientBrowser({
   // Log visit modal state
   const [showLogVisit, setShowLogVisit] = useState(false);
   const [logVisitClient, setLogVisitClient] = useState<Client | null>(null);
-  const [logVisitIsRedemption, setLogVisitIsRedemption] = useState(false);
+
+  // Quick Walk-in Modal for redemptions
+  const [showRedemptionWalkin, setShowRedemptionWalkin] = useState(false);
+  const [redemptionClient, setRedemptionClient] = useState<Client | null>(null);
 
   // Claim actions and modal states
   const [approvingClaimId, setApprovingClaimId] = useState<string | null>(null);
@@ -1536,9 +1540,8 @@ export function ClientBrowser({
                 <button
                   type="button"
                   onClick={() => {
-                    setLogVisitClient(selectedMemberForProfile);
-                    setLogVisitIsRedemption(true);
-                    setShowLogVisit(true);
+                    setRedemptionClient(selectedMemberForProfile);
+                    setShowRedemptionWalkin(true);
                     setSelectedMemberForProfile(null);
                     setCopiedToken(false);
                   }}
@@ -1554,7 +1557,6 @@ export function ClientBrowser({
                 type="button"
                 onClick={() => {
                   setLogVisitClient(selectedMemberForProfile);
-                  setLogVisitIsRedemption(false);
                   setShowLogVisit(true);
                   setSelectedMemberForProfile(null);
                   setCopiedToken(false);
@@ -1901,6 +1903,32 @@ export function ClientBrowser({
         </div>
       )}
 
+      {/* Quick Walk-in Modal (Redemption) */}
+      {showRedemptionWalkin && redemptionClient && (
+        <QuickWalkinModal
+          clients={clients}
+          services={services}
+          staff={staff}
+          therapists={therapists}
+          promos={promos}
+          addons={addons}
+          lockers={lockers}
+          initialClient={redemptionClient}
+          initialService="Combi Massage"
+          initialPromo="redeem_100_pts"
+          initialIsRedemption={true}
+          onClose={() => {
+            setShowRedemptionWalkin(false);
+            setRedemptionClient(null);
+          }}
+          onCreated={() => {
+            setShowRedemptionWalkin(false);
+            setRedemptionClient(null);
+            router.refresh();
+          }}
+        />
+      )}
+
       {/* Log Visit Modal */}
       {showLogVisit && (logVisitClient || clients[0]) && (
         <LogVisitModal
@@ -1912,16 +1940,13 @@ export function ClientBrowser({
           addons={addons}
           lockers={lockers}
           initialClientId={(logVisitClient || clients[0]).id}
-          initialIsRedemption={logVisitIsRedemption}
           onClose={() => {
             setShowLogVisit(false);
             setLogVisitClient(null);
-            setLogVisitIsRedemption(false);
           }}
           onLogged={() => {
             setShowLogVisit(false);
             setLogVisitClient(null);
-            setLogVisitIsRedemption(false);
             router.refresh();
           }}
         />

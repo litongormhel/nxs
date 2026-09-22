@@ -96,7 +96,7 @@ export function showBookingToast({
 }
 
 export interface QuickWalkinModalProps {
-  clients?: Client[];
+  clients?: (Client & { points_balance?: number | null })[];
   services?: Service[];
   therapists?: Therapist[];
   rooms?: number[];
@@ -105,7 +105,11 @@ export interface QuickWalkinModalProps {
   addons?: Addon[];
   lockers?: number[];
   timeSlots?: string[];
+  initialClient?: (Client & { points_balance?: number | null }) | null;
   initialClientId?: string | null;
+  initialService?: string | null;
+  initialPromo?: string | null;
+  initialIsRedemption?: boolean;
   initialTherapistId?: string;
   initialSlotTime?: string;
   initialDate?: string;
@@ -123,7 +127,11 @@ export function QuickWalkinModal({
   addons: propAddons,
   lockers: propLockers,
   timeSlots: propTimeSlots,
+  initialClient = null,
   initialClientId = null,
+  initialService = null,
+  initialPromo = null,
+  initialIsRedemption = false,
   initialTherapistId,
   initialSlotTime,
   initialDate,
@@ -141,7 +149,13 @@ export function QuickWalkinModal({
     return () => clearInterval(timer);
   }, []);
 
-  const [clients, setClients] = useState<Client[]>(() => propClients ?? []);
+  const [clients, setClients] = useState<Client[]>(() => {
+    const list = propClients ? [...propClients] : [];
+    if (initialClient && !list.some((c) => c.id === initialClient.id)) {
+      list.unshift(initialClient);
+    }
+    return list;
+  });
   const [services, setServices] = useState<Service[]>(() => propServices ?? []);
   const [therapists, setTherapists] = useState<Therapist[]>(() => propTherapists ?? []);
   const [rooms, setRooms] = useState<number[]>(() => propRooms ?? []);
@@ -151,7 +165,15 @@ export function QuickWalkinModal({
   const [lockers, setLockers] = useState<number[]>(() => propLockers ?? []);
   const [timeSlots, setTimeSlots] = useState<string[]>(() => propTimeSlots ?? WEEKEND_SLOTS);
 
-  useEffect(() => { if (propClients) setClients(propClients); }, [propClients]);
+  useEffect(() => {
+    if (propClients) {
+      const list = [...propClients];
+      if (initialClient && !list.some((c) => c.id === initialClient.id)) {
+        list.unshift(initialClient);
+      }
+      setClients(list);
+    }
+  }, [propClients, initialClient]);
   useEffect(() => { if (propServices) setServices(propServices); }, [propServices]);
   useEffect(() => { if (propTherapists) setTherapists(propTherapists); }, [propTherapists]);
   useEffect(() => { if (propRooms) setRooms(propRooms); }, [propRooms]);
@@ -319,14 +341,35 @@ export function QuickWalkinModal({
     propTimeSlots,
   ]);
 
+  const effectiveInitialClientId = initialClientId ?? initialClient?.id ?? null;
   const [clientQuery, setClientQuery] = useState("");
-  const [clientId, setClientId] = useState<string | null>(initialClientId);
-  // Set when opened via a Member QR scan — the client field is locked to a
+  const [clientId, setClientId] = useState<string | null>(effectiveInitialClientId);
+  // Set when opened via a Member QR scan or member prefill — the client field is locked to a
   // read-only display until the user explicitly clicks "Change client", so a
-  // scan can't be silently overridden by an accidental keystroke.
-  const [clientLocked, setClientLocked] = useState(!!initialClientId);
+  // scan/prefilled member can't be silently overridden by an accidental keystroke.
+  const [clientLocked, setClientLocked] = useState(!!(effectiveInitialClientId || initialClient));
   const [guestName, setGuestName] = useState("");
-  const [serviceId, setServiceId] = useState(propServices?.[0]?.id ?? "");
+  const [serviceId, setServiceId] = useState(() => {
+    if (propServices && propServices.length > 0) {
+      if (initialService) {
+        const match = propServices.find(
+          (s) =>
+            s.id === initialService ||
+            s.name.toLowerCase() === initialService.toLowerCase() ||
+            s.name.toLowerCase().includes(initialService.toLowerCase())
+        );
+        if (match) return match.id;
+      }
+      if (initialIsRedemption) {
+        const combi = propServices.find(
+          (s) => s.name === "Combi Massage" || s.name.toLowerCase().includes("combi")
+        );
+        if (combi) return combi.id;
+      }
+      return propServices[0].id;
+    }
+    return "";
+  });
   const [therapistId, setTherapistId] = useState<string>(initialTherapistId ?? "");
   const [useCustomTime, setUseCustomTime] = useState(false);
   const [slotTime, setSlotTime] = useState<string>(initialSlotTime ?? "");
@@ -347,13 +390,27 @@ export function QuickWalkinModal({
   }, [initialTherapistId, therapists, therapistId]);
 
   const [lockerNumber, setLockerNumber] = useState<number | "">("");
-  const [promoId, setPromoId] = useState<string>("none");
-  const [clientPointsBalance, setClientPointsBalance] = useState<number | null>(null);
+  const [promoId, setPromoId] = useState<string>(() => {
+    if (initialIsRedemption) return "redeem_100_pts";
+    if (initialPromo) {
+      if (initialPromo === "redeem_100_pts" || initialPromo === "loyalty_100") {
+        return "redeem_100_pts";
+      }
+      return initialPromo;
+    }
+    return "none";
+  });
+  const [clientPointsBalance, setClientPointsBalance] = useState<number | null>(
+    initialClient?.points_balance ?? null
+  );
 
   useEffect(() => {
     if (!clientId) {
       setClientPointsBalance(null);
       return;
+    }
+    if (initialClient && initialClient.id === clientId && initialClient.points_balance != null) {
+      setClientPointsBalance(initialClient.points_balance);
     }
     const supabase = createClient();
     supabase
@@ -362,9 +419,11 @@ export function QuickWalkinModal({
       .eq("id", clientId)
       .maybeSingle()
       .then(({ data }) => {
-        setClientPointsBalance(data?.points_balance ?? 0);
+        if (data?.points_balance != null) {
+          setClientPointsBalance(data.points_balance);
+        }
       });
-  }, [clientId]);
+  }, [clientId, initialClient]);
   const [manualDiscountOn, setManualDiscountOn] = useState(false);
   const [discountType, setDiscountType] = useState<"pct" | "fixed">("pct");
   const [discountValue, setDiscountValue] = useState(20);
@@ -389,6 +448,27 @@ export function QuickWalkinModal({
   // Set default service once services load if none selected
   useEffect(() => {
     if (!serviceId && services.length > 0) {
+      if (initialService) {
+        const match = services.find(
+          (s) =>
+            s.id === initialService ||
+            s.name.toLowerCase() === initialService.toLowerCase() ||
+            s.name.toLowerCase().includes(initialService.toLowerCase())
+        );
+        if (match) {
+          setServiceId(match.id);
+          return;
+        }
+      }
+      if (initialIsRedemption) {
+        const combi = services.find(
+          (s) => s.name === "Combi Massage" || s.name.toLowerCase().includes("combi")
+        );
+        if (combi) {
+          setServiceId(combi.id);
+          return;
+        }
+      }
       if (therapistId && servicesLoaded) {
         const offered = therapistServicesMap.get(therapistId);
         const qualified = services.find((s) => offered?.has(s.id));
@@ -399,7 +479,7 @@ export function QuickWalkinModal({
       }
       setServiceId(services[0].id);
     }
-  }, [services, serviceId, therapistId, servicesLoaded, therapistServicesMap]);
+  }, [services, serviceId, therapistId, servicesLoaded, therapistServicesMap, initialService, initialIsRedemption]);
   const [occupiedLockers, setOccupiedLockers] = useState<Set<number>>(new Set());
   const [maintenanceLockers, setMaintenanceLockers] = useState<Map<number, string | null>>(new Map());
   const [clientBookings, setClientBookings] = useState<
@@ -753,7 +833,9 @@ export function QuickWalkinModal({
       setUseCustomTime(false);
       setRoomNumber("");
     }
-    setPromoId("none");
+    if (!isLoyaltyRedemption) {
+      setPromoId("none");
+    }
     setManualDiscountOn(false);
   }
 
@@ -773,10 +855,10 @@ export function QuickWalkinModal({
   const canRedeemLoyalty = !!clientId && (clientPointsBalance ?? 0) >= 100;
 
   useEffect(() => {
-    if (promoId === "redeem_100_pts" && !canRedeemLoyalty) {
+    if (promoId === "redeem_100_pts" && !canRedeemLoyalty && clientPointsBalance !== null) {
       setPromoId("none");
     }
-  }, [canRedeemLoyalty, promoId]);
+  }, [canRedeemLoyalty, promoId, clientPointsBalance]);
 
   const isLoyaltyRedemption = promoId === "redeem_100_pts";
 
@@ -1058,7 +1140,9 @@ export function QuickWalkinModal({
                 <div className="mt-1 flex items-center justify-between gap-2 rounded-md border border-gold/50 bg-gold/5 px-3 py-2">
                   <span className="text-sm font-medium text-foreground">
                     {selectedClient?.codename} <span className="text-muted">@{selectedClient?.username}</span>
-                    <span className="ml-2 text-[10px] uppercase tracking-wide text-gold">Scanned</span>
+                    <span className="ml-2 text-[10px] uppercase tracking-wide text-gold">
+                      {initialIsRedemption || initialClient ? "Member" : "Scanned"}
+                    </span>
                   </span>
                   <button
                     type="button"

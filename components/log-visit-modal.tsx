@@ -132,14 +132,9 @@ export function LogVisitModal({
     (s) => s.name === "Combi Massage" || s.name.toLowerCase().includes("combi")
   ) ?? services[0];
   const combiCredit = combiService?.price ?? 1100;
-  const initialSigService = services.find(
-    (s) => s.name === "Signature Massage" || s.name.toLowerCase().includes("signature")
-  );
-  const defaultUpgradeDiff = initialSigService ? Math.max(0, initialSigService.price - combiCredit) : 200;
-
   const [date, setDate] = useState(initialBooking?.booking_date ?? spaDayNow());
   const [serviceId, setServiceId] = useState<string>(
-    initialBooking?.service_id ?? (initialIsRedemption ? combiService?.id : null) ?? initialServiceId ?? services[0]?.id ?? ""
+    initialBooking?.service_id ?? initialServiceId ?? services[0]?.id ?? ""
   );
   const [therapistId, setTherapistId] = useState<string>(
     initialBooking?.therapist_id ?? ""
@@ -153,11 +148,6 @@ export function LogVisitModal({
   const [lockerNumber, setLockerNumber] = useState<number | "">("");
   const [activeOccupancies, setActiveOccupancies] = useState<ActiveOccupancy[]>([]);
   const [maintenanceLockers, setMaintenanceLockers] = useState<Map<number, string | null>>(new Map());
-
-  const [isRedemption, setIsRedemption] = useState(initialIsRedemption);
-  const [isUpgraded, setIsUpgraded] = useState(false);
-  const [upgradeTo, setUpgradeTo] = useState("Signature Massage");
-  const [upgradeCash, setUpgradeCash] = useState(defaultUpgradeDiff);
 
   const [manualDiscountOn, setManualDiscountOn] = useState(false);
   const [discountType, setDiscountType] = useState<"pct" | "fixed">("pct");
@@ -331,20 +321,11 @@ export function LogVisitModal({
   }
 
   function onServiceSelect(val: string) {
-    if (val === "REDEEM") {
-      setIsRedemption(true);
+    setServiceId(val);
+    const s = services.find((x) => x.id === val);
+    if (s?.name === "Wet Area") {
+      setTherapistId("");
       setPromoId("none");
-      const combi = services.find((s) => s.name === "Combi Massage") ?? services[0];
-      if (combi) setServiceId(combi.id);
-    } else {
-      setIsRedemption(false);
-      setIsUpgraded(false);
-      setServiceId(val);
-      const s = services.find((x) => x.id === val);
-      if (s?.name === "Wet Area") {
-        setTherapistId("");
-        setPromoId("none");
-      }
     }
   }
 
@@ -372,16 +353,9 @@ export function LogVisitModal({
   }
 
   const isPromoRedemption = promoId === "redeem_100_pts";
-  const isEffectiveRedemption = isRedemption || isPromoRedemption;
+  const isEffectiveRedemption = isPromoRedemption;
 
   const computedAmount = useMemo(() => {
-    if (isRedemption && !isUpgraded) return 0;
-    if (isRedemption && isUpgraded) {
-      const addonsTotal = addons
-        .filter((a) => addonIds.includes(a.id))
-        .reduce((sum, a) => sum + a.price, 0);
-      return upgradeCash + addonsTotal;
-    }
     if (isPromoRedemption) {
       const basePrice = selectedService?.price ?? 0;
       const serviceFee = Math.max(0, basePrice - combiCredit);
@@ -408,9 +382,6 @@ export function LogVisitModal({
 
     return value + addonsTotal;
   }, [
-    isRedemption,
-    isUpgraded,
-    upgradeCash,
     isPromoRedemption,
     selectedService,
     combiCredit,
@@ -426,8 +397,6 @@ export function LogVisitModal({
   // input to the loyalty formula. Distinct from computedAmount, which is
   // what's recorded on the sale and includes add-ons.
   const servicePaidAmount = useMemo(() => {
-    if (isRedemption && !isUpgraded) return 0;
-    if (isRedemption && isUpgraded) return upgradeCash;
     if (isPromoRedemption) {
       const basePrice = selectedService?.price ?? 0;
       return Math.max(0, basePrice - combiCredit);
@@ -442,9 +411,6 @@ export function LogVisitModal({
     }
     return basePrice;
   }, [
-    isRedemption,
-    isUpgraded,
-    upgradeCash,
     isPromoRedemption,
     selectedService,
     combiCredit,
@@ -570,8 +536,8 @@ export function LogVisitModal({
           splitGcashAmount: isSplit ? numGcash : null,
           paymentRef: (paymentMethod === "GCash" || (isSplit && numGcash > 0)) ? gcashRef.trim() || null : null,
           isRedemption: isEffectiveRedemption,
-          upgradeTo: isUpgraded ? upgradeTo : null,
-          upgradeCash: isUpgraded ? upgradeCash : null,
+          upgradeTo: null,
+          upgradeCash: null,
           staffId,
           notes: notes.trim() || undefined,
         });
@@ -644,14 +610,13 @@ export function LogVisitModal({
     const lockerDisplay = lockerNumber ? `Locker ${lockerNumber}` : "—";
     const roomDisplay = linkedBooking?.room_number ? `Room ${linkedBooking.room_number}` : "—";
 
-    const baseServiceName = selectedService?.name ?? (isRedemption ? "Combi Massage" : "—");
-    const serviceWithUpgrade = isRedemption && isUpgraded ? `${baseServiceName} (Upgraded to ${upgradeTo})` : baseServiceName;
+    const baseServiceName = selectedService?.name ?? "—";
     const selectedAddonNames = addons
       .filter((a) => addonIds.includes(a.id))
       .map((a) => a.name);
     const serviceAvailedDisplay = selectedAddonNames.length > 0
-      ? `${serviceWithUpgrade} (+ ${selectedAddonNames.join(", ")})`
-      : serviceWithUpgrade;
+      ? `${baseServiceName} (+ ${selectedAddonNames.join(", ")})`
+      : baseServiceName;
 
     const paymentBreakdown =
       paymentMethod === "Cash"
@@ -985,7 +950,7 @@ export function LogVisitModal({
             </label>
             <select
               id="fService"
-              value={isRedemption ? "REDEEM" : serviceId}
+              value={serviceId}
               onChange={(e) => onServiceSelect(e.target.value)}
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
             >
@@ -994,62 +959,8 @@ export function LogVisitModal({
                   {s.name} (+{s.points_earned} pts)
                 </option>
               ))}
-              <option value="REDEEM">Redeem: Combi Massage Reward (−100 pts)</option>
             </select>
           </div>
-
-          {/* Upgrade Box (when Redeem) */}
-          {isRedemption && (
-            <div className="rounded-lg border border-dashed border-[#a97e2e] bg-[#c89b3c]/5 p-3 space-y-3">
-              <label className="flex items-center gap-2 text-sm font-semibold text-foreground cursor-pointer">
-                <input
-                  type="checkbox"
-                  id="fUpgrade"
-                  checked={isUpgraded}
-                  onChange={(e) => setIsUpgraded(e.target.checked)}
-                  className="accent-gold"
-                />
-                Upgraded with cash top-up
-              </label>
-              {isUpgraded && (
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <div>
-                    <label className="text-xs text-muted" htmlFor="fUpgradeTo">
-                      Upgraded To
-                    </label>
-                    <select
-                      id="fUpgradeTo"
-                      value={upgradeTo}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setUpgradeTo(val);
-                        const target = services.find((s) => s.name.toLowerCase().includes(val.toLowerCase()));
-                        if (target) {
-                          setUpgradeCash(Math.max(0, target.price - combiCredit));
-                        }
-                      }}
-                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
-                    >
-                      <option>Signature Massage</option>
-                      <option>Scrub</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted" htmlFor="fUpgradeCash">
-                      Cash Top-up (₱)
-                    </label>
-                    <input
-                      id="fUpgradeCash"
-                      type="number"
-                      value={upgradeCash}
-                      onChange={(e) => setUpgradeCash(Number(e.target.value))}
-                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Manual Discount Box */}
           <div className="rounded-lg border border-dashed border-[#5e3c3c] bg-red-950/10 p-3">
@@ -1059,7 +970,7 @@ export function LogVisitModal({
                 id="fManualDiscount"
                 checked={manualDiscountOn}
                 onChange={(e) => onManualDiscountToggle(e.target.checked)}
-                disabled={promoId !== "none" || isRedemption}
+                disabled={promoId !== "none"}
                 className="accent-gold"
               />
               Manual discount (e.g. Senior or PWD)
@@ -1110,7 +1021,7 @@ export function LogVisitModal({
             <select
               id="fPromo"
               value={promoId}
-              disabled={manualDiscountOn || isRedemption}
+              disabled={manualDiscountOn}
               onChange={(e) => {
                 onPromoChange(e.target.value);
                 setError(null);
@@ -1118,14 +1029,14 @@ export function LogVisitModal({
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none disabled:opacity-50"
             >
               <option value="none">None</option>
-              {!isRedemption && canRedeemLoyalty && (
+              {canRedeemLoyalty && (
                 <option value="redeem_100_pts" className="text-gold font-medium">
                   {(selectedService?.price ?? 0) <= combiCredit
                     ? "Loyalty Reward: Redeem 100 pts (Free Service / Fully Covered)"
                     : `Loyalty Reward: Redeem 100 pts (+₱${(selectedService?.price ?? 0) - combiCredit} Upgrade Fee)`}
                 </option>
               )}
-              {!isRedemption && !canRedeemLoyalty && !!clientId && (
+              {!canRedeemLoyalty && !!clientId && (
                 <option value="redeem_disabled" disabled className="text-muted">
                   Loyalty Reward: Redeem 100 pts (Requires 100 pts • Current: {clientPointsBalance ?? 0} pts)
                 </option>
