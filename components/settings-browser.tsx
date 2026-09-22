@@ -635,7 +635,7 @@ export function SettingsBrowser({
       message: `Are you sure you want to delete ${promo.label}?`,
       onConfirm: async () => {
         setDeleteConfirm(null);
-        const res = await deletePromo(promo.id, selectedStaffId);
+        const res = await deletePromo(promo.id, selectedStaffId, promo.label);
         if (!res.ok) {
           showToast(`Failed to remove ${promo.label}: ${res.error}`);
           return;

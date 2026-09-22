@@ -176,7 +176,13 @@ export async function addPromo(
     supabase,
     staffId,
     "settings_add_promo",
-    `label=${label} discount=${discount} min_pax=${constraints?.minPax ?? 1}`
+    JSON.stringify({
+      label,
+      discount,
+      applicableDays: constraints?.applicableDays ?? null,
+      applicableSlots: constraints?.applicableSlots ?? null,
+      minPax: constraints?.minPax ?? 1,
+    })
   );
   revalidatePath("/settings");
   return { ok: true, id: data.id };
@@ -222,11 +228,26 @@ export async function updatePromo(
   }
 
   if (error) return fail(error);
+
+  let promoLabel = updates.label;
+  if (!promoLabel) {
+    const { data: existingPromo } = await supabase
+      .from("promos")
+      .select("label")
+      .eq("id", promoId)
+      .maybeSingle();
+    promoLabel = existingPromo?.label;
+  }
+
   await logAction(
     supabase,
     staffId,
     "settings_update_promo",
-    `promo=${promoId} updates=${JSON.stringify(updates)}`
+    JSON.stringify({
+      promoId,
+      label: promoLabel,
+      ...updates,
+    })
   );
   revalidatePath("/settings");
   return { ok: true };
@@ -240,26 +261,60 @@ export async function updatePromoDiscount(
   const supabase = await createClient();
   const ownerCheck = await requireOwner(supabase);
   if (ownerCheck) return ownerCheck;
+
+  const { data: existingPromo } = await supabase
+    .from("promos")
+    .select("label")
+    .eq("id", promoId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("promos")
     .update({ discount })
     .eq("id", promoId);
   if (error) return fail(error);
-  await logAction(supabase, staffId, "settings_update_promo_discount", `promo=${promoId} discount=${discount}`);
+  await logAction(
+    supabase,
+    staffId,
+    "settings_update_promo_discount",
+    `promo=${promoId} label=${existingPromo?.label ?? ""} discount=${discount}`
+  );
   revalidatePath("/settings");
   return { ok: true };
 }
 
-export async function deletePromo(promoId: string, staffId: string): Promise<ActionResult> {
+export async function deletePromo(
+  promoId: string,
+  staffId: string,
+  promoLabel?: string
+): Promise<ActionResult> {
   const supabase = await createClient();
   const ownerCheck = await requireOwner(supabase);
   if (ownerCheck) return ownerCheck;
+
+  let label = promoLabel;
+  if (!label) {
+    const { data: promoRow } = await supabase
+      .from("promos")
+      .select("label")
+      .eq("id", promoId)
+      .maybeSingle();
+    if (promoRow?.label) {
+      label = promoRow.label;
+    }
+  }
+
   const { error } = await supabase
     .from("promos")
     .update({ active: false })
     .eq("id", promoId);
   if (error) return fail(error);
-  await logAction(supabase, staffId, "settings_delete_promo", `promo=${promoId}`);
+  await logAction(
+    supabase,
+    staffId,
+    "settings_delete_promo",
+    label ? `label=${label} promo=${promoId}` : `promo=${promoId}`
+  );
   revalidatePath("/settings");
   return { ok: true };
 }

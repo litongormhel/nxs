@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useStaffSim } from "@/lib/staff-context";
-import { formatLogDetail, formatActionLabel, type Lookups } from "@/lib/logs/format-detail";
+import { formatActionLog, formatActionLabel, type Lookups } from "@/lib/logs";
 import { spaDayNow, toSpaDay } from "@/lib/analytics/spa-day";
 
 export type LogEntry = {
@@ -145,7 +145,7 @@ export function LogsBrowser({
           <div className="px-4 py-4 text-sm text-muted">No matching log entries.</div>
         ) : (
           paginatedLogs.map((l) => {
-            const { sentence, technicalIds } = formatLogDetail(l.action, l.detail, lookups);
+            const { actionLabel, details } = formatActionLog(l, lookups);
             return (
               <div
                 key={l.id}
@@ -164,16 +164,11 @@ export function LogsBrowser({
                 </div>
                 <div>
                   <span className="inline-flex items-center rounded-md bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20">
-                    {formatActionLabel(l.action)}
+                    {actionLabel}
                   </span>
                 </div>
                 <div>
-                  <div className="text-foreground text-[12px]">{sentence}</div>
-                  {technicalIds.length > 0 && (
-                    <div className="mt-0.5 font-mono text-[10px] text-muted/60">
-                      {technicalIds.join(" ")}
-                    </div>
-                  )}
+                  <div className="text-foreground text-[12px] leading-relaxed">{details}</div>
                 </div>
               </div>
             );
