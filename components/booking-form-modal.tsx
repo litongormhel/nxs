@@ -1273,51 +1273,68 @@ export function BookingFormModal({
         <div className="mt-5 space-y-4">
           {/* Dedicated Receipt Preview Card */}
           <div className="rounded-lg border border-[#292524] bg-[#0c0a09] p-4 sm:p-5 space-y-3.5 font-sans text-xs">
-            <div className="flex items-center justify-between border-b border-[#292524] pb-3">
-              <span className="font-semibold text-foreground tracking-wide uppercase text-xs">
-                Confirm Booking Details
-              </span>
+            <div className="flex items-center justify-end border-b border-[#292524] pb-3">
               <span className="rounded-md bg-gold/10 px-2.5 py-0.5 text-[10px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20">
                 Receipt Preview
               </span>
             </div>
 
-            <div className="flex items-center justify-between border-b border-[#292524] pb-3">
-              <span className="text-muted text-[11px]">Target Client</span>
-              <span className="font-bold text-accent-gold text-sm text-right">
-                {!isWalkIn && selectedClient
-                  ? `${selectedClient.codename}${selectedClient.username ? ` (@${selectedClient.username})` : ""}${selectedClient.phone ? ` · ${selectedClient.phone}` : ""}`
-                  : walkinName.trim() || "Walk-in Guest"}
-              </span>
-            </div>
-
-            <div className="border-b border-[#292524] pb-3">
-              <span className="text-muted block text-[11px] mb-1">Schedule</span>
-              <div className="font-medium text-foreground text-xs sm:text-sm">
-                {fmtDate(date)} · {time ? fmtTime(time) : "—"} ·{" "}
-                <span className="text-gold font-semibold">
-                  {isMassageService ? (selectedTherapist?.name ?? "—") : "None (Wet Area)"}
-                </span>
+            {/* Client Name */}
+            <div className="flex items-start justify-between border-b border-[#292524] pb-3">
+              <span className="text-muted text-[11px]">Client Name</span>
+              <div className="text-right">
+                <div className="font-bold text-accent-gold text-sm">
+                  {!isWalkIn && selectedClient
+                    ? selectedClient.codename
+                    : walkinName.trim() || "Walk-in Guest"}
+                </div>
+                {!isWalkIn && selectedClient?.username && (
+                  <div className="text-[11px] text-muted font-normal">
+                    @{selectedClient.username}
+                  </div>
+                )}
+                {!isWalkIn && selectedClient?.phone && (
+                  <div className="text-[11px] text-muted/80 font-mono">
+                    {selectedClient.phone}
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="border-b border-[#292524] pb-3">
-              <span className="text-muted block text-[11px] mb-1">Assignment</span>
-              <div className="flex items-center justify-between font-medium text-foreground">
-                <span className="font-semibold text-accent-gold">
-                  {isMassageService ? (roomNumber != null ? `Room ${roomNumber}` : "—") : "None (Wet Area)"}
-                </span>
-                <span className="text-muted">
+            {/* Schedule */}
+            <div className="flex items-center justify-between border-b border-[#292524] pb-3">
+              <span className="text-muted text-[11px]">Schedule</span>
+              <span className="font-medium text-foreground text-xs sm:text-sm">
+                {fmtDate(date)} · {time ? fmtTime(time) : "—"}
+              </span>
+            </div>
+
+            {/* Therapist */}
+            <div className="flex items-center justify-between border-b border-[#292524] pb-3">
+              <span className="text-muted text-[11px]">Therapist</span>
+              <span className="font-medium text-gold text-xs sm:text-sm">
+                {isMassageService ? (selectedTherapist?.name ?? "—") : "None / Wet Area"}
+              </span>
+            </div>
+
+            {/* Assignment */}
+            <div className="flex items-center justify-between border-b border-[#292524] pb-3">
+              <span className="text-muted text-[11px]">Assignment</span>
+              <div className="text-right">
+                <div className="font-semibold text-accent-gold text-xs sm:text-sm">
+                  {isMassageService ? (roomNumber != null ? `Room ${roomNumber}` : "—") : "None / Wet Area"}
+                </div>
+                <div className="text-[11px] text-muted">
                   {selectedService
                     ? `${selectedService.name}${selectedService.duration_minutes ? ` (${selectedService.duration_minutes} min)` : ""}`
                     : "—"}
-                </span>
+                </div>
               </div>
             </div>
 
             {/* Financial Breakdown */}
             <div className="space-y-2 border-b border-[#292524] pb-3">
-              <span className="text-muted block text-[11px] mb-1">Financial Breakdown</span>
+              <span className="text-muted block text-[11px] mb-1">Pricing Breakdown</span>
               <div className="flex items-center justify-between text-muted text-xs">
                 <span>Base Service Price</span>
                 <span className="font-mono text-foreground">
@@ -1326,7 +1343,7 @@ export function BookingFormModal({
               </div>
 
               {isRedeeming && (
-                <div className="flex items-center justify-between text-gold text-xs">
+                <div className="flex items-center justify-between text-amber-400 text-xs">
                   <span>Loyalty Credit (100 pts)</span>
                   <span className="font-mono">
                     -₱{Math.min(basePrice, combiCredit).toLocaleString()}
@@ -1342,29 +1359,33 @@ export function BookingFormModal({
                   </span>
                 </div>
               )}
+            </div>
 
-              <div className="flex items-center justify-between pt-1 border-t border-[#292524]/60">
-                <span className="text-muted text-xs">Calculated Total Price</span>
-                <span className="font-mono text-base font-bold text-accent-gold">
+            {/* Total Amount Due & Reward Points Presentation */}
+            <div className="rounded-lg bg-background/60 border border-[#292524] p-3.5 space-y-2">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted">
+                  TOTAL AMOUNT DUE
+                </span>
+                <span className="font-mono text-2xl sm:text-3xl font-bold text-amber-400">
                   ₱{estimatedTotalPrice.toLocaleString()}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between pt-0.5">
-                <span className="text-muted text-[11px]">
-                  {isRedeeming ? "Points Redeemed" : "Estimated Points to Earn"}
-                </span>
-                <span className="font-mono text-xs font-bold text-accent-gold">
-                  {isWalkIn ? (
-                    <span className="text-muted font-normal text-[11px]">— (Walk-in)</span>
-                  ) : selectedClient && !selectedClient.has_portal_account ? (
-                    <span className="text-amber-400 font-normal text-[11px]">0 pts (No portal account)</span>
-                  ) : isRedeeming ? (
-                    "-100 pts"
-                  ) : (
-                    `+${estPointsDelta ?? 0} pts`
-                  )}
-                </span>
+              <div className="flex items-center justify-end pt-1">
+                {isWalkIn ? (
+                  <span className="text-[11px] text-muted italic">Walk-in (no points earned)</span>
+                ) : selectedClient && !selectedClient.has_portal_account ? (
+                  <span className="text-[11px] text-amber-400/80">0 pts (No portal account)</span>
+                ) : isRedeeming ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300">
+                    <span>⭐</span> -100 pts redeemed
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300">
+                    <span>⭐</span> +{estPointsDelta ?? 0} pts to earn
+                  </span>
+                )}
               </div>
             </div>
 
