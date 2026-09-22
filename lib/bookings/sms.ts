@@ -4,6 +4,8 @@ Date: {booking_date}
 Client: {client_name}
 Time: {slot_time}
 Thera: {therapist_name}
+Service: {service_name}
+Amount: {amount}
 
 For your safety and well-being, our staff will conduct a quick body temperature check upon your arrival.
 
@@ -13,6 +15,8 @@ We look forward to be your NXS relaxation spot!
 
 #NexusSpa
 #pressureXpleasure`;
+
+export const DEFAULT_SMS_CONFIRMATION_TEMPLATE = DEFAULT_SMS_TEMPLATE;
 
 export type SmsTemplateVariable = {
   key: string;
@@ -26,8 +30,8 @@ export const SMS_TEMPLATE_VARIABLES: SmsTemplateVariable[] = [
   { key: "{client_name}", label: "{client_name}", description: "Client codename or guest name" },
   { key: "{slot_time}", label: "{slot_time}", description: "Scheduled time (e.g. 4:00 PM)" },
   { key: "{therapist_name}", label: "{therapist_name}", description: "Assigned therapist name" },
-  { key: "{service_name}", label: "{service_name}", description: "Booked service (optional)", isOptional: true },
-  { key: "{amount}", label: "{amount}", description: "Service price (optional)", isOptional: true },
+  { key: "{service_name}", label: "{service_name}", description: "Booked service name" },
+  { key: "{amount}", label: "{amount}", description: "Service price or amount" },
   { key: "{room_number}", label: "{room_number}", description: "Room number (e.g. Room 1 or None)", isOptional: true },
 ];
 

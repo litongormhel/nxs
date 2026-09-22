@@ -41,7 +41,7 @@ import {
 } from "@/lib/promos/validation";
 import { LoyaltyFormulaSettings } from "@/components/loyalty-formula-settings";
 import { VoidAuthCodeSettings } from "@/components/void-auth-code-settings";
-import { DEFAULT_SMS_TEMPLATE, SMS_TEMPLATE_VARIABLES } from "@/lib/bookings/sms";
+import { DEFAULT_SMS_TEMPLATE, DEFAULT_SMS_CONFIRMATION_TEMPLATE, SMS_TEMPLATE_VARIABLES } from "@/lib/sms";
 
 export type Service = {
   id: string;
@@ -302,7 +302,9 @@ export function SettingsBrowser({
     return text.replaceAll("{room_numner}", "{room_number}");
   };
 
-  const cleanDefaultSmsTemplate = normalizeSmsVariables(DEFAULT_SMS_TEMPLATE);
+  const cleanDefaultSmsTemplate = normalizeSmsVariables(
+    DEFAULT_SMS_CONFIRMATION_TEMPLATE ?? DEFAULT_SMS_TEMPLATE
+  );
 
   // SMS Template states
   const [smsTemplate, setSmsTemplate] = useState<string>(() =>
@@ -313,6 +315,12 @@ export function SettingsBrowser({
   );
   const [isSavingSms, setIsSavingSms] = useState(false);
   const smsTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const nextTemplate = normalizeSmsVariables(initialSmsTemplate ?? cleanDefaultSmsTemplate);
+    setSmsTemplate(nextTemplate);
+    setSavedSmsTemplate(nextTemplate);
+  }, [initialSmsTemplate, cleanDefaultSmsTemplate]);
 
   const isSmsDirty = smsTemplate !== savedSmsTemplate;
   const isDefaultSms =
