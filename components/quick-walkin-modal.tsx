@@ -145,6 +145,7 @@ export function QuickWalkinModal({
   onCreated,
 }: QuickWalkinModalProps) {
   const date = initialDate || spaDayNow();
+  const [step, setStep] = useState<"form" | "review">("form");
 
   const [currentTime, setCurrentTime] = useState(() => new Date());
 
@@ -999,7 +1000,8 @@ export function QuickWalkinModal({
 
   const isLockerValid =
     typeof lockerNumber === "number" &&
-    (!occupiedLockers.has(lockerNumber) || lockerNumber === activeLockerForClient);
+    (!occupiedLockers.has(lockerNumber) || lockerNumber === activeLockerForClient) &&
+    !maintenanceLockers.has(lockerNumber);
 
   const isPastSlot = isMassageService && !useCustomTime && !!slotTime && pastSlots.has(slotTime);
   const isBookedSlot = isMassageService && !useCustomTime && !!slotTime && takenSlots.has(slotTime);
@@ -1034,6 +1036,83 @@ export function QuickWalkinModal({
         !takenTherapists.has(therapistId) &&
         !unavailableTherapists.has(therapistId) &&
         (!servicesLoaded || !!serviceTherapistMap.get(serviceId)?.has(therapistId))));
+
+  function handleClose() {
+    setStep("form");
+    setError(null);
+    onClose();
+  }
+
+  function handleProceedToReview() {
+    setError(null);
+    if (!clientId && !guestName.trim()) {
+      setError("Please select a client or enter a guest name.");
+      return;
+    }
+    if (!serviceId) {
+      setError("Please select a service.");
+      return;
+    }
+    if (isMassageService && !therapistId) {
+      setError("Please select a therapist.");
+      return;
+    }
+    if (isMassageService && unavailableTherapists.has(therapistId)) {
+      setError(`That therapist is ${unavailableTherapists.get(therapistId)} on the selected date.`);
+      return;
+    }
+    if (isMassageService && servicesLoaded && !serviceTherapistMap.get(serviceId)?.has(therapistId)) {
+      setError("The selected therapist does not offer this service.");
+      return;
+    }
+    if (isMassageService && !time) {
+      setError("Please select an available time slot, or use a custom time.");
+      return;
+    }
+    if (isMassageService && !useCustomTime && slotTime && pastSlots.has(slotTime)) {
+      setError("The selected time slot has already passed. Please select an available slot.");
+      return;
+    }
+    if (isMassageService && !useCustomTime && slotTime && takenSlots.has(slotTime)) {
+      setError("The selected time slot is already booked for this therapist.");
+      return;
+    }
+    if (hasClientSlotConflict) {
+      setError(`This client already has a booking at ${fmtTime(time)}. Please select a different time.`);
+      return;
+    }
+    if (isMassageService && (roomNumber === "" || !freeRooms.includes(Number(roomNumber)))) {
+      setError("Please select an available room.");
+      return;
+    }
+    if (lockerNumber === "") {
+      setError("Please assign a locker.");
+      return;
+    }
+    if (typeof lockerNumber === "number" && occupiedLockers.has(lockerNumber) && lockerNumber !== activeLockerForClient) {
+      setError("That locker is currently occupied. Please select an unoccupied locker.");
+      return;
+    }
+    if (typeof lockerNumber === "number" && maintenanceLockers.has(lockerNumber)) {
+      const note = maintenanceLockers.get(lockerNumber);
+      setError(`Locker #${lockerNumber} is out of order${note ? ` (${note})` : ""} and cannot be assigned.`);
+      return;
+    }
+    if (!promoCheck.eligible) {
+      setError(promoCheck.reason || "The selected promo cannot be applied to this booking.");
+      return;
+    }
+    if (isSplitPayment && !isSplitValid) {
+      setError(`Sum of Cash Amount (₱${numCash.toLocaleString()}) and GCash Amount (₱${numGcash.toLocaleString()}) must equal required total (₱${amount.toLocaleString()}).`);
+      return;
+    }
+    if (!staffId) {
+      setError("Staff session is required to log a walk-in.");
+      return;
+    }
+
+    setStep("review");
+  }
 
   function handleSubmit() {
     setError(null);
@@ -1145,6 +1224,7 @@ export function QuickWalkinModal({
           return;
         }
 
+        setStep("form");
         showBookingToast(successToastData);
         onCreated();
       } catch (err: any) {
@@ -1168,6 +1248,7 @@ export function QuickWalkinModal({
             type="button"
             onClick={() => {
               setPointsWarning(null);
+              setStep("form");
               if (pendingSuccessToast) {
                 showBookingToast(pendingSuccessToast);
                 setPendingSuccessToast(null);
@@ -1186,10 +1267,12 @@ export function QuickWalkinModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-sm font-medium text-muted uppercase tracking-wide">Quick Walk-in</h2>
-        <p className="mt-1 text-xs text-muted">
-          Service, therapist/room (if massage), locker, and payment — all in one step.
-        </p>
+        {step === "form" ? (
+          <>
+            <h2 className="text-base font-semibold text-foreground">Quick Walk-in</h2>
+            <p className="mt-0.5 text-xs text-muted">
+              Service, therapist/room (if massage), locker, and payment.
+            </p>
 
         <div className="mt-5 space-y-4">
           <div>
@@ -1887,152 +1970,6 @@ export function QuickWalkinModal({
             />
           </div>
 
-          {/* Booking Summary Card */}
-          <div className="rounded-lg border border-[#292524] bg-[#0c0a09] p-3.5 sm:p-4 space-y-3 font-sans text-xs">
-            <div className="flex items-center justify-between border-b border-[#292524] pb-2.5">
-              <span className="font-semibold text-foreground tracking-wide uppercase text-[11px]">
-                Booking Summary
-              </span>
-              <span className="rounded-md bg-gold/10 px-2 py-0.5 text-[10px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20">
-                Receipt Preview
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between border-b border-[#292524] pb-2.5">
-              <span className="text-muted text-[11px]">Client</span>
-              <span className="font-bold text-accent-gold text-xs text-right">
-                {selectedClient
-                  ? `${selectedClient.codename}${selectedClient.username ? ` (@${selectedClient.username})` : ""}${selectedClient.phone ? ` · ${selectedClient.phone}` : ""}`
-                  : guestName.trim() || "Walk-in Guest"}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 border-b border-[#292524] pb-2.5">
-              <div>
-                <span className="text-muted block text-[11px]">Schedule</span>
-                <span className="font-medium text-foreground">
-                  {fmtDate(date)} · {time ? fmtTime(time) : (isMassageService ? "—" : fmtTime(roundedNowTime()))}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted block text-[11px]">Therapist</span>
-                <span className="font-medium text-foreground">
-                  {isMassageService
-                    ? (therapists.find((t) => t.id === therapistId)?.name ?? "—")
-                    : "None (Wet Area)"}
-                </span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 border-b border-[#292524] pb-2.5">
-              <div>
-                <span className="text-muted block text-[11px]">Locker</span>
-                <span className="font-medium text-foreground">
-                  {typeof lockerNumber === "number" ? `Locker ${lockerNumber}` : "—"}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted block text-[11px]">Room</span>
-                <span className="font-medium text-foreground">
-                  {isMassageService ? (roomNumber !== "" ? `Room ${roomNumber}` : "—") : "—"}
-                </span>
-              </div>
-            </div>
-
-            <div className="border-b border-[#292524] pb-2.5">
-              <span className="text-muted block text-[11px]">Service</span>
-              <span className="font-medium text-foreground">
-                {selectedService ? selectedService.name : "—"}
-              </span>
-            </div>
-
-            {/* Financial Breakdown */}
-            <div className="space-y-1.5 border-b border-[#292524] pb-2.5">
-              <div className="flex items-center justify-between text-muted text-[11px]">
-                <span>Base Service Price</span>
-                <span className="font-mono text-foreground">
-                  ₱{(selectedService?.price ?? 0).toLocaleString()}
-                </span>
-              </div>
-
-              {isLoyaltyRedemption && (
-                <div className="flex items-center justify-between text-gold text-[11px]">
-                  <span>Loyalty Credit (100 pts)</span>
-                  <span className="font-mono">
-                    -₱{Math.min(selectedService?.price ?? 0, combiCredit).toLocaleString()}
-                  </span>
-                </div>
-              )}
-
-              {selectedPromo && !isLoyaltyRedemption && (
-                <div className="flex items-center justify-between text-emerald-400 text-[11px]">
-                  <span>Promo ({selectedPromo.label})</span>
-                  <span className="font-mono">
-                    -₱{Math.min(selectedService?.price ?? 0, selectedPromo.discount).toLocaleString()}
-                  </span>
-                </div>
-              )}
-
-              {manualDiscountOn && (
-                <div className="flex items-center justify-between text-emerald-400 text-[11px]">
-                  <span>
-                    Manual Discount ({discountType === "pct" ? `${discountValue}%` : "Fixed"})
-                  </span>
-                  <span className="font-mono">
-                    -₱{manualDiscountAmount.toLocaleString()}
-                  </span>
-                </div>
-              )}
-
-              {selectedAddons.map((a) => (
-                <div key={a.id} className="flex items-center justify-between text-muted text-[11px]">
-                  <span>Add-on: {a.name}</span>
-                  <span className="font-mono text-foreground">
-                    +₱{a.price.toLocaleString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* Points Delta */}
-            <div className="border-b border-[#292524] pb-2.5 flex items-center justify-between">
-              <span className="text-muted text-[11px]">
-                {isLoyaltyRedemption ? "Points Redeemed" : "Points Earned"}
-              </span>
-              <span className="font-mono text-xs font-bold text-accent-gold">
-                {!clientId ? (
-                  <span className="text-muted font-normal text-[11px]">— (Walk-in)</span>
-                ) : selectedClient && !selectedClient.has_portal_account ? (
-                  <span className="text-amber-400 font-normal text-[11px]">0 pts (No portal account)</span>
-                ) : isLoyaltyRedemption ? (
-                  "-100 pts"
-                ) : (
-                  `+${pointsDelta} pts`
-                )}
-              </span>
-            </div>
-
-            {/* Total Due & Payment Mode */}
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted text-[11px]">Total Due / To Collect</span>
-                <span className="font-mono text-base font-bold text-accent-gold">
-                  ₱{amount.toLocaleString()}
-                </span>
-              </div>
-              <div className="font-mono text-[11px] text-muted mt-1 text-right">
-                Payment Mode:{" "}
-                <span className="text-foreground font-medium">
-                  {paymentMethod === "Cash"
-                    ? "Cash"
-                    : paymentMethod === "GCash"
-                    ? `GCash${gcashRef.trim() ? ` (Ref: ${gcashRef.trim()})` : ""}`
-                    : `Split (Cash: ₱${numCash.toLocaleString()} | GCash: ₱${numGcash.toLocaleString()}${gcashRef.trim() ? ` · Ref: ${gcashRef.trim()}` : ""})`}
-                </span>
-              </div>
-            </div>
-          </div>
-
           {error && (
             <p
               ref={errorRef}
@@ -2043,24 +1980,258 @@ export function QuickWalkinModal({
           )}
         </div>
 
-        <div className="sticky bottom-0 sm:static mt-6 -mx-4 sm:mx-0 -mb-4 sm:mb-0 flex justify-end gap-3 bg-surface px-4 sm:px-0 py-4 sm:py-0">
+        {/* Modal Actions */}
+        <div className="sticky bottom-0 sm:static mt-6 -mx-4 sm:mx-0 -mb-4 sm:mb-0 flex gap-3 bg-surface px-4 sm:px-0 py-4 sm:py-0">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={isPending}
-            className="rounded-md border border-border px-4 py-2.5 sm:py-2 text-sm text-foreground hover:border-gold/30"
+            className="flex-1 rounded-md border border-border px-4 py-2.5 text-sm text-foreground hover:border-gold/30 disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            className="rounded-md border border-gold bg-gold/10 px-4 py-2.5 sm:py-2 text-sm font-medium text-gold hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={handleProceedToReview}
+            disabled={!canSubmit || isPending}
+            className="flex-[1.4] rounded-md border border-gold bg-gold px-4 py-2.5 text-sm font-semibold text-black hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isPending ? "Saving…" : "Confirm"}
+            Review Booking →
           </button>
         </div>
+      </>
+    ) : (
+      <>
+        <h2 className="text-base font-semibold text-foreground">Confirm Walk-in Details</h2>
+        <p className="mt-0.5 text-xs text-muted">
+          Review the walk-in receipt before saving.
+        </p>
+
+        <div className="mt-5 space-y-4">
+          {/* Dedicated Receipt Preview Card */}
+          <div className="rounded-lg border border-[#292524] bg-[#0c0a09] p-4 sm:p-5 space-y-3.5 font-sans text-xs">
+            <div className="flex items-center justify-end border-b border-[#292524] pb-3">
+              <span className="rounded-md bg-gold/10 px-2.5 py-0.5 text-[10px] font-medium text-accent-gold ring-1 ring-inset ring-gold/20">
+                Receipt Preview
+              </span>
+            </div>
+
+            {/* Client Name */}
+            <div className="flex items-start justify-between border-b border-[#292524] pb-3">
+              <span className="text-muted text-[11px]">Client Name</span>
+              <div className="text-right">
+                <div className="font-bold text-accent-gold text-sm">
+                  {selectedClient
+                    ? selectedClient.codename
+                    : guestName.trim() || "Walk-in Guest"}
+                </div>
+                {selectedClient?.username && (
+                  <div className="text-[11px] text-muted font-normal">
+                    @{selectedClient.username}
+                  </div>
+                )}
+                {selectedClient?.phone && (
+                  <div className="text-[11px] text-muted/80 font-mono">
+                    {selectedClient.phone}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Schedule */}
+            <div className="flex items-center justify-between border-b border-[#292524] pb-3">
+              <span className="text-muted text-[11px]">Schedule</span>
+              <span className="font-medium text-foreground text-xs sm:text-sm">
+                {fmtDate(date)} · {time ? fmtTime(time) : (isMassageService ? "—" : fmtTime(roundedNowTime()))}
+              </span>
+            </div>
+
+            {/* Therapist */}
+            <div className="flex items-center justify-between border-b border-[#292524] pb-3">
+              <span className="text-muted text-[11px]">Therapist</span>
+              <span className="font-medium text-gold text-xs sm:text-sm">
+                {isMassageService
+                  ? (therapists.find((t) => t.id === therapistId)?.name ?? "—")
+                  : "None / Wet Area"}
+              </span>
+            </div>
+
+            {/* Assignment */}
+            <div className="flex items-center justify-between border-b border-[#292524] pb-3">
+              <span className="text-muted text-[11px]">Assignment</span>
+              <div className="text-right">
+                <div className="font-semibold text-accent-gold text-xs sm:text-sm">
+                  {isMassageService ? (roomNumber !== "" ? `Room ${roomNumber}` : "—") : "None / Wet Area"}
+                  {" · "}
+                  {typeof lockerNumber === "number" ? `Locker ${lockerNumber}` : "—"}
+                </div>
+                <div className="text-[11px] text-muted">
+                  {selectedService ? selectedService.name : "—"}
+                </div>
+              </div>
+            </div>
+
+            {/* Financial Breakdown */}
+            <div className="space-y-2 border-b border-[#292524] pb-3">
+              <span className="text-muted block text-[11px] mb-1">Pricing Breakdown</span>
+              <div className="flex items-center justify-between text-muted text-xs">
+                <span>Base Service Price</span>
+                <span className="font-mono text-foreground">
+                  ₱{(selectedService?.price ?? 0).toLocaleString()}
+                </span>
+              </div>
+
+              {isLoyaltyRedemption && (
+                <div className="flex items-center justify-between text-amber-400 text-xs">
+                  <span>Loyalty Credit (100 pts)</span>
+                  <span className="font-mono">
+                    -₱{Math.min(selectedService?.price ?? 0, combiCredit).toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {selectedPromo && !isLoyaltyRedemption && (
+                <div className="flex items-center justify-between text-emerald-400 text-xs">
+                  <span>Promo Discount ({selectedPromo.label})</span>
+                  <span className="font-mono">
+                    -₱{Math.min(selectedService?.price ?? 0, selectedPromo.discount).toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {manualDiscountOn && (
+                <div className="flex items-center justify-between text-emerald-400 text-xs">
+                  <span>
+                    Manual Discount ({discountType === "pct" ? `${discountValue}%` : "Fixed"})
+                  </span>
+                  <span className="font-mono">
+                    -₱{manualDiscountAmount.toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {selectedAddons.map((a) => (
+                <div key={a.id} className="flex items-center justify-between text-muted text-xs">
+                  <span>Add-on: {a.name}</span>
+                  <span className="font-mono text-foreground">
+                    +₱{a.price.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Total Amount Due & Reward Points Presentation */}
+            <div className="rounded-lg bg-background/60 border border-[#292524] p-3.5 space-y-2">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted">
+                  TOTAL AMOUNT DUE
+                </span>
+                <span className="font-mono text-2xl sm:text-3xl font-bold text-amber-400">
+                  ₱{amount.toLocaleString()}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end pt-1">
+                {!clientId ? (
+                  <span className="text-[11px] text-muted italic">— (Walk-in / no points earned)</span>
+                ) : selectedClient && !selectedClient.has_portal_account ? (
+                  <span className="text-[11px] text-amber-400/80">0 pts (No portal account)</span>
+                ) : isLoyaltyRedemption ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300">
+                    <span>⭐</span> -100 pts redeemed
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300">
+                    <span>⭐</span> +{pointsDelta ?? 0} pts to earn
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Payment Mode */}
+            <div className="flex items-center justify-between border-b border-[#292524] pb-3 text-xs">
+              <span className="text-muted text-[11px]">Payment Mode</span>
+              <span className="font-mono text-foreground font-medium text-right">
+                {paymentMethod === "Cash"
+                  ? "Cash"
+                  : paymentMethod === "GCash"
+                  ? `GCash${gcashRef.trim() ? ` (Ref: ${gcashRef.trim()})` : ""}`
+                  : `Split (Cash: ₱${numCash.toLocaleString()} | GCash: ₱${numGcash.toLocaleString()}${gcashRef.trim() ? ` · Ref: ${gcashRef.trim()}` : ""})`}
+              </span>
+            </div>
+
+            {/* Notes / Vehicle Info */}
+            {notes.trim() && (
+              <div className="border-b border-[#292524] pb-3">
+                <span className="text-muted block text-[11px] mb-1">Notes / Vehicle Info</span>
+                <p className="text-foreground text-xs italic bg-background/50 rounded p-2.5 border border-border/50">
+                  {notes.trim()}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <p
+              ref={errorRef}
+              className="rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm sm:text-xs text-red-300"
+            >
+              {error}
+            </p>
+          )}
+        </div>
+
+        {/* Modal Actions */}
+        <div className="sticky bottom-0 sm:static mt-6 -mx-4 sm:mx-0 -mb-4 sm:mb-0 flex gap-3 bg-surface px-4 sm:px-0 py-4 sm:py-0">
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setStep("form");
+            }}
+            disabled={isPending}
+            className="flex-1 rounded-md border border-border px-4 py-2.5 text-sm text-foreground hover:border-gold/30 disabled:opacity-50"
+          >
+            ← Back / Edit
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={isPending}
+            className="flex-[1.4] flex items-center justify-center gap-2 rounded-md border border-gold bg-gold px-4 py-2.5 text-sm font-semibold text-black hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isPending ? (
+              <>
+                <svg
+                  className="animate-spin -ml-1 mr-2 h-4 w-4 text-black"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                Saving…
+              </>
+            ) : (
+              "Confirm & Check In"
+            )}
+          </button>
+        </div>
+      </>
+    )}
       </div>
     </div>
   );
