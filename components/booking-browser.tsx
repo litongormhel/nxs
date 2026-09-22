@@ -10,6 +10,7 @@ import { BookingFormModal } from "@/components/booking-form-modal";
 import { QuickWalkinModal } from "@/components/quick-walkin-modal";
 import { LogVisitModal } from "@/components/log-visit-modal";
 import { ScanMemberQrModal, type ScannedClient } from "@/components/scan-member-qr-modal";
+import { SmsConfirmationModal } from "@/components/sms-confirmation-modal";
 import type { Database } from "@/lib/types/database";
 
 export type Client = {
@@ -18,7 +19,53 @@ export type Client = {
   username: string;
   member_code?: string;
   has_portal_account: boolean;
+  phone?: string | null;
 };
+
+export type SmsConfirmationTarget = {
+  clientName: string;
+  phone?: string | null;
+  timeSlot: string;
+  date: string;
+  service: string;
+  price?: number;
+  therapistName?: string | null;
+  roomNumber?: number | string | null;
+  message?: string;
+};
+
+let persistentSmsTarget: SmsConfirmationTarget | null = null;
+const SMS_STORAGE_KEY = "nxs_sms_confirmation_target";
+
+function getCachedSmsTarget(): SmsConfirmationTarget | null {
+  if (persistentSmsTarget) return persistentSmsTarget;
+  if (typeof window !== "undefined") {
+    try {
+      const stored = sessionStorage.getItem(SMS_STORAGE_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch {
+      // Ignore sessionStorage read errors
+    }
+  }
+  return null;
+}
+
+function persistSmsTarget(target: SmsConfirmationTarget | null) {
+  persistentSmsTarget = target;
+  if (typeof window !== "undefined") {
+    try {
+      if (target) {
+        sessionStorage.setItem(SMS_STORAGE_KEY, JSON.stringify(target));
+      } else {
+        sessionStorage.removeItem(SMS_STORAGE_KEY);
+      }
+    } catch {
+      // Ignore sessionStorage write errors
+    }
+  }
+}
 export type Service = {
   id: string;
   name: string;
@@ -181,6 +228,14 @@ export function BookingBrowser({
   const [reassignStartTime, setReassignStartTime] = useState("");
   const [reassignError, setReassignError] = useState<string | null>(null);
   const [reassignSaving, setReassignSaving] = useState(false);
+  const [smsConfirmationTarget, setSmsConfirmationTarget] = useState<SmsConfirmationTarget | null>(
+    () => getCachedSmsTarget()
+  );
+
+  function updateSmsConfirmationTarget(target: SmsConfirmationTarget | null) {
+    persistSmsTarget(target);
+    setSmsConfirmationTarget(target);
+  }
   const [availabilityMap, setAvailabilityMap] = useState<Record<string, boolean>>({});
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const loading = loadedFor !== date;
@@ -815,8 +870,11 @@ export function BookingBrowser({
           timeSlots={timeSlots}
           defaultDate={date}
           onClose={() => setShowNewBooking(false)}
-          onCreated={() => {
+          onCreated={(target) => {
             setShowNewBooking(false);
+            if (target) {
+              updateSmsConfirmationTarget(target);
+            }
             reload();
             router.refresh();
           }}
@@ -1028,6 +1086,24 @@ export function BookingBrowser({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Independent SMS Confirmation Modal outside booking dialog tree */}
+      {smsConfirmationTarget && (
+        <SmsConfirmationModal
+          booking={{
+            codename: smsConfirmationTarget.clientName,
+            serviceName: smsConfirmationTarget.service,
+            price: smsConfirmationTarget.price ?? 0,
+            date: smsConfirmationTarget.date,
+            startTime: smsConfirmationTarget.timeSlot,
+            therapistName: smsConfirmationTarget.therapistName,
+            roomNumber: smsConfirmationTarget.roomNumber,
+            phone: smsConfirmationTarget.phone,
+          }}
+          initialMessage={smsConfirmationTarget.message}
+          onClose={() => updateSmsConfirmationTarget(null)}
+        />
       )}
     </div>
   );

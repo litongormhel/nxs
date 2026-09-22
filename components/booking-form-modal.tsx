@@ -6,11 +6,10 @@ import { createBooking } from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
 import { slotsOverlap, isSlotPastGracePeriod } from "@/lib/bookings/slots";
 import { spaDayNow } from "@/lib/analytics/spa-day";
-import { SmsPreviewModal } from "@/components/sms-preview-modal";
 import { ClientCombobox } from "@/components/client-combobox";
 import { DEFAULT_SMS_TEMPLATE, interpolateSmsTemplate, formatSmsDate } from "@/lib/bookings/sms";
 import { validatePromoEligibility } from "@/lib/promos/validation";
-import type { Client, Promo, Service, Staff, Therapist } from "@/components/booking-browser";
+import type { Client, Promo, Service, Staff, Therapist, SmsConfirmationTarget } from "@/components/booking-browser";
 import type { Database } from "@/lib/types/database";
 
 type ConflictRow = {
@@ -115,7 +114,7 @@ export function BookingFormModal({
   defaultDate?: string;
   initialTherapistId?: string;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (target?: SmsConfirmationTarget) => void;
 }) {
   const [clientSelectValue, setClientSelectValue] = useState<string>("__walkin__");
   const [walkinName, setWalkinName] = useState("");
@@ -210,21 +209,6 @@ export function BookingFormModal({
   const [servicesLoaded, setServicesLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeSmsTemplate, setActiveSmsTemplate] = useState<string>(DEFAULT_SMS_TEMPLATE);
-  const [showSmsPreview, setShowSmsPreview] = useState(false);
-  const [smsBooking, setSmsBooking] = useState<{
-    codename: string;
-    price: number;
-    serviceName: string;
-    date: string;
-    startTime: string;
-    therapistName?: string | null;
-    roomNumber?: number | string | null;
-    message?: string;
-  } | null>(null);
-  const [pendingSuccessToast, setPendingSuccessToast] = useState<{
-    title: string;
-    description: string;
-  } | null>(null);
   const [isPending, startTransition] = useTransition();
   const errorRef = useRef<HTMLParagraphElement>(null);
 
@@ -676,7 +660,7 @@ export function BookingFormModal({
       const formattedBookingDate = formatSmsDate(date);
       const resolvedRoomNumber = isMassageService && roomNumber ? roomNumber : null;
 
-      setPendingSuccessToast(successToastData);
+      showBookingToast(successToastData);
       const interpolated = interpolateSmsTemplate(activeSmsTemplate, {
         booking_date: formattedBookingDate,
         client_name: resolvedClientName,
@@ -687,23 +671,22 @@ export function BookingFormModal({
         room_number: resolvedRoomNumber,
       });
 
-      setSmsBooking({
-        codename: resolvedClientName,
-        price: servicePrice,
-        serviceName: serviceName,
+      onCreated({
+        clientName: resolvedClientName,
+        phone: selectedClient?.phone ?? null,
+        timeSlot: formattedSlot || time,
         date: formattedBookingDate,
-        startTime: formattedSlot || time,
+        service: serviceName,
+        price: servicePrice,
         therapistName: resolvedTherapistName,
         roomNumber: resolvedRoomNumber,
         message: interpolated,
       });
-      setShowSmsPreview(true);
     });
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
         <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="text-base font-semibold text-foreground">New Booking</h2>
         <p className="mt-0.5 text-xs text-muted">
@@ -1134,22 +1117,5 @@ export function BookingFormModal({
         </div>
       </div>
     </div>
-
-    {showSmsPreview && smsBooking && (
-      <SmsPreviewModal
-        booking={smsBooking}
-        initialMessage={smsBooking.message}
-        onClose={() => {
-          setShowSmsPreview(false);
-          setSmsBooking(null);
-          if (pendingSuccessToast) {
-            showBookingToast(pendingSuccessToast);
-            setPendingSuccessToast(null);
-          }
-          onCreated();
-        }}
-      />
-    )}
-  </>
   );
 }
