@@ -236,8 +236,72 @@ export async function editSale(
   }
 }
 
-export type VoidSaleInput = {
+export type EditSplitLegInput = {
   saleId: string;
+  amount: number;
+  paymentMethod: string;
+  paymentRef: string | null;
+};
+
+export async function editSplitSale(
+  legs: EditSplitLegInput[],
+  therapistId: string | null,
+  actorStaffId: string
+): Promise<ActionResult> {
+  try {
+    if (!legs || legs.length === 0) {
+      return { ok: false, error: "No legs to update." };
+    }
+    for (const leg of legs) {
+      if (isNaN(leg.amount) || leg.amount < 0) {
+        return { ok: false, error: "Enter valid amounts for all payment portions." };
+      }
+    }
+
+    const supabase = await createClient();
+    const adminClient = createStaffServiceClient();
+
+    // Check 3-day lapse guard for each leg
+    for (const leg of legs) {
+      const lapseErr = await guardLapsedSale(adminClient, supabase, leg.saleId);
+      if (lapseErr) return lapseErr;
+    }
+
+    const now = new Date().toISOString();
+    for (const leg of legs) {
+      const { error } = await supabase
+        .from("sales")
+        .update({
+          amount: leg.amount,
+          payment_method: leg.paymentMethod,
+          payment_ref: leg.paymentRef,
+          therapist_id: therapistId,
+          edited_by: actorStaffId,
+          edited_at: now,
+        })
+        .eq("id", leg.saleId);
+
+      if (error) return fail(error);
+    }
+
+    const details = legs.map((l) => `${l.saleId}:${l.amount}(${l.paymentMethod})`).join("; ");
+    await logAction(
+      supabase,
+      actorStaffId,
+      "sale_edit",
+      `split_edit legs=[${details}] therapist=${therapistId ?? "none"}`
+    );
+
+    revalidatePath("/sales");
+    return { ok: true };
+  } catch (err: any) {
+    return fail(err);
+  }
+}
+
+export type VoidSaleInput = {
+  saleId?: string;
+  saleIds?: string[];
   pin: string;
   reason: string;
   staffId: string;
@@ -248,18 +312,26 @@ export async function voidSale(
   legacyStaffId?: string
 ): Promise<ActionResult> {
   try {
-    let saleId: string;
+    let targetIds: string[] = [];
     let pin: string;
     let reason: string;
 
     if (typeof input === "object" && input !== null) {
-      saleId = input.saleId;
+      if (input.saleIds && input.saleIds.length > 0) {
+        targetIds = input.saleIds;
+      } else if (input.saleId) {
+        targetIds = [input.saleId];
+      }
       pin = input.pin;
       reason = input.reason;
     } else {
-      saleId = input;
+      targetIds = [input];
       pin = "";
       reason = "Direct void";
+    }
+
+    if (targetIds.length === 0) {
+      return { ok: false, error: "No sale ID specified." };
     }
 
     if (!pin || !pin.trim()) {
@@ -309,8 +381,10 @@ export async function voidSale(
     await resetPinAttempts(adminClient, authenticatedStaffId);
 
     // Step 2b: 3-day lapse guard — non-Owner cannot void sales older than 3 days
-    const lapseErr = await guardLapsedSale(adminClient, supabase, saleId);
-    if (lapseErr) return lapseErr;
+    for (const id of targetIds) {
+      const lapseErr = await guardLapsedSale(adminClient, supabase, id);
+      if (lapseErr) return lapseErr;
+    }
 
     // Step 3: Directly update public.sales with fallback if void_reason column is not in DB cache
     let { error: updateError } = await adminClient
@@ -321,7 +395,7 @@ export async function voidSale(
         voided_at: new Date().toISOString(),
         voided_by: authenticatedStaffId,
       })
-      .eq("id", saleId);
+      .in("id", targetIds);
 
     if (updateError && updateError.message?.includes("void_reason")) {
       console.warn(
@@ -334,7 +408,7 @@ export async function voidSale(
           voided_at: new Date().toISOString(),
           voided_by: authenticatedStaffId,
         })
-        .eq("id", saleId);
+        .in("id", targetIds);
       updateError = fallback.error;
     }
 
@@ -347,7 +421,7 @@ export async function voidSale(
     await adminClient.from("action_logs").insert({
       staff_id: authenticatedStaffId,
       action: "sale_void",
-      detail: `sale_id=${saleId} voided_by=${authenticatedStaffId} reason=${reason.trim()}`,
+      detail: `sale_ids=${targetIds.join(",")} voided_by=${authenticatedStaffId} reason=${reason.trim()}`,
     });
 
     // Step 5: Return { ok: true } and call revalidatePath("/sales")
@@ -359,7 +433,8 @@ export async function voidSale(
 }
 
 export type RestoreSaleInput = {
-  saleId: string;
+  saleId?: string;
+  saleIds?: string[];
   pin: string;
   reason: string;
   staffId: string;
@@ -369,7 +444,17 @@ export async function restoreSale(
   input: RestoreSaleInput
 ): Promise<ActionResult> {
   try {
-    const saleId = input.saleId;
+    let targetIds: string[] = [];
+    if (input.saleIds && input.saleIds.length > 0) {
+      targetIds = input.saleIds;
+    } else if (input.saleId) {
+      targetIds = [input.saleId];
+    }
+
+    if (targetIds.length === 0) {
+      return { ok: false, error: "No sale ID specified." };
+    }
+
     const pin = input.pin;
     const reason = input.reason;
 
@@ -428,7 +513,7 @@ export async function restoreSale(
         voided_at: null,
         voided_by: null,
       })
-      .eq("id", saleId);
+      .in("id", targetIds);
 
     if (updateError && updateError.message?.includes("void_reason")) {
       console.warn(
@@ -441,7 +526,7 @@ export async function restoreSale(
           voided_at: null,
           voided_by: null,
         })
-        .eq("id", saleId);
+        .in("id", targetIds);
       updateError = fallback.error;
     }
 
@@ -454,7 +539,7 @@ export async function restoreSale(
     await adminClient.from("action_logs").insert({
       staff_id: authenticatedStaffId,
       action: "sale_restore",
-      detail: `sale_id=${saleId} restored_by=${authenticatedStaffId} reason=${reason.trim()}`,
+      detail: `sale_ids=${targetIds.join(",")} restored_by=${authenticatedStaffId} reason=${reason.trim()}`,
     });
 
     // Step 5: Return { ok: true } and call revalidatePath("/sales")

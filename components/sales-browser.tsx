@@ -3,11 +3,12 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStaffSim } from "@/lib/staff-context";
-import { editSale, voidSale, restoreSale } from "@/app/(staff)/sales/actions";
+import { editSale, editSplitSale, voidSale, restoreSale } from "@/app/(staff)/sales/actions";
 import { spaDayNow, shiftSpaDay } from "@/lib/analytics/spa-day";
 
 export type Sale = {
   id: string;
+  booking_id?: string | null;
   client_name: string;
   is_walkin: boolean;
   service_name: string;
@@ -24,11 +25,34 @@ export type Sale = {
   created_at: string;
 };
 
+export type ConsolidatedSale = {
+  id: string;
+  booking_id: string | null;
+  sales: Sale[];
+  is_split: boolean;
+  client_name: string;
+  is_walkin: boolean;
+  service_name: string;
+  amount: number;
+  promo_label: string | null;
+  therapist_id: string | null;
+  therapist_name: string | null;
+  voided: boolean;
+  voided_by_name: string | null;
+  void_reason?: string | null;
+  edited_by_name: string | null;
+  created_at: string;
+  cash_amount: number;
+  digital_amount: number;
+  digital_method: string | null;
+  digital_ref: string | null;
+};
+
 type Therapist = { id: string; name: string };
 type Authorizer = { id: string; name: string };
 
 type PinModalTarget = {
-  sale: Sale;
+  group: ConsolidatedSale;
   mode: "void" | "restore";
 };
 
@@ -91,10 +115,14 @@ export function SalesBrowser({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Edit Modal State
-  const [editing, setEditing] = useState<Sale | null>(null);
+  const [editing, setEditing] = useState<ConsolidatedSale | null>(null);
   const [editAmount, setEditAmount] = useState("");
   const [editPayment, setEditPayment] = useState<(typeof PAYMENT_METHODS)[number]>("Cash");
   const [editRef, setEditRef] = useState("");
+  const [editSplitCash, setEditSplitCash] = useState("");
+  const [editSplitDigital, setEditSplitDigital] = useState("");
+  const [editSplitDigitalMethod, setEditSplitDigitalMethod] = useState<(typeof PAYMENT_METHODS)[number]>("GCash");
+  const [editSplitRef, setEditSplitRef] = useState("");
   const [editTherapistId, setEditTherapistId] = useState<string>("");
   const [editError, setEditError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -110,23 +138,86 @@ export function SalesBrowser({
 
   const editAllowed = currentRole === "Supervisor" || currentRole === "Owner";
 
+  // Grouping sales rows into consolidated visits (preserving newest-first chronological order)
+  const consolidatedSales = useMemo(() => {
+    const groupMap = new Map<string, ConsolidatedSale>();
+
+    for (const s of sales) {
+      const key = s.booking_id ? `b_${s.booking_id}` : `s_${s.id}`;
+      const existing = groupMap.get(key);
+
+      if (existing) {
+        existing.sales.push(s);
+        existing.amount += s.amount;
+        if (s.payment_method === "Cash") {
+          existing.cash_amount += s.amount;
+        } else {
+          existing.digital_amount += s.amount;
+          existing.digital_method = s.payment_method;
+          if (s.payment_ref) existing.digital_ref = s.payment_ref;
+        }
+        existing.is_split = true;
+        existing.voided = existing.sales.every((item) => item.voided);
+        if (!existing.promo_label && s.promo_label) {
+          existing.promo_label = s.promo_label;
+        }
+        if (!existing.therapist_name && s.therapist_name) {
+          existing.therapist_name = s.therapist_name;
+          existing.therapist_id = s.therapist_id;
+        }
+        if (!existing.edited_by_name && s.edited_by_name) {
+          existing.edited_by_name = s.edited_by_name;
+        }
+        if (!existing.void_reason && s.void_reason) {
+          existing.void_reason = s.void_reason;
+        }
+      } else {
+        const isCash = s.payment_method === "Cash";
+        groupMap.set(key, {
+          id: s.id,
+          booking_id: s.booking_id ?? null,
+          sales: [s],
+          is_split: false,
+          client_name: s.client_name,
+          is_walkin: s.is_walkin,
+          service_name: s.service_name,
+          amount: s.amount,
+          promo_label: s.promo_label,
+          therapist_id: s.therapist_id,
+          therapist_name: s.therapist_name,
+          voided: s.voided,
+          voided_by_name: s.voided_by_name,
+          void_reason: s.void_reason,
+          edited_by_name: s.edited_by_name,
+          created_at: s.created_at,
+          cash_amount: isCash ? s.amount : 0,
+          digital_amount: !isCash ? s.amount : 0,
+          digital_method: !isCash ? s.payment_method : null,
+          digital_ref: s.payment_ref,
+        });
+      }
+    }
+
+    return Array.from(groupMap.values());
+  }, [sales]);
+
   const { cashRemit, onlineRemit, totalShiftSales, validSalesCount } = useMemo(() => {
     let cash = 0;
     let online = 0;
     let total = 0;
-    let count = 0;
     for (const s of sales) {
       if (s.voided) continue;
       total += s.amount;
-      count += 1;
       if (s.payment_method === "Cash") {
         cash += s.amount;
       } else {
         online += s.amount;
       }
     }
+    // Count unique client transactions/visits (consolidated rows that are not voided)
+    const count = consolidatedSales.filter((g) => !g.voided).length;
     return { cashRemit: cash, onlineRemit: online, totalShiftSales: total, validSalesCount: count };
-  }, [sales]);
+  }, [sales, consolidatedSales]);
 
   const handleDateChange = (newDate: string) => {
     if (!newDate) return;
@@ -138,67 +229,160 @@ export function SalesBrowser({
     setTimeout(() => setToastMessage(null), 2400);
   };
 
-  const openEdit = (sale: Sale) => {
-    setEditing(sale);
-    setEditAmount(String(sale.amount));
-    setEditPayment(
-      (PAYMENT_METHODS as readonly string[]).includes(sale.payment_method)
-        ? (sale.payment_method as (typeof PAYMENT_METHODS)[number])
-        : "Cash"
-    );
-    setEditRef(sale.payment_ref ?? "");
-    setEditTherapistId(sale.therapist_id ?? "");
+  const openEdit = (group: ConsolidatedSale) => {
+    setEditing(group);
+    setEditTherapistId(group.therapist_id ?? "");
     setEditError(null);
+
+    if (group.is_split) {
+      setEditSplitCash(String(group.cash_amount));
+      setEditSplitDigital(String(group.digital_amount));
+      setEditSplitDigitalMethod(
+        (PAYMENT_METHODS as readonly string[]).includes(group.digital_method ?? "")
+          ? (group.digital_method as (typeof PAYMENT_METHODS)[number])
+          : "GCash"
+      );
+      setEditSplitRef(group.digital_ref ?? "");
+    } else {
+      const single = group.sales[0];
+      setEditAmount(String(single?.amount ?? group.amount));
+      setEditPayment(
+        (PAYMENT_METHODS as readonly string[]).includes(single?.payment_method ?? "")
+          ? (single.payment_method as (typeof PAYMENT_METHODS)[number])
+          : "Cash"
+      );
+      setEditRef(single?.payment_ref ?? "");
+    }
   };
 
   const closeEdit = () => setEditing(null);
 
   const confirmEdit = async () => {
     if (!editing) return;
-    const amount = parseFloat(editAmount);
-    if (isNaN(amount) || amount < 0) {
-      setEditError("Enter a valid amount.");
-      return;
-    }
     setBusy(true);
+    setEditError(null);
+
     try {
-      const res = await editSale(
-        editing.id,
-        {
-          amount,
-          paymentMethod: editPayment,
-          paymentRef: editPayment === "GCash" ? editRef.trim() || null : null,
-          therapistId: editTherapistId || null,
-        },
-        sessionStaff?.id ?? ""
-      );
-      if (!res.ok) {
-        const errMsg =
-          typeof res.error === "string"
-            ? res.error
-            : (res.error as any)?.message || "An unexpected error occurred.";
-        setEditError(errMsg);
-        return;
-      }
-      setSales((prev) =>
-        prev.map((s) =>
-          s.id === editing.id
-            ? {
+      if (editing.is_split) {
+        const cashAmt = parseFloat(editSplitCash);
+        const digitalAmt = parseFloat(editSplitDigital);
+        if (isNaN(cashAmt) || cashAmt < 0 || isNaN(digitalAmt) || digitalAmt < 0) {
+          setEditError("Enter valid amounts for both payment portions.");
+          setBusy(false);
+          return;
+        }
+
+        const cashSale = editing.sales.find((s) => s.payment_method === "Cash");
+        const digitalSale = editing.sales.find((s) => s.payment_method !== "Cash");
+
+        if (!cashSale || !digitalSale) {
+          setEditError("Could not identify split payment records.");
+          setBusy(false);
+          return;
+        }
+
+        const legs = [
+          {
+            saleId: cashSale.id,
+            amount: cashAmt,
+            paymentMethod: "Cash",
+            paymentRef: null,
+          },
+          {
+            saleId: digitalSale.id,
+            amount: digitalAmt,
+            paymentMethod: editSplitDigitalMethod,
+            paymentRef: editSplitDigitalMethod === "GCash" ? editSplitRef.trim() || null : null,
+          },
+        ];
+
+        const res = await editSplitSale(legs, editTherapistId || null, sessionStaff?.id ?? "");
+        if (!res.ok) {
+          const errMsg =
+            typeof res.error === "string"
+              ? res.error
+              : (res.error as any)?.message || "Failed to update split payment.";
+          setEditError(errMsg);
+          setBusy(false);
+          return;
+        }
+
+        const therapistName = therapists.find((t) => t.id === editTherapistId)?.name ?? null;
+        setSales((prev) =>
+          prev.map((s) => {
+            if (s.id === cashSale.id) {
+              return {
                 ...s,
-                amount,
-                payment_method: editPayment,
-                payment_ref: editPayment === "GCash" ? editRef.trim() || null : null,
+                amount: cashAmt,
                 therapist_id: editTherapistId || null,
-                therapist_name:
-                  therapists.find((t) => t.id === editTherapistId)?.name ?? null,
+                therapist_name: therapistName,
                 edited_by_name: "You",
-              }
-            : s
-        )
-      );
-      setEditing(null);
-      showToast("Sale updated");
-      router.refresh();
+              };
+            }
+            if (s.id === digitalSale.id) {
+              return {
+                ...s,
+                amount: digitalAmt,
+                payment_method: editSplitDigitalMethod,
+                payment_ref: editSplitDigitalMethod === "GCash" ? editSplitRef.trim() || null : null,
+                therapist_id: editTherapistId || null,
+                therapist_name: therapistName,
+                edited_by_name: "You",
+              };
+            }
+            return s;
+          })
+        );
+        setEditing(null);
+        showToast("Sale updated");
+        router.refresh();
+      } else {
+        const amount = parseFloat(editAmount);
+        if (isNaN(amount) || amount < 0) {
+          setEditError("Enter a valid amount.");
+          setBusy(false);
+          return;
+        }
+        const singleSale = editing.sales[0];
+        const res = await editSale(
+          singleSale.id,
+          {
+            amount,
+            paymentMethod: editPayment,
+            paymentRef: editPayment === "GCash" ? editRef.trim() || null : null,
+            therapistId: editTherapistId || null,
+          },
+          sessionStaff?.id ?? ""
+        );
+        if (!res.ok) {
+          const errMsg =
+            typeof res.error === "string"
+              ? res.error
+              : (res.error as any)?.message || "An unexpected error occurred.";
+          setEditError(errMsg);
+          setBusy(false);
+          return;
+        }
+        const therapistName = therapists.find((t) => t.id === editTherapistId)?.name ?? null;
+        setSales((prev) =>
+          prev.map((s) =>
+            s.id === singleSale.id
+              ? {
+                  ...s,
+                  amount,
+                  payment_method: editPayment,
+                  payment_ref: editPayment === "GCash" ? editRef.trim() || null : null,
+                  therapist_id: editTherapistId || null,
+                  therapist_name: therapistName,
+                  edited_by_name: "You",
+                }
+              : s
+          )
+        );
+        setEditing(null);
+        showToast("Sale updated");
+        router.refresh();
+      }
     } catch (err: any) {
       const errMsg = err?.message || "An unexpected error occurred.";
       setEditError(errMsg);
@@ -207,8 +391,8 @@ export function SalesBrowser({
     }
   };
 
-  const openVoidModal = (sale: Sale) => {
-    setPinModalTarget({ sale, mode: "void" });
+  const openVoidModal = (group: ConsolidatedSale) => {
+    setPinModalTarget({ group, mode: "void" });
     setPinInput("");
     setSelectedVoidReason(STANDARD_VOID_REASONS[0]);
     setOtherReasonDetail("");
@@ -216,8 +400,8 @@ export function SalesBrowser({
     setPinModalError(null);
   };
 
-  const openRestoreModal = (sale: Sale) => {
-    setPinModalTarget({ sale, mode: "restore" });
+  const openRestoreModal = (group: ConsolidatedSale) => {
+    setPinModalTarget({ group, mode: "restore" });
     setPinInput("");
     setReasonInput("");
     setPinModalError(null);
@@ -263,10 +447,11 @@ export function SalesBrowser({
 
     try {
       const staffId = sessionStaff?.id ?? "";
+      const targetSaleIds = pinModalTarget.group.sales.map((s) => s.id);
 
       if (pinModalTarget.mode === "void") {
         const res = await voidSale({
-          saleId: pinModalTarget.sale.id,
+          saleIds: targetSaleIds,
           pin: trimmedPin,
           reason: effectiveReason,
           staffId,
@@ -283,7 +468,7 @@ export function SalesBrowser({
 
         setSales((prev) =>
           prev.map((s) =>
-            s.id === pinModalTarget.sale.id
+            targetSaleIds.includes(s.id)
               ? {
                   ...s,
                   voided: true,
@@ -298,7 +483,7 @@ export function SalesBrowser({
         router.refresh();
       } else {
         const res = await restoreSale({
-          saleId: pinModalTarget.sale.id,
+          saleIds: targetSaleIds,
           pin: trimmedPin,
           reason: effectiveReason,
           staffId,
@@ -315,7 +500,7 @@ export function SalesBrowser({
 
         setSales((prev) =>
           prev.map((s) =>
-            s.id === pinModalTarget.sale.id
+            targetSaleIds.includes(s.id)
               ? {
                   ...s,
                   voided: false,
@@ -454,12 +639,12 @@ export function SalesBrowser({
           <div>Therapist</div>
           <div>Actions</div>
         </div>
-        {sales.length === 0 ? (
+        {consolidatedSales.length === 0 ? (
           <div className="px-4 py-6 text-center text-sm text-muted">
             No sales recorded for Spa Day {selectedDate}.
           </div>
         ) : (
-          sales.map((s) => (
+          consolidatedSales.map((s) => (
             <div
               key={s.id}
               className={`grid gap-3 border-b border-border px-4 py-3 text-[12px] last:border-b-0 min-w-[900px] items-center ${
@@ -482,18 +667,37 @@ export function SalesBrowser({
               <div className={`font-mono font-semibold ${s.voided ? "line-through text-muted" : "text-accent-gold"}`}>
                 ₱{s.amount.toLocaleString()}
               </div>
-              <div className="text-muted">
-                {s.payment_method === "Points" ? (
-                  <span className="font-medium text-accent-gold">Points</span>
+              <div>
+                {s.is_split ? (
+                  <div className="space-y-1">
+                    <span className="inline-flex items-center rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
+                      SPLIT
+                    </span>
+                    <div className="text-[11px] text-muted space-y-0.5 leading-tight">
+                      <div>• Cash: ₱{s.cash_amount.toLocaleString()}</div>
+                      <div>
+                        • {s.digital_method || "Digital"}: ₱{s.digital_amount.toLocaleString()}
+                        {s.digital_ref && (
+                          <span className="ml-1 opacity-60 text-[9.5px] font-mono">(Ref: {s.digital_ref})</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 ) : (
-                  s.payment_method
-                )}
-                {s.payment_ref && (
-                  <span className="ml-1 opacity-60 text-[9.5px]">Ref: {s.payment_ref}</span>
+                  <div className="text-muted">
+                    {s.sales[0]?.payment_method === "Points" ? (
+                      <span className="font-medium text-accent-gold">Points</span>
+                    ) : (
+                      s.sales[0]?.payment_method ?? "Cash"
+                    )}
+                    {s.sales[0]?.payment_ref && (
+                      <span className="ml-1 opacity-60 text-[9.5px]">Ref: {s.sales[0].payment_ref}</span>
+                    )}
+                  </div>
                 )}
               </div>
               <div className="text-muted">
-                {s.payment_method === "Points" ? (
+                {s.sales.some((item) => item.payment_method === "Points") ? (
                   <span className="rounded bg-gold/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-accent-gold">
                     Redeem
                   </span>
@@ -506,7 +710,7 @@ export function SalesBrowser({
                 {!s.voided ? (
                   <>
                     {(() => {
-                      const lapsed = isSaleLapsed(s.created_at);
+                      const lapsed = s.sales.some((item) => isSaleLapsed(item.created_at));
                       const isOwner = currentRole === "Owner";
                       const editLocked = lapsed && !isOwner;
                       const voidLocked = lapsed && !isOwner;
@@ -563,52 +767,125 @@ export function SalesBrowser({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4">
             <div>
-              <h3 className="text-base font-bold text-foreground">Edit Sale</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-foreground">Edit Sale</h3>
+                {editing.is_split && (
+                  <span className="rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-400">
+                    Split Payment
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-muted mt-1">
                 {editing.client_name} · {editing.service_name}
               </p>
             </div>
             <div className="space-y-3">
-              <div>
-                <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
-                  Amount Paid (₱)
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={editAmount}
-                  onChange={(e) => setEditAmount(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
-                  Payment Method
-                </label>
-                <select
-                  value={editPayment}
-                  onChange={(e) => setEditPayment(e.target.value as (typeof PAYMENT_METHODS)[number])}
-                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
-                >
-                  {PAYMENT_METHODS.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {editPayment === "GCash" && (
-                <div>
-                  <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
-                    GCash Ref
-                  </label>
-                  <input
-                    type="text"
-                    value={editRef}
-                    onChange={(e) => setEditRef(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold font-mono"
-                  />
-                </div>
+              {editing.is_split ? (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
+                      Cash Portion (₱)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editSplitCash}
+                      onChange={(e) => setEditSplitCash(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
+                      Digital Portion (₱)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editSplitDigital}
+                      onChange={(e) => setEditSplitDigital(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
+                      Digital Payment Method
+                    </label>
+                    <select
+                      value={editSplitDigitalMethod}
+                      onChange={(e) => setEditSplitDigitalMethod(e.target.value as (typeof PAYMENT_METHODS)[number])}
+                      className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                    >
+                      {PAYMENT_METHODS.filter((m) => m !== "Cash").map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {editSplitDigitalMethod === "GCash" && (
+                    <div>
+                      <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
+                        GCash Ref
+                      </label>
+                      <input
+                        type="text"
+                        value={editSplitRef}
+                        onChange={(e) => setEditSplitRef(e.target.value)}
+                        className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold font-mono"
+                      />
+                    </div>
+                  )}
+                  <div className="rounded-lg bg-surface-2 p-2.5 text-xs flex justify-between items-center border border-border">
+                    <span className="text-muted">Combined Total</span>
+                    <span className="font-mono font-bold text-accent-gold">
+                      ₱{((parseFloat(editSplitCash) || 0) + (parseFloat(editSplitDigital) || 0)).toLocaleString()}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
+                      Amount Paid (₱)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editAmount}
+                      onChange={(e) => setEditAmount(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
+                      Payment Method
+                    </label>
+                    <select
+                      value={editPayment}
+                      onChange={(e) => setEditPayment(e.target.value as (typeof PAYMENT_METHODS)[number])}
+                      className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                    >
+                      {PAYMENT_METHODS.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {editPayment === "GCash" && (
+                    <div>
+                      <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
+                        GCash Ref
+                      </label>
+                      <input
+                        type="text"
+                        value={editRef}
+                        onChange={(e) => setEditRef(e.target.value)}
+                        className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground outline-none focus:border-gold font-mono"
+                      />
+                    </div>
+                  )}
+                </>
               )}
               <div>
                 <label className="block text-[10px] font-bold tracking-wider uppercase text-muted mb-1">
@@ -657,12 +934,24 @@ export function SalesBrowser({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-fade-in">
           <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4">
             <div className="border-b border-border pb-3">
-              <h3 className="text-base font-bold text-foreground">
-                {pinModalTarget.mode === "void" ? "Confirm Void Sale" : "Confirm Restore Sale"}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-foreground">
+                  {pinModalTarget.mode === "void" ? "Confirm Void Sale" : "Confirm Restore Sale"}
+                </h3>
+                {pinModalTarget.group.is_split && (
+                  <span className="rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-400">
+                    Split
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-muted mt-1">
-                {pinModalTarget.sale.client_name} · {pinModalTarget.sale.service_name} · ₱{pinModalTarget.sale.amount.toLocaleString()}
+                {pinModalTarget.group.client_name} · {pinModalTarget.group.service_name} · ₱{pinModalTarget.group.amount.toLocaleString()}
               </p>
+              {pinModalTarget.group.is_split && (
+                <p className="text-[10px] text-amber-400/90 mt-1">
+                  (Applies to both Cash and Online split portions)
+                </p>
+              )}
             </div>
             <div className="space-y-3">
               <div>

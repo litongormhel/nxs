@@ -22,7 +22,7 @@ export default async function SalesPage({
     supabase
       .from("sales")
       .select(
-        "id, client_id, guest_label, amount, payment_method, payment_ref, therapist_id, voided, voided_at, voided_by, void_reason, edited_by, edited_at, created_at, clients(codename), services(name), therapists(name), promos(label)"
+        "id, client_id, guest_label, booking_id, amount, payment_method, payment_ref, therapist_id, voided, voided_at, voided_by, void_reason, edited_by, edited_at, created_at, clients(codename), services(name), therapists(name), promos(label)"
       )
       .gte("created_at", bounds.startIso)
       .lte("created_at", bounds.endIso)
@@ -42,7 +42,7 @@ export default async function SalesPage({
     const fallbackRes = await supabase
       .from("sales")
       .select(
-        "id, client_id, guest_label, amount, payment_method, payment_ref, therapist_id, voided, voided_at, voided_by, edited_by, edited_at, created_at, clients(codename), services(name), therapists(name), promos(label)"
+        "id, client_id, guest_label, booking_id, amount, payment_method, payment_ref, therapist_id, voided, voided_at, voided_by, edited_by, edited_at, created_at, clients(codename), services(name), therapists(name), promos(label)"
       )
       .gte("created_at", bounds.startIso)
       .lte("created_at", bounds.endIso)
@@ -62,6 +62,7 @@ export default async function SalesPage({
         selectedDate={selectedDate}
         initialSales={(sales ?? []).map((s) => ({
           id: s.id,
+          booking_id: (s as { booking_id?: string | null }).booking_id ?? null,
           client_name: s.clients?.codename ?? s.guest_label ?? "Walk-in",
           is_walkin: s.client_id === null,
           service_name: s.services?.name ?? "—",
