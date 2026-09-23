@@ -364,6 +364,65 @@ export type Database = {
           },
         ]
       }
+      commission_payouts: {
+        Row: {
+          created_at: string
+          deductions: number
+          disbursed_at: string | null
+          disbursed_by: string | null
+          gross_commission: number
+          id: string
+          net_payout: number
+          notes: string | null
+          payment_method: "cash" | "gcash"
+          period_end: string
+          period_start: string
+          status: "unclaimed" | "claimed"
+          therapist_id: string
+          total_bookings: number
+        }
+        Insert: {
+          created_at?: string
+          deductions?: number
+          disbursed_at?: string | null
+          disbursed_by?: string | null
+          gross_commission?: number
+          id?: string
+          net_payout?: number
+          notes?: string | null
+          payment_method?: "cash" | "gcash"
+          period_end: string
+          period_start: string
+          status?: "unclaimed" | "claimed"
+          therapist_id: string
+          total_bookings?: number
+        }
+        Update: {
+          created_at?: string
+          deductions?: number
+          disbursed_at?: string | null
+          disbursed_by?: string | null
+          gross_commission?: number
+          id?: string
+          net_payout?: number
+          notes?: string | null
+          payment_method?: "cash" | "gcash"
+          period_end?: string
+          period_start?: string
+          status?: "unclaimed" | "claimed"
+          therapist_id?: string
+          total_bookings?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commission_payouts_therapist_id_fkey"
+            columns: ["therapist_id"]
+            isOneToOne: false
+            referencedRelation: "therapists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locker_occupancy: {
         Row: {
           booking_id: string | null

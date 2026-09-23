@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition, useMemo } from "react";
 import { useStaffSim } from "@/lib/staff-context";
 import { getCommissionReport, type CommissionReportRow } from "@/app/(staff)/analytics/actions";
 import { spaDayNow, spaMonthNow } from "@/lib/analytics/spa-day";
+import { createClient } from "@/lib/supabase/client";
+import { TherapistProfileDrawer } from "@/components/therapist-profile-drawer";
 
 function peso(n: number): string {
-  return `₱${n.toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
+  return `₱${Math.round(n).toLocaleString("en-PH")}`;
 }
 
 type Preset = "1-15" | "16-eom" | "custom";
@@ -27,6 +29,28 @@ function presetRange(preset: Preset): { start: string; end: string } {
   return { start: spaDayNow(), end: spaDayNow() };
 }
 
+function formatDateShort(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+export type CommissionPayoutItem = {
+  id: string;
+  therapist_id: string;
+  period_start: string;
+  period_end: string;
+  total_bookings: number;
+  gross_commission: number;
+  deductions: number;
+  net_payout: number;
+  payment_method: "cash" | "gcash";
+  status: "unclaimed" | "claimed";
+  notes: string | null;
+  disbursed_at: string | null;
+  disbursed_by: string | null;
+};
+
 export function CommissionReportBrowser({
   filterTherapist,
   onClearFilter,
@@ -34,13 +58,43 @@ export function CommissionReportBrowser({
   filterTherapist?: { id: string; name: string } | null;
   onClearFilter?: () => void;
 } = {}) {
-  const { currentRole } = useStaffSim();
+  const { currentRole, sessionStaff } = useStaffSim();
   const [preset, setPreset] = useState<Preset>("1-15");
   const [range, setRange] = useState(() => presetRange("1-15"));
   const [rows, setRows] = useState<CommissionReportRow[] | null>(null);
+  const [payouts, setPayouts] = useState<Record<string, CommissionPayoutItem>>({});
   const [grand, setGrand] = useState<{ total: number; commission: number; bookings: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Modal states
+  const [disbursingRow, setDisbursingRow] = useState<CommissionReportRow | null>(null);
+  const [deductions, setDeductions] = useState<string>("0");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "gcash">("cash");
+  const [disbursementNotes, setDisbursementNotes] = useState<string>("");
+  const [isSubmittingPayout, setIsSubmittingPayout] = useState(false);
+  const [payoutError, setPayoutError] = useState<string | null>(null);
+
+  // Slip modal state
+  const [slipData, setSlipData] = useState<{
+    therapistName: string;
+    payout: CommissionPayoutItem;
+  } | null>(null);
+
+  // Batch modal state
+  const [showBatchConfirm, setShowBatchConfirm] = useState(false);
+  const [isBatchDisbursing, setIsBatchDisbursing] = useState(false);
+
+  // Therapist Profile Drawer state
+  const [drawerTarget, setDrawerTarget] = useState<{
+    therapistId: string;
+    therapistName: string;
+    therapistArchived?: boolean;
+    cutoffRank?: number | null;
+    bookingsCount?: number;
+    commission?: number;
+    status?: "claimed" | "unclaimed";
+  } | null>(null);
 
   function handlePreset(p: Preset) {
     setPreset(p);
@@ -59,6 +113,22 @@ export function CommissionReportBrowser({
       }
       setRows(result.rows);
       setGrand({ total: result.grandTotal, commission: result.grandCommission, bookings: result.grandBookings });
+
+      // Fetch existing commission payouts for this period
+      const supabase = createClient();
+      const { data: payoutsData, error: payoutsErr } = await supabase
+        .from("commission_payouts")
+        .select("*")
+        .eq("period_start", range.start)
+        .eq("period_end", range.end);
+
+      if (!payoutsErr && payoutsData) {
+        const pMap: Record<string, CommissionPayoutItem> = {};
+        for (const p of payoutsData) {
+          pMap[p.therapist_id] = p as CommissionPayoutItem;
+        }
+        setPayouts(pMap);
+      }
     });
   }, [range.start, range.end]);
 
@@ -72,6 +142,7 @@ export function CommissionReportBrowser({
   const displayRows = filterTherapist
     ? (rows ?? []).filter((r) => r.therapistId === filterTherapist.id)
     : rows;
+
   const displayGrand =
     filterTherapist && rows
       ? (() => {
@@ -84,6 +155,166 @@ export function CommissionReportBrowser({
         })()
       : grand;
 
+  // Rank map sorted by bookings count in cutoff descending
+  const rankMap = useMemo(() => {
+    if (!rows) return new Map<string, number>();
+    const sorted = [...rows].sort((a, b) => b.bookingsCount - a.bookingsCount);
+    const map = new Map<string, number>();
+    sorted.forEach((r, idx) => {
+      map.set(r.therapistId, idx + 1);
+    });
+    return map;
+  }, [rows]);
+
+  // Count unclaimed in current visible rows
+  const unclaimedRows = useMemo(() => {
+    if (!displayRows) return [];
+    return displayRows.filter((r) => {
+      const p = payouts[r.therapistId];
+      return !p || p.status === "unclaimed";
+    });
+  }, [displayRows, payouts]);
+
+  const totalUnclaimedCommission = useMemo(() => {
+    return unclaimedRows.reduce((sum, r) => sum + r.commission, 0);
+  }, [unclaimedRows]);
+
+  // Open disbursement modal
+  function handleOpenDisburse(row: CommissionReportRow) {
+    setDisbursingRow(row);
+    setDeductions("0");
+    setPaymentMethod("cash");
+    setDisbursementNotes("");
+    setPayoutError(null);
+  }
+
+  // Submit single disbursement
+  async function handleSubmitDisbursement() {
+    if (!disbursingRow) return;
+    setIsSubmittingPayout(true);
+    setPayoutError(null);
+
+    const deductionsNum = Math.max(0, Number(deductions) || 0);
+    const netPayout = Math.max(0, disbursingRow.commission - deductionsNum);
+
+    const supabase = createClient();
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData?.user?.id || null;
+
+    const payload = {
+      therapist_id: disbursingRow.therapistId,
+      period_start: range.start,
+      period_end: range.end,
+      total_bookings: disbursingRow.bookingsCount,
+      gross_commission: disbursingRow.commission,
+      deductions: deductionsNum,
+      net_payout: netPayout,
+      payment_method: paymentMethod,
+      status: "claimed" as const,
+      notes: disbursementNotes.trim() || null,
+      disbursed_at: new Date().toISOString(),
+      disbursed_by: userId,
+    };
+
+    const { data, error: insertErr } = await supabase
+      .from("commission_payouts")
+      .upsert(payload, { onConflict: "therapist_id,period_start,period_end" })
+      .select()
+      .single();
+
+    setIsSubmittingPayout(false);
+
+    if (insertErr) {
+      setPayoutError(insertErr.message);
+      return;
+    }
+
+    // Optimistic UI update
+    setPayouts((prev) => ({
+      ...prev,
+      [disbursingRow.therapistId]: data as CommissionPayoutItem,
+    }));
+    setDisbursingRow(null);
+  }
+
+  // Batch mark all as disbursed
+  async function handleBatchDisburse() {
+    if (unclaimedRows.length === 0) return;
+    setIsBatchDisbursing(true);
+
+    const supabase = createClient();
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData?.user?.id || null;
+    const nowIso = new Date().toISOString();
+
+    const batchPayloads = unclaimedRows.map((r) => ({
+      therapist_id: r.therapistId,
+      period_start: range.start,
+      period_end: range.end,
+      total_bookings: r.bookingsCount,
+      gross_commission: r.commission,
+      deductions: 0,
+      net_payout: r.commission,
+      payment_method: "cash" as const,
+      status: "claimed" as const,
+      notes: "Batch marked as disbursed",
+      disbursed_at: nowIso,
+      disbursed_by: userId,
+    }));
+
+    const { data, error: batchErr } = await supabase
+      .from("commission_payouts")
+      .upsert(batchPayloads, { onConflict: "therapist_id,period_start,period_end" })
+      .select();
+
+    setIsBatchDisbursing(false);
+    setShowBatchConfirm(false);
+
+    if (batchErr) {
+      setError(`Batch disbursement failed: ${batchErr.message}`);
+      return;
+    }
+
+    if (data) {
+      setPayouts((prev) => {
+        const next = { ...prev };
+        for (const item of data) {
+          next[item.therapist_id] = item as CommissionPayoutItem;
+        }
+        return next;
+      });
+    }
+  }
+
+  function renderRankPill(rank: number) {
+    if (rank === 1) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-bold text-amber-400 whitespace-nowrap">
+          Top 1
+        </span>
+      );
+    }
+    if (rank === 2) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full border border-slate-400/40 bg-slate-400/15 px-2 py-0.5 text-[10.5px] font-bold text-slate-300 whitespace-nowrap">
+          Top 2
+        </span>
+      );
+    }
+    if (rank === 3) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-700/40 bg-amber-700/15 px-2 py-0.5 text-[10.5px] font-bold text-amber-600 whitespace-nowrap">
+          Top 3
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[10.5px] font-semibold text-muted whitespace-nowrap">
+        #{rank}
+      </span>
+    );
+  }
+
   if (currentRole !== "Owner") {
     return (
       <div className="rounded-xl border border-border bg-surface p-6 text-sm text-muted max-w-md">
@@ -95,57 +326,73 @@ export function CommissionReportBrowser({
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
-        {(["1-15", "16-eom", "custom"] as Preset[]).map((p) => (
+      {/* Top Filter and Controls Bar */}
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          {(["1-15", "16-eom", "custom"] as Preset[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => handlePreset(p)}
+              className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition ${
+                preset === p
+                  ? "border border-[#a97e2e] bg-surface text-accent-gold"
+                  : "border border-border text-muted hover:text-foreground"
+              }`}
+            >
+              {p === "1-15" ? "1–15" : p === "16-eom" ? "16–EOM" : "Custom"}
+            </button>
+          ))}
+
+          <input
+            type="date"
+            value={range.start}
+            onChange={(e) => {
+              setPreset("custom");
+              setRange((r) => ({ ...r, start: e.target.value }));
+            }}
+            className="rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none focus:border-gold"
+          />
+          <span className="text-[11px] text-muted">to</span>
+          <input
+            type="date"
+            value={range.end}
+            onChange={(e) => {
+              setPreset("custom");
+              setRange((r) => ({ ...r, end: e.target.value }));
+            }}
+            className="rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none focus:border-gold"
+          />
+
           <button
-            key={p}
-            onClick={() => handlePreset(p)}
-            className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition ${
-              preset === p
-                ? "border border-[#a97e2e] bg-surface text-accent-gold"
-                : "border border-border text-muted hover:text-fg"
-            }`}
+            onClick={handleGenerate}
+            disabled={isPending}
+            className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold transition hover:bg-[#c89b3c]/10 disabled:opacity-50"
           >
-            {p === "1-15" ? "1–15" : p === "16-eom" ? "16–EOM" : "Custom"}
+            {isPending ? "Generating..." : "Generate"}
           </button>
-        ))}
+        </div>
 
-        <input
-          type="date"
-          value={range.start}
-          onChange={(e) => {
-            setPreset("custom");
-            setRange((r) => ({ ...r, start: e.target.value }));
-          }}
-          className="rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none focus:border-gold"
-        />
-        <span className="text-[11px] text-muted">to</span>
-        <input
-          type="date"
-          value={range.end}
-          onChange={(e) => {
-            setPreset("custom");
-            setRange((r) => ({ ...r, end: e.target.value }));
-          }}
-          className="rounded-lg border border-border bg-surface px-2 py-1.5 font-mono text-[11.5px] text-foreground outline-none focus:border-gold"
-        />
-
-        <button
-          onClick={handleGenerate}
-          disabled={isPending}
-          className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold transition hover:bg-[#c89b3c]/10 disabled:opacity-50"
-        >
-          {isPending ? "Generating..." : "Generate"}
-        </button>
+        {/* Batch Mark All as Disbursed Helper */}
+        {displayRows && displayRows.length > 0 && unclaimedRows.length > 0 && (
+          <button
+            onClick={() => setShowBatchConfirm(true)}
+            className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-[11.5px] font-bold text-amber-400 transition hover:bg-amber-500/20 flex items-center gap-1.5"
+          >
+            <span>Mark All as Disbursed</span>
+            <span className="rounded-full bg-amber-500/20 px-1.5 py-0.2 text-[10px]">
+              {unclaimedRows.length}
+            </span>
+          </button>
+        )}
       </div>
 
       {filterTherapist && (
         <div className="mb-4 flex items-center gap-2">
-          <span className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold">
+          <span className="rounded-lg border border-[#a97e2e] bg-surface px-3 py-1.5 text-[11px] font-bold text-accent-gold flex items-center">
             Filtering: {filterTherapist.name}
             <button
               onClick={onClearFilter}
-              className="ml-2 text-muted hover:text-fg"
+              className="ml-2 text-muted hover:text-foreground text-sm font-bold"
               aria-label="Clear therapist filter"
             >
               ×
@@ -156,73 +403,460 @@ export function CommissionReportBrowser({
 
       {error && <div className="mb-4 text-[11px] text-accent-red">{error}</div>}
 
+      {/* Commission Table */}
       {displayRows && displayGrand && (
-        <div className="overflow-x-auto rounded-xl border border-border bg-surface">
+        <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-sm">
           <table className="w-full text-[12.5px]">
             <thead>
               <tr className="border-b border-border text-left text-[11px] text-muted">
+                <th className="px-4 py-3 font-bold">Rank</th>
                 <th className="px-4 py-3 font-bold">Therapist</th>
                 <th className="px-4 py-3 font-bold">Bookings</th>
                 <th className="px-4 py-3 font-bold">Breakdown</th>
                 <th className="px-4 py-3 font-bold">Total</th>
                 <th className="px-4 py-3 font-bold">Commission</th>
+                <th className="px-4 py-3 font-bold">Payout Status</th>
+                <th className="px-4 py-3 font-bold text-right">Action</th>
               </tr>
             </thead>
             <tbody>
               {displayRows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-muted">
+                  <td colSpan={8} className="px-4 py-6 text-center text-muted">
                     No bookings in this range.
                   </td>
                 </tr>
               )}
-              {displayRows.map((row) => (
-                <tr key={row.therapistId} className="border-b border-border last:border-0">
-                  <td className="px-4 py-3 font-bold text-foreground">
-                    {row.therapistName}
-                    {row.therapistArchived && (
-                      <span className="ml-1 text-muted font-normal">(Archived)</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">{row.bookingsCount}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1.5">
-                      {row.lines.map((line) => (
-                        <span
-                          key={line.serviceId}
-                          className="rounded-lg border border-border bg-background px-2 py-1 text-[11px]"
-                          title={line.rateNotSet ? "No commission rate configured for this service" : undefined}
-                        >
-                          {line.serviceName} ×{line.count}
-                          {line.rateNotSet ? (
-                            <span className="ml-1 italic text-muted">(Not set)</span>
-                          ) : (
-                            <span className="ml-1 text-muted">
-                              ({line.rateType === "flat" ? `₱${line.rateValue}` : `${line.rateValue}%`})
-                            </span>
-                          )}
+              {displayRows.map((row) => {
+                const rank = rankMap.get(row.therapistId) ?? 99;
+                const payout = payouts[row.therapistId];
+                const isClaimed = payout?.status === "claimed";
+
+                return (
+                  <tr key={row.therapistId} className="border-b border-border last:border-0 hover:bg-background/40 transition">
+                    {/* Rank */}
+                    <td className="px-4 py-3">
+                      {renderRankPill(rank)}
+                    </td>
+
+                    {/* Therapist (Clickable for Profile Drawer) */}
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() =>
+                          setDrawerTarget({
+                            therapistId: row.therapistId,
+                            therapistName: row.therapistName,
+                            therapistArchived: row.therapistArchived,
+                            cutoffRank: rank,
+                            bookingsCount: row.bookingsCount,
+                            commission: row.commission,
+                            status: isClaimed ? "claimed" : "unclaimed",
+                          })
+                        }
+                        className="text-left font-bold text-foreground hover:text-accent-gold hover:underline transition flex items-center gap-1.5"
+                        title="Click to view detailed therapist profile"
+                      >
+                        <span>{row.therapistName}</span>
+                        {row.therapistArchived && (
+                          <span className="text-muted font-normal text-[11px]">(Archived)</span>
+                        )}
+                      </button>
+                    </td>
+
+                    {/* Bookings Count */}
+                    <td className="px-4 py-3 font-mono font-medium">{row.bookingsCount}</td>
+
+                    {/* Breakdown */}
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {row.lines.map((line) => (
+                          <span
+                            key={line.serviceId}
+                            className="rounded-lg border border-border bg-background px-2 py-1 text-[11px]"
+                            title={line.rateNotSet ? "No commission rate configured for this service" : undefined}
+                          >
+                            {line.serviceName} ×{line.count}
+                            {line.rateNotSet ? (
+                              <span className="ml-1 italic text-muted">(Not set)</span>
+                            ) : (
+                              <span className="ml-1 text-muted">
+                                ({line.rateType === "flat" ? `₱${line.rateValue}` : `${line.rateValue}%`})
+                              </span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+
+                    {/* Total Price */}
+                    <td className="px-4 py-3 font-mono">{peso(row.total)}</td>
+
+                    {/* Gross Commission */}
+                    <td className="px-4 py-3 text-accent-gold font-bold font-mono">{peso(row.commission)}</td>
+
+                    {/* Payout Status */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {isClaimed ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400">
+                          🟢 Claimed {payout.disbursed_at ? `(${formatDateShort(payout.disbursed_at)})` : ""}
                         </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">{peso(row.total)}</td>
-                  <td className="px-4 py-3 text-accent-gold font-bold">{peso(row.commission)}</td>
-                </tr>
-              ))}
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-400">
+                          🟡 Unclaimed
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Action */}
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      {isClaimed ? (
+                        <button
+                          onClick={() =>
+                            setSlipData({
+                              therapistName: row.therapistName,
+                              payout,
+                            })
+                          }
+                          className="rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-semibold text-muted hover:border-gold hover:text-foreground transition"
+                        >
+                          View Slip
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenDisburse(row)}
+                          className="rounded-lg border border-[#a97e2e] bg-surface px-2.5 py-1 text-[11px] font-bold text-accent-gold transition hover:bg-[#c89b3c]/15"
+                        >
+                          Record Release
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
             {displayRows.length > 0 && (
               <tfoot>
                 <tr className="border-t border-border font-bold">
+                  <td className="px-4 py-3 text-muted text-xs">—</td>
                   <td className="px-4 py-3 text-foreground">Grand Total</td>
-                  <td className="px-4 py-3">{displayGrand.bookings}</td>
+                  <td className="px-4 py-3 font-mono">{displayGrand.bookings}</td>
                   <td className="px-4 py-3" />
-                  <td className="px-4 py-3">{peso(displayGrand.total)}</td>
-                  <td className="px-4 py-3 text-accent-gold">{peso(displayGrand.commission)}</td>
+                  <td className="px-4 py-3 font-mono">{peso(displayGrand.total)}</td>
+                  <td className="px-4 py-3 text-accent-gold font-mono">{peso(displayGrand.commission)}</td>
+                  <td className="px-4 py-3 text-muted text-[11px]">
+                    {Object.keys(payouts).length} claimed
+                  </td>
+                  <td className="px-4 py-3" />
                 </tr>
               </tfoot>
             )}
           </table>
         </div>
+      )}
+
+      {/* Commission Disbursement Modal */}
+      {disbursingRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => !isSubmittingPayout && setDisbursingRow(null)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div>
+              <h2 className="text-base font-bold text-foreground">
+                Record Commission Disbursement
+              </h2>
+              <p className="text-xs text-muted mt-0.5">
+                Cutoff Period: <span className="font-mono text-foreground">{range.start}</span> to{" "}
+                <span className="font-mono text-foreground">{range.end}</span>
+              </p>
+            </div>
+
+            {/* Informational Banner */}
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[11.5px] text-amber-300 flex items-start gap-2.5">
+              <span className="text-base leading-none">🛡️</span>
+              <p className="leading-relaxed">
+                <strong className="font-semibold">Tracking notice:</strong> Recording this payout does not deduct from
+                daily sales or drawer cash. This tracks owner disbursements only.
+              </p>
+            </div>
+
+            {/* Summary Fields */}
+            <div className="space-y-2 rounded-xl border border-border bg-background p-3.5 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-muted">Therapist:</span>
+                <span className="font-bold text-foreground text-sm">{disbursingRow.therapistName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted">Completed Sessions:</span>
+                <span className="font-mono font-medium text-foreground">{disbursingRow.bookingsCount}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted">Total Gross Commission:</span>
+                <span className="font-mono font-bold text-accent-gold">{peso(disbursingRow.commission)}</span>
+              </div>
+            </div>
+
+            {/* Interactive Deductions Input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                Vale / Deductions (₱)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={deductions}
+                onChange={(e) => setDeductions(e.target.value)}
+                placeholder="0"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm font-mono text-foreground outline-none focus:border-gold"
+              />
+              <p className="text-[10.5px] text-muted">
+                Deduct loans, supplies, or cash advances from this cutoff.
+              </p>
+            </div>
+
+            {/* Dynamic Calculation: Net Handed Over */}
+            <div className="rounded-xl border border-border bg-background/80 p-4 text-center">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+                Net Handed Over
+              </span>
+              <div className="mt-1 text-2xl font-mono font-bold text-amber-400">
+                {peso(Math.max(0, disbursingRow.commission - (Number(deductions) || 0)))}
+              </div>
+            </div>
+
+            {/* Disbursement Channel */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                Disbursement Channel
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("cash")}
+                  className={`rounded-xl border py-2.5 px-3 text-xs font-bold transition flex items-center justify-center gap-2 ${
+                    paymentMethod === "cash"
+                      ? "border-[#a97e2e] bg-[#c89b3c]/15 text-accent-gold"
+                      : "border-border bg-background text-muted hover:text-foreground"
+                  }`}
+                >
+                  <span>💵</span>
+                  <span>Cash (Direct)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("gcash")}
+                  className={`rounded-xl border py-2.5 px-3 text-xs font-bold transition flex items-center justify-center gap-2 ${
+                    paymentMethod === "gcash"
+                      ? "border-[#a97e2e] bg-[#c89b3c]/15 text-accent-gold"
+                      : "border-border bg-background text-muted hover:text-foreground"
+                  }`}
+                >
+                  <span>📱</span>
+                  <span>GCash Transfer</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Notes Input */}
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground">
+                Notes (Optional)
+              </label>
+              <input
+                type="text"
+                value={disbursementNotes}
+                onChange={(e) => setDisbursementNotes(e.target.value)}
+                placeholder="e.g. Reference number or receipt note"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+              />
+            </div>
+
+            {payoutError && (
+              <div className="text-xs text-accent-red">{payoutError}</div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDisbursingRow(null)}
+                disabled={isSubmittingPayout}
+                className="rounded-xl border border-border px-4 py-2 text-xs font-bold text-muted hover:text-foreground transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitDisbursement}
+                disabled={isSubmittingPayout}
+                className="rounded-xl border border-[#a97e2e] bg-surface px-4 py-2 text-xs font-bold text-accent-gold transition hover:bg-[#c89b3c]/15 disabled:opacity-50"
+              >
+                {isSubmittingPayout ? "Saving..." : "Confirm & Disburse"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Slip Modal */}
+      {slipData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setSlipData(null)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div>
+                <h2 className="text-base font-bold text-foreground">
+                  Commission Disbursement Voucher
+                </h2>
+                <p className="text-xs text-muted">
+                  Official Record Slip
+                </p>
+              </div>
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10.5px] font-bold text-emerald-400">
+                Disbursed
+              </span>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="flex justify-between py-1 border-b border-border/50">
+                <span className="text-muted">Therapist:</span>
+                <span className="font-bold text-foreground">{slipData.therapistName}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-border/50">
+                <span className="text-muted">Cutoff Window:</span>
+                <span className="font-mono text-foreground">
+                  {slipData.payout.period_start} to {slipData.payout.period_end}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-border/50">
+                <span className="text-muted">Sessions Completed:</span>
+                <span className="font-mono text-foreground">{slipData.payout.total_bookings}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-border/50">
+                <span className="text-muted">Gross Commission:</span>
+                <span className="font-mono font-medium text-foreground">{peso(slipData.payout.gross_commission)}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-border/50">
+                <span className="text-muted">Vale / Deductions:</span>
+                <span className="font-mono text-accent-red font-medium">-{peso(slipData.payout.deductions)}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-border/50 items-center">
+                <span className="text-muted font-semibold">Net Payout Handed:</span>
+                <span className="font-mono font-bold text-base text-accent-gold">{peso(slipData.payout.net_payout)}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-border/50">
+                <span className="text-muted">Payment Channel:</span>
+                <span className="font-medium text-foreground">
+                  {slipData.payout.payment_method === "gcash" ? "GCash Transfer" : "Cash (Direct)"}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-border/50">
+                <span className="text-muted">Disbursed At:</span>
+                <span className="font-mono text-foreground text-[11px]">
+                  {slipData.payout.disbursed_at ? new Date(slipData.payout.disbursed_at).toLocaleString("en-PH") : "—"}
+                </span>
+              </div>
+              {slipData.payout.notes && (
+                <div className="pt-1">
+                  <span className="text-muted block mb-1">Notes:</span>
+                  <div className="rounded-lg border border-border bg-background p-2 text-foreground text-[11.5px]">
+                    {slipData.payout.notes}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setSlipData(null)}
+                className="w-full rounded-xl border border-border bg-background py-2 text-xs font-bold text-foreground hover:bg-surface transition"
+              >
+                Close Slip
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Disburse Confirmation Modal */}
+      {showBatchConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => !isBatchDisbursing && setShowBatchConfirm(false)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <h2 className="text-base font-bold text-foreground">
+              Confirm Batch Disbursement
+            </h2>
+            <p className="text-xs text-muted leading-relaxed">
+              Are you sure you want to mark all{" "}
+              <strong className="text-foreground">{unclaimedRows.length} unclaimed therapists</strong> as disbursed for
+              cutoff period <span className="font-mono font-bold text-foreground">{range.start}</span> to{" "}
+              <span className="font-mono font-bold text-foreground">{range.end}</span>?
+            </p>
+
+            <div className="rounded-xl border border-border bg-background p-3 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-muted">Total Therapists:</span>
+                <span className="font-bold text-foreground">{unclaimedRows.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Total Net Commission:</span>
+                <span className="font-mono font-bold text-accent-gold">{peso(totalUnclaimedCommission)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Default Channel:</span>
+                <span className="text-foreground">Cash (Direct) with ₱0 deductions</span>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] text-amber-300">
+              Notice: Payout vouchers can be individually inspected or adjusted after batch recording.
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowBatchConfirm(false)}
+                disabled={isBatchDisbursing}
+                className="rounded-xl border border-border px-4 py-2 text-xs font-bold text-muted hover:text-foreground transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleBatchDisburse}
+                disabled={isBatchDisbursing}
+                className="rounded-xl border border-[#a97e2e] bg-surface px-4 py-2 text-xs font-bold text-accent-gold transition hover:bg-[#c89b3c]/15 disabled:opacity-50"
+              >
+                {isBatchDisbursing ? "Disbursing..." : "Confirm Batch Release"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Therapist Profile Drawer */}
+      {drawerTarget && (
+        <TherapistProfileDrawer
+          therapistId={drawerTarget.therapistId}
+          therapistName={drawerTarget.therapistName}
+          therapistArchived={drawerTarget.therapistArchived}
+          cutoffRank={drawerTarget.cutoffRank}
+          currentCutoff={{ start: range.start, end: range.end }}
+          currentCutoffBookings={drawerTarget.bookingsCount}
+          currentCutoffCommission={drawerTarget.commission}
+          currentCutoffStatus={drawerTarget.status}
+          onClose={() => setDrawerTarget(null)}
+        />
       )}
     </div>
   );
