@@ -24,6 +24,7 @@ type ConflictRow = {
   room_number: number | null;
   start_time: string;
   duration_minutes: number | null;
+  status?: string | null;
 };
 
 const ACTIVE_STATUSES: Database["public"]["Enums"]["booking_status"][] = [
@@ -672,7 +673,7 @@ export function QuickWalkinModal({
     const normTime = time.slice(0, 5);
     for (const row of conflicts) {
       if (!row.therapist_id) continue;
-      if (slotsOverlap(time, duration, row.start_time, row.duration_minutes ?? 0)) {
+      if (slotsOverlap(time, duration, row.start_time, row.duration_minutes ?? duration ?? 80)) {
         taken.add(row.therapist_id);
       }
     }
@@ -712,13 +713,15 @@ export function QuickWalkinModal({
           conflicts.some(
             (c) =>
               c.therapist_id === therapistId &&
-              slotsOverlap(slot, duration, c.start_time, c.duration_minutes ?? duration ?? 60)
+              slotsOverlap(slot, duration, c.start_time, c.duration_minutes ?? duration ?? 80)
           ));
 
       const takenRooms = new Set<number>();
       for (const row of conflicts) {
         if (row.room_number == null) continue;
-        if (slotsOverlap(slot, duration, row.start_time, row.duration_minutes ?? duration ?? 60)) {
+        const st = (row.status || "").toLowerCase();
+        if (st === "completed" || st === "done" || st === "cancelled") continue;
+        if (slotsOverlap(slot, duration, row.start_time, row.duration_minutes ?? duration ?? 80)) {
           takenRooms.add(row.room_number);
         }
       }
@@ -762,7 +765,7 @@ export function QuickWalkinModal({
           !conflicts.some(
             (c) =>
               c.therapist_id === t.id &&
-              slotsOverlap(slot, duration, c.start_time, c.duration_minutes ?? duration ?? 60)
+              slotsOverlap(slot, duration, c.start_time, c.duration_minutes ?? duration ?? 80)
           )
       );
       if (!hasFreeSlot) fullyBooked.add(t.id);
@@ -775,7 +778,9 @@ export function QuickWalkinModal({
     const taken = new Set<number>();
     for (const row of conflicts) {
       if (row.room_number == null) continue;
-      if (slotsOverlap(time, duration, row.start_time, row.duration_minutes ?? 0)) {
+      const st = (row.status || "").toLowerCase();
+      if (st === "completed" || st === "done" || st === "cancelled") continue;
+      if (slotsOverlap(time, duration, row.start_time, row.duration_minutes ?? duration ?? 80)) {
         taken.add(row.room_number);
       }
     }

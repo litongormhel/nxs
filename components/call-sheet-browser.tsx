@@ -24,7 +24,7 @@ export function minutesFrom8am(h: number, m: number): number {
 
 export function getSlotStatus(
   slotTime: string | null,
-  durationMinutes: number = 90,
+  durationMinutes: number = 80,
   checkedInAt?: string,
   nowDate: Date = new Date()
 ): SlotStatus {
@@ -209,6 +209,13 @@ export function CallSheetBrowser({
     });
   }, [inProgress, timeFilter]);
 
+  const inProgressCount = useMemo(() => {
+    return filtered.filter((e) => {
+      const s = getSlotStatus(e.slot_time, e.duration_minutes ?? 80, e.checked_in_at);
+      return s === "ongoing" || (e as any).status === "in_progress";
+    }).length;
+  }, [filtered]);
+
   const handleDownload = () => {
     const label = timeFilter === "all" ? "All Times" : fmtTime(timeFilter);
     const dataUrl = drawCallSheetJpeg(filtered, label);
@@ -279,7 +286,7 @@ export function CallSheetBrowser({
           <div className="px-4 py-6 text-xs text-muted">No massages match this time.</div>
         ) : (
           filtered.map((e) => {
-            const status = getSlotStatus(e.slot_time, e.duration_minutes ?? 90, e.checked_in_at);
+            const status = getSlotStatus(e.slot_time, e.duration_minutes ?? 80, e.checked_in_at);
             return (
               <div
                 key={e.id}
@@ -331,7 +338,8 @@ export function CallSheetBrowser({
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="text-xs text-muted">
-          Total: {filtered.length} massage{filtered.length === 1 ? "" : "s"}
+          Total: {timeFilter === "all" ? inProgressCount : filtered.length} massage
+          {(timeFilter === "all" ? inProgressCount : filtered.length) === 1 ? "" : "s"}
           {timeFilter === "all" ? " in progress" : ` at ${fmtTime(timeFilter)}`}
         </div>
         {timeFilter !== "all" && (

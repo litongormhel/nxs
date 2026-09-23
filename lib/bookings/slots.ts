@@ -20,9 +20,10 @@ export const SLOT_START_TIMES: string[] = (() => {
   return slots;
 })();
 
-function toMinutesSinceOpen(time: string): number {
-  const [h, m] = time.split(":").map(Number);
-  const minutes = h * 60 + m;
+export function toMinutesSinceOpen(time: string): number {
+  if (!time) return 0;
+  const [h, m] = time.slice(0, 5).split(":").map(Number);
+  const minutes = (Number.isNaN(h) ? 0 : h) * 60 + (Number.isNaN(m) ? 0 : m);
   // times after midnight (00:xx, 01:xx) are the tail end of the same operating day
   return minutes < 16 * 60 ? minutes + 24 * 60 : minutes;
 }
@@ -38,6 +39,12 @@ export function compareSlotTimes(a: string, b: string): number {
   return toMinutesSinceOpen(a) - toMinutesSinceOpen(b);
 }
 
+/**
+ * Checks whether two time intervals strictly overlap.
+ * Two intervals [startA, endA] and [startB, endB] overlap strictly when:
+ * startA < endB && endA > startB
+ * Touching boundaries (e.g. endA === startB) do NOT count as collisions.
+ */
 export function slotsOverlap(
   startA: string,
   durationA: number,
@@ -48,7 +55,7 @@ export function slotsOverlap(
   const aEnd = aStart + durationA;
   const bStart = toMinutesSinceOpen(startB);
   const bEnd = bStart + durationB;
-  return aStart < bEnd && bStart < aEnd;
+  return aStart < bEnd && aEnd > bStart;
 }
 
 const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
