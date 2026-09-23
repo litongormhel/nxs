@@ -262,6 +262,7 @@ export type Database = {
           id: string
           investor: boolean
           member_code: string
+          notes: string | null
           password_hash: string | null
           phone: string | null
           points_balance: number
@@ -279,6 +280,7 @@ export type Database = {
           id?: string
           investor?: boolean
           member_code: string
+          notes?: string | null
           password_hash?: string | null
           phone?: string | null
           points_balance?: number
@@ -296,6 +298,7 @@ export type Database = {
           id?: string
           investor?: boolean
           member_code?: string
+          notes?: string | null
           password_hash?: string | null
           phone?: string | null
           points_balance?: number

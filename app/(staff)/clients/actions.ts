@@ -653,3 +653,63 @@ export async function adjustClientPoints(
 
   return { ok: true, newBalance };
 }
+
+// -------------------------------------------------------------
+// Receptionist Notes Actions
+// -------------------------------------------------------------
+
+export type UpdateClientNotesInput = {
+  clientId: string;
+  notes: string | null;
+};
+
+export type UpdateClientNotesResult =
+  | { ok: true; notes: string | null }
+  | { ok: false; error: string };
+
+export async function updateClientNotes(
+  input: UpdateClientNotesInput
+): Promise<UpdateClientNotesResult> {
+  const supabase = await createClient();
+
+  // 1. Verify authenticated staff
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Not authenticated." };
+  }
+
+  const { data: staffRow } = await supabase
+    .from("staff")
+    .select("id, name")
+    .eq("user_id", user.id)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (!staffRow) {
+    return { ok: false, error: "Staff profile not found." };
+  }
+
+  let db: any = supabase;
+  try {
+    db = createServiceClient();
+  } catch {
+    db = supabase;
+  }
+
+  const cleanedNotes = input.notes?.trim() ? input.notes.trim() : null;
+
+  const { error } = await db
+    .from("clients")
+    .update({ notes: cleanedNotes })
+    .eq("id", input.clientId);
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/clients");
+  return { ok: true, notes: cleanedNotes };
+}
+

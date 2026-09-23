@@ -22,10 +22,31 @@ export default async function ClientsPage() {
     appSettingsRes,
     visitClaimsRes,
   ] = await Promise.all([
-    supabase
-      .from("clients")
-      .select("id, codename, username, member_code, points_balance, since_date, phone, qr_token")
-      .order("codename", { ascending: true }),
+    (async () => {
+      const fullRes = await supabase
+        .from("clients")
+        .select("id, codename, username, member_code, points_balance, since_date, phone, qr_token, notes")
+        .order("codename", { ascending: true });
+      if (
+        fullRes.error &&
+        (fullRes.error.code === "42703" ||
+          fullRes.error.message?.includes("notes") ||
+          fullRes.error.message?.includes("schema cache"))
+      ) {
+        const fallbackRes = await supabase
+          .from("clients")
+          .select("id, codename, username, member_code, points_balance, since_date, phone, qr_token")
+          .order("codename", { ascending: true });
+        return {
+          data: (fallbackRes.data ?? []).map((c) => ({
+            ...c,
+            notes: null,
+          })),
+          error: fallbackRes.error,
+        };
+      }
+      return fullRes;
+    })(),
     supabase
       .from("services")
       .select("id, name, price, duration_minutes, points_earned")
@@ -253,6 +274,7 @@ export default async function ClientsPage() {
     .filter((c) => portalAccountClientIds.has(c.id))
     .map((c) => ({
       ...c,
+      notes: (c as any).notes ?? null,
       has_portal_account: true,
     }));
 

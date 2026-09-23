@@ -14,6 +14,7 @@ import {
   approveAllWalkinClaims,
   rejectWalkinClaim,
   adjustClientPoints,
+  updateClientNotes,
 } from "@/app/(staff)/clients/actions";
 
 export type PendingClaim = {
@@ -50,6 +51,7 @@ export type Client = {
   phone?: string | null;
   qr_token?: string | null;
   has_portal_account: boolean;
+  notes?: string | null;
 };
 
 export type WalkInVisit = {
@@ -202,11 +204,59 @@ export function ClientBrowser({
 
   // Modal states for Members
   const [selectedMemberForProfile, setSelectedMemberForProfile] = useState<Client | null>(null);
-  const [copiedToken, setCopiedToken] = useState(false);
   const [selectedMemberForHistory, setSelectedMemberForHistory] = useState<{
     client: Client;
     visits: MemberVisit[];
   } | null>(null);
+
+  // Receptionist notes state
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
+  const [clientNotesMap, setClientNotesMap] = useState<Record<string, string | null>>({});
+
+  const currentMemberNotes = selectedMemberForProfile
+    ? clientNotesMap[selectedMemberForProfile.id] !== undefined
+      ? clientNotesMap[selectedMemberForProfile.id]
+      : selectedMemberForProfile.notes ?? null
+    : null;
+
+  const handleOpenMemberProfile = (client: Client) => {
+    setSelectedMemberForProfile(client);
+    setIsEditingNotes(false);
+    setNotesError(null);
+    setNoteDraft(clientNotesMap[client.id] !== undefined ? clientNotesMap[client.id] ?? "" : client.notes ?? "");
+  };
+
+  const handleSaveNotes = async () => {
+    if (!selectedMemberForProfile) return;
+    setIsSavingNotes(true);
+    setNotesError(null);
+    try {
+      const res = await updateClientNotes({
+        clientId: selectedMemberForProfile.id,
+        notes: noteDraft,
+      });
+      if (!res.ok) {
+        setNotesError(res.error);
+      } else {
+        const updatedNotes = res.notes;
+        setClientNotesMap((prev) => ({
+          ...prev,
+          [selectedMemberForProfile.id]: updatedNotes,
+        }));
+        setSelectedMemberForProfile((prev) =>
+          prev ? { ...prev, notes: updatedNotes } : null
+        );
+        setIsEditingNotes(false);
+      }
+    } catch (err: any) {
+      setNotesError(err?.message || "Failed to save receptionist notes.");
+    } finally {
+      setIsSavingNotes(false);
+    }
+  };
 
   // Manual points adjustment modal states (Owner only)
   const [showAdjustPointsModal, setShowAdjustPointsModal] = useState(false);
@@ -915,7 +965,7 @@ export function ClientBrowser({
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 type="button"
-                                onClick={() => setSelectedMemberForProfile(client)}
+                                onClick={() => handleOpenMemberProfile(client)}
                                 className="rounded border border-border bg-surface px-2.5 py-1 font-medium text-gold hover:border-gold/40 hover:bg-gold/10 transition-colors cursor-pointer"
                               >
                                 View Profile →
@@ -1380,7 +1430,7 @@ export function ClientBrowser({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onClick={() => {
             setSelectedMemberForProfile(null);
-            setCopiedToken(false);
+            setIsEditingNotes(false);
           }}
         >
           <div
@@ -1414,7 +1464,7 @@ export function ClientBrowser({
                 type="button"
                 onClick={() => {
                   setSelectedMemberForProfile(null);
-                  setCopiedToken(false);
+                  setIsEditingNotes(false);
                 }}
                 className="shrink-0 rounded-md p-1 text-muted hover:text-foreground hover:bg-surface-2 transition-colors cursor-pointer"
                 aria-label="Close"
@@ -1467,6 +1517,82 @@ export function ClientBrowser({
               </div>
             </div>
 
+            {/* Receptionist Notes Card */}
+            <div className="rounded-lg border border-border bg-surface-2 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                  Receptionist Notes
+                </p>
+                {!isEditingNotes && currentMemberNotes && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNoteDraft(currentMemberNotes);
+                      setIsEditingNotes(true);
+                      setNotesError(null);
+                    }}
+                    className="text-[10px] font-semibold text-gold hover:text-accent-gold transition-colors cursor-pointer"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+
+              {isEditingNotes ? (
+                <div className="space-y-2">
+                  <textarea
+                    value={noteDraft}
+                    onChange={(e) => setNoteDraft(e.target.value)}
+                    placeholder="Add notes for this client (preferences, special requests, reminders)..."
+                    rows={3}
+                    autoFocus
+                    className="w-full rounded-md border border-border bg-surface p-2.5 text-xs text-foreground placeholder:text-muted/60 focus:border-gold/60 focus:outline-none resize-none"
+                  />
+                  {notesError && (
+                    <p className="text-[11px] text-red-400">{notesError}</p>
+                  )}
+                  <div className="flex items-center justify-end gap-2 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditingNotes(false);
+                        setNoteDraft(currentMemberNotes ?? "");
+                        setNotesError(null);
+                      }}
+                      disabled={isSavingNotes}
+                      className="px-2.5 py-1 rounded border border-border text-[11px] font-medium text-muted hover:text-foreground transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveNotes}
+                      disabled={isSavingNotes}
+                      className="px-3 py-1 rounded bg-gold hover:bg-gold-hover text-background text-[11px] font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {isSavingNotes ? "Saving..." : "Save"}
+                    </button>
+                  </div>
+                </div>
+              ) : currentMemberNotes ? (
+                <p className="text-xs text-foreground bg-surface/60 rounded p-2.5 border border-border/60 whitespace-pre-wrap break-words leading-relaxed">
+                  {currentMemberNotes}
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNoteDraft("");
+                    setIsEditingNotes(true);
+                    setNotesError(null);
+                  }}
+                  className="w-full py-2 px-3 rounded-md border border-dashed border-border/80 hover:border-gold/50 bg-surface/40 hover:bg-surface text-xs text-muted hover:text-gold transition-all text-center cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <span>+</span> Add Note
+                </button>
+              )}
+            </div>
+
             {/* Eligibility Banner / Points Status Callout */}
             {selectedMemberForProfile.points_balance >= 100 ? (
               <div className="rounded-lg border border-gold/60 bg-gold/10 p-2.5 flex items-center gap-2.5 shadow-[0_0_15px_rgba(200,155,60,0.18)]">
@@ -1498,36 +1624,9 @@ export function ClientBrowser({
                 Digital Member QR
               </p>
               {selectedMemberForProfile.qr_token ? (
-                <>
-                  <div className="p-2 bg-[#141210] rounded-lg border border-border/80 flex items-center justify-center">
-                    <QRImage value={selectedMemberForProfile.qr_token} size={130} />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (selectedMemberForProfile.qr_token) {
-                        try {
-                          await navigator.clipboard.writeText(selectedMemberForProfile.qr_token);
-                          setCopiedToken(true);
-                          setTimeout(() => setCopiedToken(false), 2000);
-                        } catch {
-                          // fallback
-                        }
-                      }
-                    }}
-                    title="Click to copy QR token"
-                    className="flex items-center justify-center gap-1.5 px-2.5 py-1 rounded border border-border/60 hover:border-gold/30 bg-surface/60 hover:bg-surface text-[11px] font-mono text-muted hover:text-foreground transition-all cursor-pointer w-full max-w-[240px]"
-                  >
-                    <span className="truncate">
-                      {selectedMemberForProfile.qr_token.length > 22
-                        ? `${selectedMemberForProfile.qr_token.slice(0, 10)}...${selectedMemberForProfile.qr_token.slice(-8)}`
-                        : selectedMemberForProfile.qr_token}
-                    </span>
-                    <span className="shrink-0 text-[10px] text-gold font-sans font-medium">
-                      {copiedToken ? "✓ Copied" : "Copy"}
-                    </span>
-                  </button>
-                </>
+                <div className="p-2 bg-[#141210] rounded-lg border border-border/80 flex items-center justify-center">
+                  <QRImage value={selectedMemberForProfile.qr_token} size={130} />
+                </div>
               ) : (
                 <p className="text-xs text-muted italic py-3">No QR token assigned</p>
               )}
@@ -1543,7 +1642,7 @@ export function ClientBrowser({
                     setRedemptionClient(selectedMemberForProfile);
                     setShowRedemptionWalkin(true);
                     setSelectedMemberForProfile(null);
-                    setCopiedToken(false);
+                    setIsEditingNotes(false);
                   }}
                   disabled={services.length === 0 || staff.length === 0}
                   className="w-full flex items-center justify-center gap-1.5 rounded-md border border-gold bg-gold hover:bg-gold-hover text-background px-4 py-2.5 text-xs font-bold shadow-[0_0_15px_rgba(200,155,60,0.3)] transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
@@ -1559,7 +1658,7 @@ export function ClientBrowser({
                   setLogVisitClient(selectedMemberForProfile);
                   setShowLogVisit(true);
                   setSelectedMemberForProfile(null);
-                  setCopiedToken(false);
+                  setIsEditingNotes(false);
                 }}
                 disabled={services.length === 0 || staff.length === 0}
                 className="w-full flex items-center justify-center gap-1.5 rounded-md border border-gold bg-gold/10 px-4 py-2 text-xs font-semibold text-gold hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
@@ -1568,7 +1667,7 @@ export function ClientBrowser({
               </button>
 
               {/* Secondary button: Claim Past Walk-in Visit */}
-              {allowWalkinClaims ? (
+              {allowWalkinClaims && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1581,15 +1680,6 @@ export function ClientBrowser({
                 >
                   <span>🏷</span> Claim Past Walk-in Visit
                 </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  title="Walk-in claiming is currently disabled by Owner"
-                  className="w-full flex items-center justify-center gap-1.5 rounded-md border border-border bg-surface-2 px-4 py-2 text-xs font-semibold text-muted opacity-50 cursor-not-allowed"
-                >
-                  <span>🏷</span> Claim Past Walk-in Visit (Disabled by Owner)
-                </button>
               )}
 
               {/* Tertiary button: Close */}
@@ -1597,7 +1687,7 @@ export function ClientBrowser({
                 type="button"
                 onClick={() => {
                   setSelectedMemberForProfile(null);
-                  setCopiedToken(false);
+                  setIsEditingNotes(false);
                 }}
                 className="w-full rounded-md border border-border px-4 py-2 text-xs font-medium text-muted hover:text-foreground hover:border-gold/30 transition-colors cursor-pointer"
               >
