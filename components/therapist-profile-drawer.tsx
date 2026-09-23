@@ -32,6 +32,32 @@ function formatClaimedDate(iso: string | null): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function formatCutoffWithYear(startStr: string, endStr: string): string {
+  if (!startStr || !endStr) return `${startStr} – ${endStr}`;
+  const [sy, sm, sd] = startStr.split("-").map(Number);
+  const [ey, em, ed] = endStr.split("-").map(Number);
+  if (!sy || !sm || !sd || !ey || !em || !ed) return `${startStr} – ${endStr}`;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const sMonth = months[sm - 1];
+  const eMonth = months[em - 1];
+  const sDay = String(sd).padStart(2, "0");
+  const eDay = String(ed).padStart(2, "0");
+  if (sy === ey && sm === em) {
+    return `${sMonth} ${sDay} – ${eDay}, ${sy}`;
+  }
+  if (sy === ey) {
+    return `${sMonth} ${sDay} – ${eMonth} ${eDay}, ${sy}`;
+  }
+  return `${sMonth} ${sDay}, ${sy} – ${eMonth} ${eDay}, ${ey}`;
+}
+
+function formatDisbursedDate(iso: string | null): string {
+  if (!iso) return "Claimed";
+  const d = new Date(iso);
+  const m = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return `Disbursed ${m}`;
+}
+
 export type TherapistProfileDrawerProps = {
   therapistId: string;
   therapistName: string;
@@ -478,69 +504,52 @@ export function TherapistProfileDrawer({
                 No disbursement records found for this therapist.
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-stone-800 bg-stone-950/80 p-3 font-mono text-xs">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-stone-800 pb-2 text-[10.5px] uppercase tracking-wider text-stone-400">
-                      <th className="pb-2 pr-2 font-semibold whitespace-nowrap">Cutoff Period</th>
-                      <th className="pb-2 px-2 font-semibold whitespace-nowrap">Gross / Vale</th>
-                      <th className="pb-2 px-2 font-semibold whitespace-nowrap">Net Disbursed</th>
-                      <th className="pb-2 px-2 font-semibold whitespace-nowrap">Method</th>
-                      <th className="pb-2 px-2 font-semibold whitespace-nowrap">Claimed Date</th>
-                      <th className="pb-2 pl-2 text-right font-semibold whitespace-nowrap">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-800/60">
-                    {disbursements.map((item) => (
-                      <tr key={item.id} className="hover:bg-stone-900/40 transition-colors">
-                        <td className="py-2.5 pr-2 font-medium text-stone-200 whitespace-nowrap">
-                          {formatCutoffShort(item.period_start, item.period_end)}
-                        </td>
-                        <td className="py-2.5 px-2 text-stone-300 whitespace-nowrap">
-                          <span>{peso(item.gross_commission)}</span>
-                          {item.deductions > 0 && (
-                            <span className="ml-1 text-[10px] text-red-400 font-normal">
-                              (-{peso(item.deductions)})
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-2 font-bold text-amber-400 whitespace-nowrap">
+              <div className="space-y-2">
+                {disbursements.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-xl border border-border bg-background p-3 space-y-2"
+                  >
+                    {/* Card Top Row: Cutoff period + Channel badge + [ 📄 Slip ] button */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <span className="font-mono text-xs font-bold text-foreground">
+                          {formatCutoffWithYear(item.period_start, item.period_end)}
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[10px] font-medium text-muted">
+                          {item.payment_method === "gcash" ? "📱 GCash" : "💵 Cash"}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDisbursement(item)}
+                        title="View disbursement voucher"
+                        aria-label="View disbursement details"
+                        className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2 py-1 text-[10.5px] font-semibold text-muted hover:border-gold hover:text-accent-gold transition shrink-0"
+                      >
+                        <span>📄</span>
+                        <span>Slip</span>
+                      </button>
+                    </div>
+
+                    {/* Card Bottom Row: Claimed date + bold amber Net Handed amount, with -₱X Vale indicator if deductions exist */}
+                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/40">
+                      <div className="text-[11px] text-muted">
+                        {formatDisbursedDate(item.disbursed_at)}
+                      </div>
+                      <div className="text-right flex items-baseline gap-1.5">
+                        {item.deductions > 0 && (
+                          <span className="text-[11px] text-red-400 font-mono font-medium">
+                            -{peso(item.deductions)} Vale
+                          </span>
+                        )}
+                        <span className="font-mono text-sm font-bold text-amber-400">
                           {peso(item.net_payout)}
-                        </td>
-                        <td className="py-2.5 px-2 text-stone-400 whitespace-nowrap capitalize">
-                          {item.payment_method === "gcash" ? "GCash" : "Cash"}
-                        </td>
-                        <td className="py-2.5 px-2 text-stone-400 whitespace-nowrap">
-                          {formatClaimedDate(item.disbursed_at)}
-                        </td>
-                        <td className="py-2.5 pl-2 text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedDisbursement(item)}
-                            title="View disbursement voucher"
-                            aria-label="View disbursement details"
-                            className="inline-flex items-center justify-center rounded-lg border border-stone-800 bg-stone-900/80 p-1.5 text-stone-300 hover:border-amber-500/50 hover:text-amber-400 transition"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className="h-3.5 w-3.5"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              strokeWidth={2}
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                              />
-                            </svg>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

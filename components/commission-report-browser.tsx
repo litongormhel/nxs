@@ -55,6 +55,38 @@ function formatCutoffRange(startStr: string, endStr: string): string {
   return `${startMonth} ${sd}, ${sy} - ${endMonth} ${ed}, ${ey}`;
 }
 
+function formatCoveredPeriod(startStr: string, endStr: string): string {
+  if (!startStr || !endStr) return `${startStr}–${endStr}`;
+  const [sy, sm, sd] = startStr.split("-").map(Number);
+  const [ey, em, ed] = endStr.split("-").map(Number);
+  if (!sy || !sm || !sd || !ey || !em || !ed) return `${startStr}–${endStr}`;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const sMonth = months[sm - 1];
+  const eMonth = months[em - 1];
+  const sDay = String(sd).padStart(2, "0");
+  const eDay = String(ed).padStart(2, "0");
+  if (sy === ey && sm === em) {
+    return `${sMonth} ${sDay}–${eDay}`;
+  }
+  if (sy === ey) {
+    return `${sMonth} ${sDay}–${eMonth} ${eDay}`;
+  }
+  return `${sMonth} ${sDay}, ${sy}–${eMonth} ${eDay}, ${ey}`;
+}
+
+function compareCommissionRows(a: CommissionReportRow, b: CommissionReportRow): number {
+  if (b.bookingsCount !== a.bookingsCount) {
+    return b.bookingsCount - a.bookingsCount;
+  }
+  if (b.total !== a.total) {
+    return b.total - a.total;
+  }
+  if (b.commission !== a.commission) {
+    return b.commission - a.commission;
+  }
+  return a.therapistName.localeCompare(b.therapistName);
+}
+
 export type CommissionPayoutItem = {
   id: string;
   therapist_id: string;
@@ -134,18 +166,31 @@ export function CommissionReportBrowser({
       setRows(result.rows);
       setGrand({ total: result.grandTotal, commission: result.grandCommission, bookings: result.grandBookings });
 
-      // Fetch existing commission payouts for this period
+      // Fetch existing commission payouts for this period (overlapping or covering)
       const supabase = createClient();
       const { data: payoutsData, error: payoutsErr } = await supabase
         .from("commission_payouts")
         .select("*")
-        .eq("period_start", range.start)
-        .eq("period_end", range.end);
+        .lte("period_start", range.end)
+        .gte("period_end", range.start);
 
       if (!payoutsErr && payoutsData) {
         const pMap: Record<string, CommissionPayoutItem> = {};
         for (const p of payoutsData) {
-          pMap[p.therapist_id] = p as CommissionPayoutItem;
+          if (p.period_start <= range.end && p.period_end >= range.start) {
+            const existing = pMap[p.therapist_id];
+            if (!existing) {
+              pMap[p.therapist_id] = p as CommissionPayoutItem;
+            } else {
+              const isExact = p.period_start === range.start && p.period_end === range.end;
+              const existingIsExact = existing.period_start === range.start && existing.period_end === range.end;
+              if (isExact && !existingIsExact) {
+                pMap[p.therapist_id] = p as CommissionPayoutItem;
+              } else if (p.status === "claimed" && existing.status !== "claimed") {
+                pMap[p.therapist_id] = p as CommissionPayoutItem;
+              }
+            }
+          }
         }
         setPayouts(pMap);
       }
@@ -175,10 +220,10 @@ export function CommissionReportBrowser({
         })()
       : grand;
 
-  // Rank map sorted by bookings count in cutoff descending
+  // Rank map sorted by bookings count in cutoff descending (with tie-breakers)
   const rankMap = useMemo(() => {
     if (!rows) return new Map<string, number>();
-    const sorted = [...rows].sort((a, b) => b.bookingsCount - a.bookingsCount);
+    const sorted = [...rows].sort(compareCommissionRows);
     const map = new Map<string, number>();
     sorted.forEach((r, idx) => {
       map.set(r.therapistId, idx + 1);
@@ -186,14 +231,19 @@ export function CommissionReportBrowser({
     return map;
   }, [rows]);
 
+  const sortedDisplayRows = useMemo(() => {
+    if (!displayRows) return null;
+    return [...displayRows].sort(compareCommissionRows);
+  }, [displayRows]);
+
   // Count unclaimed in current visible rows
   const unclaimedRows = useMemo(() => {
-    if (!displayRows) return [];
-    return displayRows.filter((r) => {
+    if (!sortedDisplayRows) return [];
+    return sortedDisplayRows.filter((r) => {
       const p = payouts[r.therapistId];
       return !p || p.status === "unclaimed";
     });
-  }, [displayRows, payouts]);
+  }, [sortedDisplayRows, payouts]);
 
   const totalUnclaimedCommission = useMemo(() => {
     return unclaimedRows.reduce((sum, r) => sum + r.commission, 0);
@@ -259,7 +309,13 @@ export function CommissionReportBrowser({
 
   // Batch mark all as disbursed
   async function handleBatchDisburse() {
-    if (unclaimedRows.length === 0) return;
+    const validUnclaimed = unclaimedRows.filter((r) => {
+      const p = payouts[r.therapistId];
+      const isCovered = p && p.status === "claimed" && p.period_start <= range.end && p.period_end >= range.start;
+      return !isCovered;
+    });
+
+    if (validUnclaimed.length === 0) return;
     setIsBatchDisbursing(true);
 
     const supabase = createClient();
@@ -267,7 +323,7 @@ export function CommissionReportBrowser({
     const userId = authData?.user?.id || null;
     const nowIso = new Date().toISOString();
 
-    const batchPayloads = unclaimedRows.map((r) => ({
+    const batchPayloads = validUnclaimed.map((r) => ({
       therapist_id: r.therapistId,
       period_start: range.start,
       period_end: range.end,
@@ -393,7 +449,7 @@ export function CommissionReportBrowser({
         </div>
 
         {/* Batch Mark All as Disbursed Helper */}
-        {displayRows && displayRows.length > 0 && unclaimedRows.length > 0 && (
+        {sortedDisplayRows && sortedDisplayRows.length > 0 && unclaimedRows.length > 0 && (
           <button
             onClick={() => setShowBatchConfirm(true)}
             className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-[11.5px] font-bold text-amber-400 transition hover:bg-amber-500/20 flex items-center gap-1.5"
@@ -424,7 +480,7 @@ export function CommissionReportBrowser({
       {error && <div className="mb-4 text-[11px] text-accent-red">{error}</div>}
 
       {/* Commission Table */}
-      {displayRows && displayGrand && (
+      {sortedDisplayRows && displayGrand && (
         <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-sm">
           <table className="w-full text-[12.5px]">
             <thead>
@@ -440,14 +496,14 @@ export function CommissionReportBrowser({
               </tr>
             </thead>
             <tbody>
-              {displayRows.length === 0 && (
+              {sortedDisplayRows.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-6 text-center text-muted">
                     No bookings in this range.
                   </td>
                 </tr>
               )}
-              {displayRows.map((row) => {
+              {sortedDisplayRows.map((row) => {
                 const rank = rankMap.get(row.therapistId) ?? 99;
                 const payout = payouts[row.therapistId];
                 const isClaimed = payout?.status === "claimed";
@@ -518,7 +574,11 @@ export function CommissionReportBrowser({
                     <td className="px-4 py-3 whitespace-nowrap">
                       {isClaimed ? (
                         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400">
-                          🟢 Claimed {payout.disbursed_at ? `(${formatDateShort(payout.disbursed_at)})` : ""}
+                          {payout.period_start !== range.start || payout.period_end !== range.end ? (
+                            `🟢 Claimed (Covered in ${formatCoveredPeriod(payout.period_start, payout.period_end)})`
+                          ) : (
+                            `🟢 Claimed ${payout.disbursed_at ? `(${formatDateShort(payout.disbursed_at)})` : ""}`
+                          )}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-400">
@@ -554,7 +614,7 @@ export function CommissionReportBrowser({
                 );
               })}
             </tbody>
-            {displayRows.length > 0 && (
+            {sortedDisplayRows.length > 0 && (
               <tfoot>
                 <tr className="border-t border-border font-bold">
                   <td className="px-4 py-3 text-muted text-xs">—</td>
@@ -564,7 +624,7 @@ export function CommissionReportBrowser({
                   <td className="px-4 py-3 font-mono">{peso(displayGrand.total)}</td>
                   <td className="px-4 py-3 text-accent-gold font-mono">{peso(displayGrand.commission)}</td>
                   <td className="px-4 py-3 text-muted text-[11px]">
-                    {Object.keys(payouts).length} claimed
+                    {sortedDisplayRows.filter((r) => payouts[r.therapistId]?.status === "claimed").length} claimed
                   </td>
                   <td className="px-4 py-3" />
                 </tr>
