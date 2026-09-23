@@ -35,6 +35,26 @@ function formatDateShort(iso: string | null): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function formatCutoffRange(startStr: string, endStr: string): string {
+  if (!startStr || !endStr) return `${startStr} to ${endStr}`;
+  const [sy, sm, sd] = startStr.split("-").map(Number);
+  const [ey, em, ed] = endStr.split("-").map(Number);
+
+  if (!sy || !sm || !sd || !ey || !em || !ed) return `${startStr} to ${endStr}`;
+
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const startMonth = months[sm - 1];
+  const endMonth = months[em - 1];
+
+  if (sy === ey && sm === em) {
+    return `${startMonth} ${sd} - ${ed}, ${sy}`;
+  }
+  if (sy === ey) {
+    return `${startMonth} ${sd} - ${endMonth} ${ed}, ${sy}`;
+  }
+  return `${startMonth} ${sd}, ${sy} - ${endMonth} ${ed}, ${ey}`;
+}
+
 export type CommissionPayoutItem = {
   id: string;
   therapist_id: string;
@@ -582,7 +602,7 @@ export function CommissionReportBrowser({
                       Cutoff Period
                     </span>
                     <span className="text-xs text-stone-400 font-mono">
-                      {range.start} to {range.end}
+                      {formatCutoffRange(range.start, range.end)}
                     </span>
                   </div>
                 </div>
@@ -732,7 +752,7 @@ export function CommissionReportBrowser({
               <div className="flex justify-between py-1 border-b border-border/50">
                 <span className="text-muted">Cutoff Window:</span>
                 <span className="font-mono text-foreground">
-                  {slipData.payout.period_start} to {slipData.payout.period_end}
+                  {formatCutoffRange(slipData.payout.period_start, slipData.payout.period_end)}
                 </span>
               </div>
               <div className="flex justify-between py-1 border-b border-border/50">
