@@ -161,6 +161,13 @@ function occupancyOf(row: BookingRow): LockerOccupancyRow | null {
   return null;
 }
 
+function isCheckedInBooking(row: BookingRow): boolean {
+  const occ = occupancyOf(row);
+  if (occ?.checked_out_at) return false;
+  const hasActiveOccupancy = Boolean(occ && (occ.checked_in_at || occ.locker_number != null));
+  return hasActiveOccupancy || (row.status === "Completed" && !occ?.checked_out_at);
+}
+
 function sortBySpaDay(rows: BookingRow[]): BookingRow[] {
   return [...rows].sort((a, b) => compareSlotTimes(a.start_time, b.start_time));
 }
@@ -338,7 +345,10 @@ export function BookingBrowser({
     () =>
       sortBySpaDay(
         dayBookings.filter(
-          (r) => r.status === "Booked" || r.status === "Needs Reassignment" || r.status === "No-show"
+          (r) =>
+            !isCheckedInBooking(r) &&
+            !occupancyOf(r)?.checked_out_at &&
+            (r.status === "Booked" || r.status === "Needs Reassignment" || r.status === "No-show")
         )
       ),
     [dayBookings]
@@ -346,14 +356,14 @@ export function BookingBrowser({
   const checkinRows = useMemo(
     () =>
       sortByLatestCheckin(
-        dayBookings.filter((r) => r.status === "Completed" && !occupancyOf(r)?.checked_out_at)
+        dayBookings.filter((r) => isCheckedInBooking(r))
       ),
     [dayBookings]
   );
   const checkoutRows = useMemo(
     () =>
       sortBySpaDay(
-        dayBookings.filter((r) => r.status === "Completed" && !!occupancyOf(r)?.checked_out_at)
+        dayBookings.filter((r) => Boolean(occupancyOf(r)?.checked_out_at))
       ),
     [dayBookings]
   );
@@ -780,7 +790,7 @@ export function BookingBrowser({
             <table className="w-full text-left text-[11px]">
               <thead>
                 <tr className="border-b border-border text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-                  {tab === "checkin" && <th className="px-3.5 py-2.5 w-12 text-center">Edit</th>}
+                  {tab === "checkin" && <th className="px-3.5 py-2.5 text-center">Action</th>}
                   <th className="px-3.5 py-2.5">Massage Time</th>
                   <th className="px-3.5 py-2.5">Client</th>
                   <th className="px-3.5 py-2.5">Service</th>
@@ -794,25 +804,39 @@ export function BookingBrowser({
               </thead>
               <tbody>
                 {filteredRows.map((row) => {
-                  const flagged = row.status === "Needs Reassignment";
+                  const flagged =
+                    row.status === "Needs Reassignment" ||
+                    (tab === "checkin" && !row.therapist_id);
                   const occ = occupancyOf(row);
                   return (
                     <tr
                       key={row.id}
                       className={`border-b border-border last:border-0 ${
-                        flagged ? "bg-gradient-to-r from-red-950/20 to-surface" : ""
+                        flagged ? "bg-gradient-to-r from-amber-950/20 to-surface" : ""
                       }`}
                     >
                       {tab === "checkin" && (
                         <td className="px-3.5 py-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => setEditBookingRow(row)}
-                            title="Edit booking"
-                            className="rounded-md border border-border bg-surface-2 px-2 py-1 text-[10px] font-bold text-foreground hover:border-gold hover:text-accent-gold transition-all"
-                          >
-                            Edit
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setEditBookingRow(row)}
+                              title="Edit booking"
+                              className="rounded-md border border-border bg-surface-2 px-2 py-1 text-[10px] font-bold text-foreground hover:border-gold hover:text-accent-gold transition-all"
+                            >
+                              Edit
+                            </button>
+                            {(row.status === "Needs Reassignment" || !row.therapist_id) && (
+                              <button
+                                type="button"
+                                onClick={() => openReassign(row)}
+                                title="Reassign Therapist"
+                                className="rounded-md border border-[#6b4f1f] bg-surface-2 px-2 py-1 text-[10px] font-bold text-accent-amber hover:brightness-125 transition-all whitespace-nowrap"
+                              >
+                                Reassign Therapist
+                              </button>
+                            )}
+                          </div>
                         </td>
                       )}
                       <td className="whitespace-nowrap px-3.5 py-3 font-mono text-[10.5px] text-muted">
@@ -833,7 +857,24 @@ export function BookingBrowser({
                       </td>
                       <td className="px-3.5 py-3 text-muted">{serviceName(row.service_id)}</td>
                       <td className="px-3.5 py-3">{renderRoomPill(row)}</td>
-                      <td className="px-3.5 py-3 text-muted">{therapistName(row.therapist_id)}</td>
+                      <td className="px-3.5 py-3 text-muted">
+                        {tab === "checkin" && (row.status === "Needs Reassignment" || !row.therapist_id) ? (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-accent-amber">
+                              ⚠️ Needs Reassignment
+                            </span>
+                            {row.therapist_id ? (
+                              <span className="text-[10px] text-muted">
+                                Current: {therapistName(row.therapist_id)}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-muted/70 italic">Unassigned</span>
+                            )}
+                          </div>
+                        ) : (
+                          therapistName(row.therapist_id)
+                        )}
+                      </td>
                       {tab !== "upcoming" && (
                         <td className="px-3.5 py-3 font-mono text-[10.5px] text-muted">
                           {fmtTimestamp(occ?.checked_in_at)}

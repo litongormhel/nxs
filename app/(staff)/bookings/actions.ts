@@ -1040,9 +1040,11 @@ export async function changeBookingTherapist(
 ): Promise<ChangeTherapistResult> {
   const supabase = await createClient();
 
-  const { data: booking, error: fetchErr } = await supabase
-    .from("bookings")
-    .select("status, therapist_id, booking_date, start_time")
+  const { data: booking, error: fetchErr } = await (supabase
+    .from("bookings") as any)
+    .select(
+      "status, therapist_id, booking_date, start_time, locker_occupancy(id, checked_in_at, checked_out_at, locker_number)"
+    )
     .eq("id", bookingId)
     .single();
 
@@ -1050,10 +1052,22 @@ export async function changeBookingTherapist(
     return { ok: false, error: fetchErr?.message ?? "Booking not found." };
   }
 
-  if (booking.status === "Completed" || booking.status === "Cancelled") {
+  const occupancies = (booking.locker_occupancy as any[]) ?? [];
+  const activeOcc = occupancies.find((o) => !o.checked_out_at);
+  const isCheckedIn = Boolean(activeOcc && (activeOcc.checked_in_at || activeOcc.locker_number != null));
+  const isCheckedOut = occupancies.some((o) => !!o.checked_out_at);
+
+  if (booking.status === "Cancelled") {
     return {
       ok: false,
-      error: "Cannot change a Completed or Cancelled booking.",
+      error: "Cannot change a Cancelled booking.",
+    };
+  }
+
+  if (booking.status === "Completed" && isCheckedOut) {
+    return {
+      ok: false,
+      error: "Cannot change an already checked-out booking.",
     };
   }
 
@@ -1073,7 +1087,9 @@ export async function changeBookingTherapist(
     status?: BookingStatus;
   } = {
     therapist_id: newTherapistId,
-    ...(booking.status === "Needs Reassignment" ? { status: "Booked" } : {}),
+    ...(booking.status === "Needs Reassignment"
+      ? { status: isCheckedIn ? "Completed" : "Booked" }
+      : {}),
   };
   if (timeChanged) {
     updateData.start_time = effectiveStartTime;
@@ -1257,6 +1273,7 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
   }
 
   // Update bookings
+  const isCheckedIn = Boolean(existingOcc && !existingOcc.checked_out_at);
   const { error: updateErr } = await supabase
     .from("bookings")
     .update({
@@ -1264,7 +1281,9 @@ export async function editBooking(input: EditBookingInput): Promise<EditBookingR
       therapist_id: finalTherapistId,
       room_number: finalRoomNumber,
       start_time: finalStartTime,
-      ...(booking.status === "Needs Reassignment" ? { status: "Booked" } : {}),
+      ...(booking.status === "Needs Reassignment"
+        ? { status: isCheckedIn ? "Completed" : "Booked" }
+        : {}),
     })
     .eq("id", input.bookingId);
 
