@@ -102,8 +102,13 @@ export function showBookingToast({
   };
 }
 
+export type QuickWalkinClient = Client & {
+  points_balance?: number | null;
+  name?: string | null;
+};
+
 export interface QuickWalkinModalProps {
-  clients?: (Client & { points_balance?: number | null })[];
+  clients?: QuickWalkinClient[];
   services?: Service[];
   therapists?: Therapist[];
   rooms?: number[];
@@ -112,7 +117,7 @@ export interface QuickWalkinModalProps {
   addons?: Addon[];
   lockers?: number[];
   timeSlots?: string[];
-  initialClient?: (Client & { points_balance?: number | null }) | null;
+  initialClient?: QuickWalkinClient | null;
   initialClientId?: string | null;
   initialService?: string | null;
   initialPromo?: string | null;
@@ -157,7 +162,7 @@ export function QuickWalkinModal({
     return () => clearInterval(timer);
   }, []);
 
-  const [clients, setClients] = useState<Client[]>(() => {
+  const [clients, setClients] = useState<QuickWalkinClient[]>(() => {
     const list = propClients ? [...propClients] : [];
     if (initialClient && !list.some((c) => c.id === initialClient.id)) {
       list.unshift(initialClient);
@@ -197,7 +202,7 @@ export function QuickWalkinModal({
       Promise.all([
         supabase
           .from("clients")
-          .select("id, codename, username, member_code")
+          .select("id, codename, username, member_code, phone, points_balance")
           .order("codename"),
         supabase.from("client_portal_accounts").select("client_id"),
       ]).then(([{ data: clientsData }, { data: portalData }]) => {
@@ -209,6 +214,8 @@ export function QuickWalkinModal({
               codename: c.codename,
               username: c.username,
               member_code: c.member_code ?? undefined,
+              phone: c.phone,
+              points_balance: c.points_balance,
               has_portal_account: portalSet.has(c.id),
             }))
           );
@@ -411,24 +418,64 @@ export function QuickWalkinModal({
   const [clientPointsBalance, setClientPointsBalance] = useState<number | null>(
     initialClient?.points_balance ?? null
   );
+  const [clientPhone, setClientPhone] = useState<string | null>(
+    initialClient?.phone ?? null
+  );
 
   useEffect(() => {
     if (!clientId) {
       setClientPointsBalance(null);
+      setClientPhone(null);
       return;
     }
-    if (initialClient && initialClient.id === clientId && initialClient.points_balance != null) {
-      setClientPointsBalance(initialClient.points_balance);
+    if (initialClient && initialClient.id === clientId) {
+      if (initialClient.points_balance != null) {
+        setClientPointsBalance(initialClient.points_balance);
+      }
+      if (initialClient.phone != null) {
+        setClientPhone(initialClient.phone);
+      }
     }
     const supabase = createClient();
     supabase
       .from("clients")
-      .select("points_balance")
+      .select("id, codename, username, phone, points_balance, member_code")
       .eq("id", clientId)
       .maybeSingle()
       .then(({ data }) => {
-        if (data?.points_balance != null) {
-          setClientPointsBalance(data.points_balance);
+        if (data) {
+          if (data.points_balance != null) {
+            setClientPointsBalance(data.points_balance);
+          }
+          if (data.phone != null) {
+            setClientPhone(data.phone);
+          }
+          setClients((prev) => {
+            const existing = prev.find((c) => c.id === data.id);
+            if (existing) {
+              return prev.map((c) =>
+                c.id === data.id
+                  ? {
+                      ...c,
+                      phone: data.phone ?? c.phone,
+                      points_balance: data.points_balance ?? c.points_balance,
+                    }
+                  : c
+              );
+            }
+            return [
+              ...prev,
+              {
+                id: data.id,
+                codename: data.codename,
+                username: data.username,
+                phone: data.phone,
+                points_balance: data.points_balance,
+                member_code: data.member_code ?? undefined,
+                has_portal_account: true,
+              },
+            ];
+          });
         }
       });
   }, [clientId, initialClient]);
@@ -802,11 +849,23 @@ export function QuickWalkinModal({
 
   const filteredClients = useMemo(() => {
     if (!clientQuery.trim()) return [];
-    const q = clientQuery.toLowerCase();
+    const q = clientQuery.trim().toLowerCase();
+    const cleanQ = q.startsWith("@") ? q.slice(1) : q;
+    const digitsOnly = q.replace(/\D/g, "");
     return clients
-      .filter(
-        (c) => c.codename.toLowerCase().includes(q) || c.username.toLowerCase().includes(q)
-      )
+      .filter((c) => {
+        const codename = c.codename?.toLowerCase() ?? "";
+        const username = c.username?.toLowerCase() ?? "";
+        const name = (c as any).name?.toLowerCase() ?? "";
+        const phone = c.phone ?? "";
+        const phoneDigits = phone.replace(/\D/g, "");
+
+        const nameMatch = codename.includes(q) || codename.includes(cleanQ) || name.includes(q) || name.includes(cleanQ);
+        const usernameMatch = username.includes(cleanQ);
+        const phoneMatch = (digitsOnly.length >= 3 && phoneDigits.includes(digitsOnly)) || phone.includes(q);
+
+        return nameMatch || usernameMatch || phoneMatch;
+      })
       .slice(0, 8);
   }, [clients, clientQuery]);
 
@@ -1284,26 +1343,59 @@ export function QuickWalkinModal({
             <label className="text-xs text-muted" htmlFor="wk-client-search">
               Client <span className="opacity-70">(search if they already have an account)</span>
             </label>
-            {clientLocked ? (
-              <div className="space-y-2">
-                <div className="mt-1 flex items-center justify-between gap-2 rounded-md border border-gold/50 bg-gold/5 px-3 py-2">
-                  <span className="text-sm font-medium text-foreground">
-                    {selectedClient?.codename} <span className="text-muted">@{selectedClient?.username}</span>
-                    <span className="ml-2 text-[10px] uppercase tracking-wide text-gold">
-                      {initialIsRedemption || initialClient ? "Member" : "Scanned"}
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setClientLocked(false);
-                      setClientId(null);
-                    }}
-                    className="shrink-0 text-xs text-muted underline hover:text-foreground"
-                  >
-                    Change client
-                  </button>
+            {clientId ? (
+              <div className="space-y-2 mt-1">
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                  <div className="flex flex-col gap-1 min-w-0 pr-2">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/30">
+                        🟢 Linked Member
+                      </span>
+                    </div>
+                    <div className="text-sm font-bold text-foreground truncate">
+                      {(selectedClient as any)?.name || selectedClient?.codename || "Member"}{" "}
+                      {selectedClient?.username && (
+                        <span className="text-muted font-normal">· @{selectedClient.username}</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted truncate">
+                      {clientPhone || selectedClient?.phone || "No phone"} · 🪙 {clientPointsBalance ?? (selectedClient as any)?.points_balance ?? 0} pts available
+                    </div>
+                  </div>
+                  <div className="shrink-0">
+                    {clientLocked ? (
+                      initialIsRedemption ? (
+                        <span className="rounded bg-amber-500/20 px-2.5 py-1 text-xs font-medium text-amber-300/80 border border-amber-500/20">
+                          Locked
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setClientLocked(false);
+                            setClientId(null);
+                            setClientQuery("");
+                          }}
+                          className="rounded-md border border-amber-500/30 bg-amber-500/20 px-2.5 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-500/30 transition-colors"
+                        >
+                          Change
+                        </button>
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setClientId(null);
+                          setClientQuery("");
+                        }}
+                        className="rounded-md border border-amber-500/30 bg-amber-500/20 px-2.5 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-500/30 transition-colors"
+                      >
+                        ✕ Clear
+                      </button>
+                    )}
+                  </div>
                 </div>
+
                 {selectedClient && !selectedClient.has_portal_account && (
                   <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
                     <span className="shrink-0 text-sm leading-none text-amber-400">ℹ</span>
@@ -1321,15 +1413,14 @@ export function QuickWalkinModal({
                 <input
                   id="wk-client-search"
                   type="text"
-                  placeholder="Search by name or username…"
-                  value={clientId ? (selectedClient?.codename ?? "") : clientQuery}
+                  placeholder="Search by name, @username, or phone…"
+                  value={clientQuery}
                   onChange={(e) => {
-                    setClientId(null);
                     setClientQuery(e.target.value);
                   }}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
                 />
-                {!clientId && clientQuery && (
+                {clientQuery && (
                   <div className="mt-1 max-h-48 overflow-y-auto rounded-md border border-border bg-background">
                     {filteredClients.length === 0 && filteredActiveWalkins.length === 0 ? (
                       <p className="px-3 py-2 text-xs text-muted">No matching clients or active walk-ins.</p>
@@ -1346,9 +1437,17 @@ export function QuickWalkinModal({
                             }}
                             className="flex items-center justify-between min-h-[44px] sm:min-h-0 w-full px-3 py-2 text-left text-sm text-foreground hover:bg-gold/10"
                           >
-                            <span>
-                              {c.codename} <span className="text-muted">@{c.username}</span>
-                            </span>
+                            <div className="flex flex-col">
+                              <span>
+                                <span className="font-semibold text-foreground">
+                                  {(c as any).name || c.codename}
+                                </span>{" "}
+                                <span className="text-muted font-normal">@{c.username}</span>
+                              </span>
+                              {c.phone && (
+                                <span className="text-xs text-muted">{c.phone}</span>
+                              )}
+                            </div>
                             {!c.has_portal_account && (
                               <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 border border-amber-500/30">
                                 No Portal Account
@@ -1374,31 +1473,6 @@ export function QuickWalkinModal({
                           </button>
                         ))}
                       </>
-                    )}
-                  </div>
-                )}
-                {clientId && (
-                  <div className="mt-1 space-y-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setClientId(null);
-                        setClientQuery("");
-                      }}
-                      className="text-xs text-muted underline hover:text-foreground"
-                    >
-                      Clear
-                    </button>
-                    {selectedClient && !selectedClient.has_portal_account && (
-                      <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
-                        <span className="shrink-0 text-sm leading-none text-amber-400">ℹ</span>
-                        <div className="space-y-0.5">
-                          <p className="font-medium text-amber-300">No Portal Account</p>
-                          <p className="text-amber-200/90 leading-relaxed">
-                            Client has no online portal account — walk-in booking can be confirmed normally, but loyalty points cannot be earned or redeemed for this visit.
-                          </p>
-                        </div>
-                      </div>
                     )}
                   </div>
                 )}
