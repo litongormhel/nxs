@@ -266,7 +266,7 @@ export function CommissionReportBrowser({
 
     const deductionsNum = Math.max(0, Number(deductions) || 0);
     const existingPayout = payouts[disbursingRow.therapistId];
-    const isBalanceTopUp = Boolean(
+    const isTopUp = Boolean(
       existingPayout &&
       existingPayout.status === "claimed" &&
       disbursingRow.commission > existingPayout.gross_commission
@@ -276,23 +276,7 @@ export function CommissionReportBrowser({
     const { data: authData } = await supabase.auth.getUser();
     const userId = authData?.user?.id || null;
 
-    let payload: {
-      id?: string;
-      therapist_id: string;
-      period_start: string;
-      period_end: string;
-      total_bookings: number;
-      gross_commission: number;
-      deductions: number;
-      net_payout: number;
-      payment_method: "cash" | "gcash";
-      status: "claimed";
-      notes: string | null;
-      disbursed_at: string;
-      disbursed_by: string | null;
-    };
-
-    if (isBalanceTopUp && existingPayout) {
+    if (isTopUp && existingPayout?.id) {
       const grossBalance = disbursingRow.commission - existingPayout.gross_commission;
       const netHandedOver = Math.max(0, grossBalance - deductionsNum);
       const totalDeductions = Number(existingPayout.deductions || 0) + deductionsNum;
@@ -308,24 +292,77 @@ export function CommissionReportBrowser({
         updatedNotes = "Balance top-up disbursed";
       }
 
-      payload = {
-        id: existingPayout.id,
-        therapist_id: disbursingRow.therapistId,
-        period_start: range.start,
-        period_end: range.end,
-        total_bookings: disbursingRow.bookingsCount,
-        gross_commission: disbursingRow.commission,
-        deductions: totalDeductions,
-        net_payout: totalNetPayout,
-        payment_method: paymentMethod,
-        status: "claimed",
-        notes: updatedNotes || null,
-        disbursed_at: new Date().toISOString(),
-        disbursed_by: userId,
-      };
-    } else {
+      const { data, error: updateErr } = await supabase
+        .from("commission_payouts")
+        .update({
+          total_bookings: disbursingRow.bookingsCount,
+          gross_commission: disbursingRow.commission,
+          deductions: totalDeductions,
+          net_payout: totalNetPayout,
+          disbursed_at: new Date().toISOString(),
+          payment_method: paymentMethod,
+          status: "claimed",
+          notes: updatedNotes || null,
+          disbursed_by: userId,
+        })
+        .eq("id", existingPayout.id)
+        .select()
+        .single();
+
+      setIsSubmittingPayout(false);
+
+      if (updateErr) {
+        setPayoutError(updateErr.message);
+        return;
+      }
+
+      // Optimistic UI update
+      if (data) {
+        setPayouts((prev) => ({
+          ...prev,
+          [disbursingRow.therapistId]: data as CommissionPayoutItem,
+        }));
+      }
+      setDisbursingRow(null);
+    } else if (existingPayout?.id) {
+      // Existing record update (e.g. unclaimed status to claimed)
       const netPayout = Math.max(0, disbursingRow.commission - deductionsNum);
-      payload = {
+      const { data, error: updateErr } = await supabase
+        .from("commission_payouts")
+        .update({
+          total_bookings: disbursingRow.bookingsCount,
+          gross_commission: disbursingRow.commission,
+          deductions: deductionsNum,
+          net_payout: netPayout,
+          disbursed_at: new Date().toISOString(),
+          payment_method: paymentMethod,
+          status: "claimed",
+          notes: disbursementNotes.trim() || null,
+          disbursed_by: userId,
+        })
+        .eq("id", existingPayout.id)
+        .select()
+        .single();
+
+      setIsSubmittingPayout(false);
+
+      if (updateErr) {
+        setPayoutError(updateErr.message);
+        return;
+      }
+
+      // Optimistic UI update
+      if (data) {
+        setPayouts((prev) => ({
+          ...prev,
+          [disbursingRow.therapistId]: data as CommissionPayoutItem,
+        }));
+      }
+      setDisbursingRow(null);
+    } else {
+      // Brand-new disbursement record from scratch (!existingPayout)
+      const netPayout = Math.max(0, disbursingRow.commission - deductionsNum);
+      const newPayload = {
         therapist_id: disbursingRow.therapistId,
         period_start: range.start,
         period_end: range.end,
@@ -334,32 +371,34 @@ export function CommissionReportBrowser({
         deductions: deductionsNum,
         net_payout: netPayout,
         payment_method: paymentMethod,
-        status: "claimed",
+        status: "claimed" as const,
         notes: disbursementNotes.trim() || null,
         disbursed_at: new Date().toISOString(),
         disbursed_by: userId,
       };
+
+      const { data, error: insertErr } = await supabase
+        .from("commission_payouts")
+        .insert(newPayload)
+        .select()
+        .single();
+
+      setIsSubmittingPayout(false);
+
+      if (insertErr) {
+        setPayoutError(insertErr.message);
+        return;
+      }
+
+      // Optimistic UI update
+      if (data) {
+        setPayouts((prev) => ({
+          ...prev,
+          [disbursingRow.therapistId]: data as CommissionPayoutItem,
+        }));
+      }
+      setDisbursingRow(null);
     }
-
-    const { data, error: insertErr } = await supabase
-      .from("commission_payouts")
-      .upsert(payload, { onConflict: "therapist_id,period_start,period_end" })
-      .select()
-      .single();
-
-    setIsSubmittingPayout(false);
-
-    if (insertErr) {
-      setPayoutError(insertErr.message);
-      return;
-    }
-
-    // Optimistic UI update
-    setPayouts((prev) => ({
-      ...prev,
-      [disbursingRow.therapistId]: data as CommissionPayoutItem,
-    }));
-    setDisbursingRow(null);
   }
 
   // Batch mark all as disbursed
