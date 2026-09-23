@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { updateBookingStatus, changeBookingTherapist, editBooking, cancelBooking } from "@/app/(staff)/bookings/actions";
+import {
+  updateBookingStatus,
+  changeBookingTherapist,
+  editBooking,
+  cancelBooking,
+  bulkCancelLapsedBookings,
+} from "@/app/(staff)/bookings/actions";
 import { useStaffSim } from "@/lib/staff-context";
 import { slotsOverlap, compareSlotTimes, sortSlotTimes } from "@/lib/bookings/slots";
 import { BookingFormModal } from "@/components/booking-form-modal";
@@ -228,6 +234,9 @@ export function BookingBrowser({
   const [cancelReason, setCancelReason] = useState("Client decided not to reschedule");
   const [cancelSaving, setCancelSaving] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [showBulkCancelModal, setShowBulkCancelModal] = useState(false);
+  const [bulkCancelSaving, setBulkCancelSaving] = useState(false);
+  const [bulkCancelError, setBulkCancelError] = useState<string | null>(null);
   const [reassignTherapistId, setReassignTherapistId] = useState("");
   const [reassignStartTime, setReassignStartTime] = useState("");
   const [reassignError, setReassignError] = useState<string | null>(null);
@@ -348,7 +357,7 @@ export function BookingBrowser({
           (r) =>
             !isCheckedInBooking(r) &&
             !occupancyOf(r)?.checked_out_at &&
-            (r.status === "Booked" || r.status === "Needs Reassignment" || r.status === "No-show")
+            (r.status === "Booked" || r.status === "Needs Reassignment")
         )
       ),
     [dayBookings]
@@ -523,6 +532,33 @@ export function BookingBrowser({
       return;
     }
     setCancelBookingRow(null);
+    reload();
+    router.refresh();
+  }
+
+  async function handleConfirmBulkCancel() {
+    if (upcomingRows.length === 0) return;
+    const idsToCancel = upcomingRows.map((r) => r.id);
+
+    setBulkCancelSaving(true);
+    setBulkCancelError(null);
+
+    // Optimistically mark target bookings as Cancelled in dayBookings state
+    setDayBookings((prev) =>
+      prev.map((b) => (idsToCancel.includes(b.id) ? { ...b, status: "Cancelled" as const } : b))
+    );
+    setShowBulkCancelModal(false);
+
+    const res = await bulkCancelLapsedBookings(idsToCancel, date, sessionStaff?.id);
+    setBulkCancelSaving(false);
+
+    if (!res.ok) {
+      setBulkCancelError(res.error);
+      setShowBulkCancelModal(true);
+      reload();
+      return;
+    }
+
     reload();
     router.refresh();
   }
@@ -757,6 +793,21 @@ export function BookingBrowser({
               );
             })}
           </div>
+
+          {/* Bulk Cancel Lapsed Button */}
+          {date < spaDayNow() && upcomingRows.length > 0 && (
+            <div className="sm:ml-auto">
+              <button
+                type="button"
+                onClick={() => setShowBulkCancelModal(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 px-3 py-1.5 text-xs font-bold transition-all shadow-sm active:scale-95"
+                title={`Cancel all ${upcomingRows.length} unattended bookings for ${date}`}
+              >
+                <span>🧹</span>
+                <span>Cancel All Lapsed ({upcomingRows.length})</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Record Counter */}
@@ -1120,6 +1171,41 @@ export function BookingBrowser({
                 className="flex-1 rounded-lg border border-accent-red bg-accent-red/10 py-2 text-xs font-bold text-accent-red hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {cancelSaving ? "Cancelling…" : "Confirm Cancel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-foreground">Cancel All Lapsed Bookings</h3>
+            <p className="text-xs text-muted">
+              Cancel all <strong className="text-foreground">{upcomingRows.length}</strong> unattended booking{upcomingRows.length === 1 ? "" : "s"} for <strong className="text-foreground">{date}</strong>? This will mark them as Cancelled and remove them from the active schedule. This cannot be undone.
+            </p>
+
+            {bulkCancelError && <p className="text-xs text-accent-red">{bulkCancelError}</p>}
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                disabled={bulkCancelSaving}
+                onClick={() => {
+                  setShowBulkCancelModal(false);
+                  setBulkCancelError(null);
+                }}
+                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                disabled={bulkCancelSaving}
+                onClick={handleConfirmBulkCancel}
+                className="flex-1 rounded-lg border border-amber-500/40 bg-amber-500/10 py-2 text-xs font-bold text-amber-400 hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {bulkCancelSaving ? "Cancelling…" : "Confirm Cancel"}
               </button>
             </div>
           </div>

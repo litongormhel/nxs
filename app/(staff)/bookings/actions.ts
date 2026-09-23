@@ -1526,6 +1526,66 @@ export async function cancelReassignmentBooking(
   return cancelBooking(bookingId, staffId, "Client decided not to pursue");
 }
 
+export type BulkCancelLapsedResult =
+  | { ok: true; count: number }
+  | { ok: false; error: string };
+
+export async function bulkCancelLapsedBookings(
+  bookingIds: string[],
+  date: string,
+  staffId?: string
+): Promise<BulkCancelLapsedResult> {
+  if (!bookingIds.length) {
+    return { ok: true, count: 0 };
+  }
+
+  const supabase = await createClient();
+
+  // Resolve staff ID if not directly provided
+  let actingStaffId = staffId;
+  if (!actingStaffId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data: staffMember } = await supabase
+        .from("staff")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (staffMember) {
+        actingStaffId = staffMember.id;
+      }
+    }
+  }
+
+  const { data, error: updateErr } = await supabase
+    .from("bookings")
+    .update({ status: "Cancelled" })
+    .in("id", bookingIds)
+    .select("id");
+
+  if (updateErr) {
+    return { ok: false, error: updateErr.message };
+  }
+
+  const count = data?.length ?? bookingIds.length;
+
+  if (actingStaffId) {
+    await supabase.from("action_logs").insert({
+      staff_id: actingStaffId,
+      action: "bulk_cancel_lapsed_bookings",
+      detail: `Cancelled ${count} lapsed bookings for ${date}. booking_ids=${bookingIds.join(",")}`,
+    });
+  }
+
+  revalidatePath("/bookings");
+  revalidatePath("/dashboard");
+  revalidatePath("/call-sheet");
+
+  return { ok: true, count };
+}
+
 export type ResolveMemberQrResult =
   | {
       ok: true;
