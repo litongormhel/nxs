@@ -1509,7 +1509,7 @@ function EditBookingModal({
                     disabled={disabled}
                     className={disabled ? "text-muted" : undefined}
                   >
-                    Room {num}{isCurrent ? " (Current)" : occupied ? " — Occupied" : ""}
+                    Room {num}{isCurrent ? " (Current)" : occupied ? " - Occupied" : ""}
                   </option>
                 );
               })}

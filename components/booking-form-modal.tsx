@@ -382,7 +382,7 @@ export function BookingFormModal({
       for (const row of conflicts) {
         if (row.room_number == null) continue;
         const st = (row.status || "").toLowerCase();
-        if (st === "completed" || st === "done" || st === "cancelled") continue;
+        if (st === "cancelled" || st === "no-show") continue;
         if (slotsOverlap(slot, duration, row.start_time, row.duration_minutes ?? duration ?? 80)) {
           takenRooms.add(row.room_number);
         }
@@ -422,7 +422,7 @@ export function BookingFormModal({
     for (const row of conflicts) {
       if (row.room_number == null) continue;
       const st = (row.status || "").toLowerCase();
-      if (st === "completed" || st === "done" || st === "cancelled") continue;
+      if (st === "cancelled" || st === "no-show") continue;
       if (slotsOverlap(time, duration, row.start_time, row.duration_minutes ?? duration ?? 80)) {
         taken.add(row.room_number);
       }
@@ -1137,7 +1137,7 @@ export function BookingFormModal({
                           disabled={!isFree}
                           className={!isFree ? "text-muted" : undefined}
                         >
-                          Room {r}{!isFree ? " — Occupied" : ""}
+                          Room {r}{!isFree ? " - Occupied" : ""}
                         </option>
                       );
                     })}
