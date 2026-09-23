@@ -561,85 +561,81 @@ export function CommissionReportBrowser({
             className="fixed inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => !isSubmittingPayout && setDisbursingRow(null)}
           />
-          <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            {/* Header */}
-            <div>
-              <h2 className="text-base font-bold text-foreground">
-                Record Commission Disbursement
-              </h2>
-              <p className="text-xs text-muted mt-0.5">
-                Cutoff Period: <span className="font-mono text-foreground">{range.start}</span> to{" "}
-                <span className="font-mono text-foreground">{range.end}</span>
-              </p>
-            </div>
+          <div className="relative z-10 w-full max-w-md bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-2xl space-y-3.5 animate-in fade-in zoom-in-95 duration-150">
+            {/* Top Therapist Voucher Banner */}
+            {(() => {
+              const disbursingRank = rankMap.get(disbursingRow.therapistId);
+              const rankLabel = disbursingRank ? `Top ${disbursingRank} Therapist` : "Therapist";
 
-            {/* Informational Banner */}
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[11.5px] text-amber-300 flex items-start gap-2.5">
-              <span className="text-base leading-none">🛡️</span>
-              <p className="leading-relaxed">
-                <strong className="font-semibold">Tracking notice:</strong> Recording this payout does not deduct from
-                daily sales or drawer cash. This tracks owner disbursements only.
-              </p>
-            </div>
+              return (
+                <div className="flex items-center justify-between rounded-xl bg-stone-950/60 border border-stone-800/80 p-3.5">
+                  <div>
+                    <h2 className="text-lg font-bold text-white leading-tight">
+                      {disbursingRow.therapistName}
+                    </h2>
+                    <p className="text-xs text-stone-400 mt-1">
+                      {rankLabel} · {disbursingRow.bookingsCount} Sessions
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase font-semibold text-stone-500 tracking-wider block">
+                      Cutoff Period
+                    </span>
+                    <span className="text-xs text-stone-400 font-mono">
+                      {range.start} to {range.end}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
 
-            {/* Summary Fields */}
-            <div className="space-y-2 rounded-xl border border-border bg-background p-3.5 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-muted">Therapist:</span>
-                <span className="font-bold text-foreground text-sm">{disbursingRow.therapistName}</span>
+            {/* Unified Financial Computation Block */}
+            <div className="bg-stone-950/80 border border-stone-800 rounded-xl p-3.5 space-y-2.5 font-mono">
+              <div className="flex items-center justify-between">
+                <span className="text-stone-400 text-xs">Total Gross Commission</span>
+                <span className="text-stone-200 text-sm font-semibold text-right">
+                  {peso(disbursingRow.commission)}
+                </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted">Completed Sessions:</span>
-                <span className="font-mono font-medium text-foreground">{disbursingRow.bookingsCount}</span>
+              <div className="flex items-center justify-between">
+                <span className="text-stone-400 text-xs">Less: Vale / Deductions</span>
+                <div className="flex items-center gap-1.5 text-rose-400 font-mono text-xs font-bold">
+                  <span>- ₱</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={deductions}
+                    onChange={(e) => setDeductions(e.target.value)}
+                    placeholder="0"
+                    className="text-rose-400 bg-stone-900 border border-stone-700 rounded px-2 py-1 text-right w-28 text-xs font-mono font-bold focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted">Total Gross Commission:</span>
-                <span className="font-mono font-bold text-accent-gold">{peso(disbursingRow.commission)}</span>
-              </div>
-            </div>
-
-            {/* Interactive Deductions Input */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">
-                Vale / Deductions (₱)
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={deductions}
-                onChange={(e) => setDeductions(e.target.value)}
-                placeholder="0"
-                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm font-mono text-foreground outline-none focus:border-gold"
-              />
-              <p className="text-[10.5px] text-muted">
-                Deduct loans, supplies, or cash advances from this cutoff.
-              </p>
-            </div>
-
-            {/* Dynamic Calculation: Net Handed Over */}
-            <div className="rounded-xl border border-border bg-background/80 p-4 text-center">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-                Net Handed Over
-              </span>
-              <div className="mt-1 text-2xl font-mono font-bold text-amber-400">
-                {peso(Math.max(0, disbursingRow.commission - (Number(deductions) || 0)))}
+              <div className="border-t border-stone-800/80" />
+              <div className="flex items-center justify-between pt-0.5">
+                <span className="text-xs text-amber-500/90 font-bold uppercase tracking-wider">
+                  NET HANDED OVER
+                </span>
+                <span className="text-2xl font-bold font-mono text-amber-400 text-right">
+                  {peso(Math.max(0, disbursingRow.commission - (Number(deductions) || 0)))}
+                </span>
               </div>
             </div>
 
             {/* Disbursement Channel */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">
+              <label className="text-xs font-semibold text-stone-300">
                 Disbursement Channel
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("cash")}
-                  className={`rounded-xl border py-2.5 px-3 text-xs font-bold transition flex items-center justify-center gap-2 ${
+                  className={`rounded-xl border py-2 px-3 text-xs font-bold transition flex items-center justify-center gap-2 ${
                     paymentMethod === "cash"
-                      ? "border-[#a97e2e] bg-[#c89b3c]/15 text-accent-gold"
-                      : "border-border bg-background text-muted hover:text-foreground"
+                      ? "border-amber-500/60 bg-amber-500/15 text-amber-400"
+                      : "border-stone-800 bg-stone-950/60 text-stone-400 hover:text-stone-200 hover:border-stone-700"
                   }`}
                 >
                   <span>💵</span>
@@ -648,10 +644,10 @@ export function CommissionReportBrowser({
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("gcash")}
-                  className={`rounded-xl border py-2.5 px-3 text-xs font-bold transition flex items-center justify-center gap-2 ${
+                  className={`rounded-xl border py-2 px-3 text-xs font-bold transition flex items-center justify-center gap-2 ${
                     paymentMethod === "gcash"
-                      ? "border-[#a97e2e] bg-[#c89b3c]/15 text-accent-gold"
-                      : "border-border bg-background text-muted hover:text-foreground"
+                      ? "border-amber-500/60 bg-amber-500/15 text-amber-400"
+                      : "border-stone-800 bg-stone-950/60 text-stone-400 hover:text-stone-200 hover:border-stone-700"
                   }`}
                 >
                   <span>📱</span>
@@ -660,31 +656,36 @@ export function CommissionReportBrowser({
               </div>
             </div>
 
-            {/* Notes Input */}
+            {/* Notes / Ref */}
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">
-                Notes (Optional)
+              <label className="text-xs font-semibold text-stone-300">
+                Notes / Reference (Optional)
               </label>
               <input
                 type="text"
                 value={disbursementNotes}
                 onChange={(e) => setDisbursementNotes(e.target.value)}
-                placeholder="e.g. Reference number or receipt note"
-                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-gold"
+                placeholder="e.g. Paid at front desk / Ref 102948"
+                className="w-full rounded-xl border border-stone-800 bg-stone-950/60 px-3 py-2 text-xs text-stone-200 placeholder-stone-500 outline-none focus:border-amber-500"
               />
             </div>
 
             {payoutError && (
-              <div className="text-xs text-accent-red">{payoutError}</div>
+              <div className="text-xs text-rose-400 text-center font-medium">{payoutError}</div>
             )}
 
+            {/* Audit Footnote */}
+            <p className="text-[11px] text-stone-500 text-center leading-normal">
+              ℹ️ Audit tracking only — does not deduct from daily sales or drawer cash.
+            </p>
+
             {/* Action Buttons */}
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex items-center justify-end gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => setDisbursingRow(null)}
                 disabled={isSubmittingPayout}
-                className="rounded-xl border border-border px-4 py-2 text-xs font-bold text-muted hover:text-foreground transition disabled:opacity-50"
+                className="rounded-xl border border-stone-800 bg-stone-950/40 px-4 py-2 text-xs font-bold text-stone-400 hover:text-stone-200 hover:border-stone-700 transition disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -692,7 +693,7 @@ export function CommissionReportBrowser({
                 type="button"
                 onClick={handleSubmitDisbursement}
                 disabled={isSubmittingPayout}
-                className="rounded-xl border border-[#a97e2e] bg-surface px-4 py-2 text-xs font-bold text-accent-gold transition hover:bg-[#c89b3c]/15 disabled:opacity-50"
+                className="rounded-xl border border-amber-500 bg-amber-500 px-4 py-2 text-xs font-bold text-stone-950 transition hover:bg-amber-400 active:scale-[0.98] disabled:opacity-50"
               >
                 {isSubmittingPayout ? "Saving..." : "Confirm & Disburse"}
               </button>
