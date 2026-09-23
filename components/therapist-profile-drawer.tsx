@@ -7,6 +7,31 @@ function peso(n: number): string {
   return `₱${Math.round(n).toLocaleString("en-PH")}`;
 }
 
+function formatCutoffShort(startStr: string, endStr: string): string {
+  if (!startStr || !endStr) return `${startStr} – ${endStr}`;
+  const [sy, sm, sd] = startStr.split("-").map(Number);
+  const [ey, em, ed] = endStr.split("-").map(Number);
+  if (!sy || !sm || !sd || !ey || !em || !ed) return `${startStr} – ${endStr}`;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const sMonth = months[sm - 1];
+  const eMonth = months[em - 1];
+  const sDay = String(sd).padStart(2, "0");
+  const eDay = String(ed).padStart(2, "0");
+  if (sy === ey && sm === em) {
+    return `${sMonth} ${sDay} – ${eDay}`;
+  }
+  if (sy === ey) {
+    return `${sMonth} ${sDay} – ${eMonth} ${eDay}`;
+  }
+  return `${sMonth} ${sDay}, ${sy} – ${eMonth} ${eDay}, ${ey}`;
+}
+
+function formatClaimedDate(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 export type TherapistProfileDrawerProps = {
   therapistId: string;
   therapistName: string;
@@ -38,6 +63,20 @@ type MonthlyStats = {
   commission: number;
 };
 
+type DisbursementRecord = {
+  id: string;
+  period_start: string;
+  period_end: string;
+  total_bookings: number;
+  gross_commission: number;
+  deductions: number;
+  net_payout: number;
+  payment_method: "cash" | "gcash";
+  status: "unclaimed" | "claimed";
+  notes: string | null;
+  disbursed_at: string | null;
+};
+
 export function TherapistProfileDrawer({
   therapistId,
   therapistName,
@@ -55,6 +94,8 @@ export function TherapistProfileDrawer({
   const [monthlyHistory, setMonthlyHistory] = useState<MonthlyStats[]>([]);
   const [lifetimeBookings, setLifetimeBookings] = useState<number>(0);
   const [lifetimeEarnings, setLifetimeEarnings] = useState<number>(0);
+  const [disbursements, setDisbursements] = useState<DisbursementRecord[]>([]);
+  const [selectedDisbursement, setSelectedDisbursement] = useState<DisbursementRecord | null>(null);
 
   // Close on Escape
   useEffect(() => {
@@ -207,6 +248,33 @@ export function TherapistProfileDrawer({
           });
 
         setSukiClients(sukiList);
+
+        // 4. Fetch disbursement records for this therapist
+        const { data: payoutsData } = await supabase
+          .from("commission_payouts")
+          .select("id, period_start, period_end, total_bookings, gross_commission, deductions, net_payout, payment_method, status, notes, disbursed_at")
+          .eq("therapist_id", therapistId)
+          .eq("status", "claimed")
+          .order("disbursed_at", { ascending: false })
+          .limit(6);
+
+        if (!cancelled && payoutsData) {
+          setDisbursements(
+            payoutsData.map((p) => ({
+              id: p.id,
+              period_start: p.period_start,
+              period_end: p.period_end,
+              total_bookings: Number(p.total_bookings),
+              gross_commission: Number(p.gross_commission),
+              deductions: Number(p.deductions),
+              net_payout: Number(p.net_payout),
+              payment_method: (p.payment_method === "gcash" ? "gcash" : "cash") as "cash" | "gcash",
+              status: p.status as "unclaimed" | "claimed",
+              notes: p.notes,
+              disbursed_at: p.disbursed_at,
+            }))
+          );
+        }
       } catch (err) {
         console.error("Failed to load therapist profile drawer data:", err);
       } finally {
@@ -398,6 +466,85 @@ export function TherapistProfileDrawer({
             )}
           </div>
 
+          {/* Disbursement / Claim History */}
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-muted mb-2.5">
+              DISBURSEMENT / CLAIM HISTORY
+            </h3>
+            {loading ? (
+              <div className="text-xs text-muted">Loading disbursement history...</div>
+            ) : disbursements.length === 0 ? (
+              <div className="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted">
+                No disbursement records found for this therapist.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-stone-800 bg-stone-950/80 p-3 font-mono text-xs">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-stone-800 pb-2 text-[10.5px] uppercase tracking-wider text-stone-400">
+                      <th className="pb-2 pr-2 font-semibold whitespace-nowrap">Cutoff Period</th>
+                      <th className="pb-2 px-2 font-semibold whitespace-nowrap">Gross / Vale</th>
+                      <th className="pb-2 px-2 font-semibold whitespace-nowrap">Net Disbursed</th>
+                      <th className="pb-2 px-2 font-semibold whitespace-nowrap">Method</th>
+                      <th className="pb-2 px-2 font-semibold whitespace-nowrap">Claimed Date</th>
+                      <th className="pb-2 pl-2 text-right font-semibold whitespace-nowrap">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-800/60">
+                    {disbursements.map((item) => (
+                      <tr key={item.id} className="hover:bg-stone-900/40 transition-colors">
+                        <td className="py-2.5 pr-2 font-medium text-stone-200 whitespace-nowrap">
+                          {formatCutoffShort(item.period_start, item.period_end)}
+                        </td>
+                        <td className="py-2.5 px-2 text-stone-300 whitespace-nowrap">
+                          <span>{peso(item.gross_commission)}</span>
+                          {item.deductions > 0 && (
+                            <span className="ml-1 text-[10px] text-red-400 font-normal">
+                              (-{peso(item.deductions)})
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-2 font-bold text-amber-400 whitespace-nowrap">
+                          {peso(item.net_payout)}
+                        </td>
+                        <td className="py-2.5 px-2 text-stone-400 whitespace-nowrap capitalize">
+                          {item.payment_method === "gcash" ? "GCash" : "Cash"}
+                        </td>
+                        <td className="py-2.5 px-2 text-stone-400 whitespace-nowrap">
+                          {formatClaimedDate(item.disbursed_at)}
+                        </td>
+                        <td className="py-2.5 pl-2 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDisbursement(item)}
+                            title="View disbursement voucher"
+                            aria-label="View disbursement details"
+                            className="inline-flex items-center justify-center rounded-lg border border-stone-800 bg-stone-900/80 p-1.5 text-stone-300 hover:border-amber-500/50 hover:text-amber-400 transition"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-3.5 w-3.5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                              />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* Top Regular / Suki Clients */}
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-muted mb-2.5">
@@ -446,6 +593,90 @@ export function TherapistProfileDrawer({
           </button>
         </div>
       </div>
+
+      {/* Disbursement Voucher Slip Modal */}
+      {selectedDisbursement && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setSelectedDisbursement(null)}
+          />
+          <div className="relative z-10 w-full max-w-sm rounded-2xl border border-stone-800 bg-stone-950 p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-white font-mono">
+                  Disbursement Voucher
+                </h2>
+                <p className="text-[11px] text-stone-400 font-sans">
+                  Official Claim Record
+                </p>
+              </div>
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+                Claimed
+              </span>
+            </div>
+
+            <div className="space-y-2 text-xs font-mono">
+              <div className="flex justify-between py-1 border-b border-stone-800/60">
+                <span className="text-stone-400 font-sans">Therapist:</span>
+                <span className="font-bold text-white">{therapistName}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-stone-800/60">
+                <span className="text-stone-400 font-sans">Cutoff Window:</span>
+                <span className="text-stone-200">
+                  {formatCutoffShort(selectedDisbursement.period_start, selectedDisbursement.period_end)}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-stone-800/60">
+                <span className="text-stone-400 font-sans">Completed Sessions:</span>
+                <span className="text-stone-200">{selectedDisbursement.total_bookings}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-stone-800/60">
+                <span className="text-stone-400 font-sans">Gross Commission:</span>
+                <span className="text-stone-200">{peso(selectedDisbursement.gross_commission)}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-stone-800/60">
+                <span className="text-stone-400 font-sans">Vale / Deductions:</span>
+                <span className="text-red-400">-{peso(selectedDisbursement.deductions)}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-stone-800/60 items-center">
+                <span className="text-stone-300 font-semibold font-sans">Net Disbursed:</span>
+                <span className="font-bold text-base text-amber-400">{peso(selectedDisbursement.net_payout)}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-stone-800/60">
+                <span className="text-stone-400 font-sans">Payment Method:</span>
+                <span className="text-stone-200">
+                  {selectedDisbursement.payment_method === "gcash" ? "GCash" : "Cash"}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-stone-800/60">
+                <span className="text-stone-400 font-sans">Claimed Date:</span>
+                <span className="text-stone-200 text-[11px]">
+                  {formatClaimedDate(selectedDisbursement.disbursed_at)}
+                </span>
+              </div>
+              {selectedDisbursement.notes && (
+                <div className="pt-1">
+                  <span className="text-stone-400 font-sans block mb-1 text-[11px]">Notes:</span>
+                  <div className="rounded-lg border border-stone-800 bg-stone-900/60 p-2 text-stone-200 text-[11px]">
+                    {selectedDisbursement.notes}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedDisbursement(null)}
+                className="w-full rounded-xl border border-stone-800 bg-stone-900 py-2 text-xs font-bold text-stone-200 hover:bg-stone-800 transition"
+              >
+                Close Slip
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
