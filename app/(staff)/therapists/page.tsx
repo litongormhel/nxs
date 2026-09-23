@@ -30,7 +30,10 @@ export default async function TherapistsPage() {
       .from("therapist_leave")
       .select("therapist_id, start_date, end_date, reason")
       .order("created_at", { ascending: false }),
-    supabase.from("services").select("id, name"),
+    supabase
+      .from("services")
+      .select("id, name, active, requires_therapist")
+      .order("name", { ascending: true }),
     supabase.from("therapist_services").select("therapist_id, service_id"),
     (supabase
       .from("therapist_breaks" as any) as any)
@@ -96,12 +99,29 @@ export default async function TherapistsPage() {
   (dbServices ?? []).forEach((s) => {
     serviceIds[s.name] = s.id;
   });
+  const primeScrub = (dbServices ?? []).find(
+    (s) => s.name === "Prime Scrub Massage" || s.name.toLowerCase().includes("scrub")
+  );
+  if (primeScrub) {
+    serviceIds["Scrub"] = primeScrub.id;
+    serviceIds["Scrub + Massage"] = primeScrub.id;
+    serviceIds["Prime Scrub Massage"] = primeScrub.id;
+  }
 
   const servicesByTherapist: Record<string, string[]> = {};
   (dbTherapistServices ?? []).forEach((row) => {
     const service = (dbServices ?? []).find((s) => s.id === row.service_id);
     if (!service) return;
-    (servicesByTherapist[row.therapist_id] ??= []).push(service.name);
+    const name = service.name;
+    (servicesByTherapist[row.therapist_id] ??= []).push(name);
+    if (name.toLowerCase().includes("scrub")) {
+      if (!servicesByTherapist[row.therapist_id].includes("Scrub")) {
+        servicesByTherapist[row.therapist_id].push("Scrub");
+      }
+      if (!servicesByTherapist[row.therapist_id].includes("Prime Scrub Massage")) {
+        servicesByTherapist[row.therapist_id].push("Prime Scrub Massage");
+      }
+    }
   });
 
   const breaksByTherapist: Record<string, Record<string, string[]>> = {};

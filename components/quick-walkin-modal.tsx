@@ -680,23 +680,34 @@ export function QuickWalkinModal({
 
       const stMap = new Map<string, Set<string>>();
       const tsMap = new Map<string, Set<string>>();
-      const scrubAndMassage = services.find((s) => s.name === "Scrub + Massage");
-      const activeScrubId = scrubAndMassage?.id ?? "8c97c5db-eaa9-47b9-89c0-9db114000483";
-      const legacyScrubId = "326e0b78-49cb-441c-aa03-e54453f2f67f";
+      const primeScrub = services.find(
+        (s) => s.name === "Prime Scrub Massage" || s.name.toLowerCase().includes("scrub")
+      );
+      const activeScrubId = primeScrub?.id ?? "d5f6ee31-309f-4933-85c5-f2f98f95afba";
+      const legacyScrubIds = new Set([
+        "326e0b78-49cb-441c-aa03-e54453f2f67f",
+        "8c97c5db-eaa9-47b9-89c0-9db114000483",
+      ]);
 
       for (const row of servicesOffered.data ?? []) {
-        const effectiveServiceId =
-          row.service_id === legacyScrubId ? activeScrubId : row.service_id;
-
-        if (!stMap.has(effectiveServiceId)) {
-          stMap.set(effectiveServiceId, new Set());
+        const serviceIdsToMap = [row.service_id];
+        if (legacyScrubIds.has(row.service_id) && activeScrubId) {
+          serviceIdsToMap.push(activeScrubId);
+        } else if (row.service_id === activeScrubId) {
+          legacyScrubIds.forEach((id) => serviceIdsToMap.push(id));
         }
-        stMap.get(effectiveServiceId)!.add(row.therapist_id);
 
-        if (!tsMap.has(row.therapist_id)) {
-          tsMap.set(row.therapist_id, new Set());
+        for (const sId of serviceIdsToMap) {
+          if (!stMap.has(sId)) {
+            stMap.set(sId, new Set());
+          }
+          stMap.get(sId)!.add(row.therapist_id);
+
+          if (!tsMap.has(row.therapist_id)) {
+            tsMap.set(row.therapist_id, new Set());
+          }
+          tsMap.get(row.therapist_id)!.add(sId);
         }
-        tsMap.get(row.therapist_id)!.add(effectiveServiceId);
       }
       setServiceTherapistMap(stMap);
       setTherapistServicesMap(tsMap);
@@ -781,14 +792,31 @@ export function QuickWalkinModal({
     return taken;
   }, [conflicts, therapistId, duration, effectiveRooms, timeSlots, therapistBreaksMap]);
 
+  const isScrubSelected = selectedService?.name.toLowerCase().includes("scrub");
+
   // Filter therapists by qualification for the currently selected service
   const qualifiedTherapists = useMemo(() => {
     if (!serviceId) return [];
     if (!servicesLoaded) return therapists;
-    const offeringSet = serviceTherapistMap.get(serviceId);
+    let offeringSet = serviceTherapistMap.get(serviceId);
+    if ((!offeringSet || offeringSet.size === 0) && isScrubSelected) {
+      const scrubOffering = new Set<string>();
+      for (const [sId, set] of serviceTherapistMap.entries()) {
+        const s = services.find((srv) => srv.id === sId);
+        if (
+          s?.name.toLowerCase().includes("scrub") ||
+          sId === "d5f6ee31-309f-4933-85c5-f2f98f95afba" ||
+          sId === "8c97c5db-eaa9-47b9-89c0-9db114000483" ||
+          sId === "326e0b78-49cb-441c-aa03-e54453f2f67f"
+        ) {
+          set.forEach((tId) => scrubOffering.add(tId));
+        }
+      }
+      if (scrubOffering.size > 0) offeringSet = scrubOffering;
+    }
     if (!offeringSet) return [];
-    return therapists.filter((t) => offeringSet.has(t.id));
-  }, [serviceId, therapists, serviceTherapistMap, servicesLoaded]);
+    return therapists.filter((t) => offeringSet!.has(t.id));
+  }, [serviceId, therapists, serviceTherapistMap, servicesLoaded, isScrubSelected, services]);
 
   // Filter services strictly by therapist qualification if a therapist is selected
   const availableServices = useMemo(() => {
@@ -796,7 +824,17 @@ export function QuickWalkinModal({
     if (!servicesLoaded) return services;
     const offered = therapistServicesMap.get(therapistId);
     if (!offered) return [];
-    return services.filter((s) => offered.has(s.id));
+    return services.filter((s) => {
+      if (offered.has(s.id)) return true;
+      if (s.name.toLowerCase().includes("scrub")) {
+        return (
+          offered.has("d5f6ee31-309f-4933-85c5-f2f98f95afba") ||
+          offered.has("8c97c5db-eaa9-47b9-89c0-9db114000483") ||
+          offered.has("326e0b78-49cb-441c-aa03-e54453f2f67f")
+        );
+      }
+      return false;
+    });
   }, [therapistId, services, servicesLoaded, therapistServicesMap]);
 
   // Therapists with zero free slots anywhere in the day's slot grid
@@ -1081,6 +1119,12 @@ export function QuickWalkinModal({
     });
   }, [promoId, isLoyaltyRedemption, selectedPromo, date, effectiveWalkinTime]);
 
+  const isCurrentTherapistQualified = useMemo(() => {
+    if (!serviceId || !therapistId) return false;
+    if (!servicesLoaded) return true;
+    return qualifiedTherapists.some((t) => t.id === therapistId);
+  }, [serviceId, therapistId, servicesLoaded, qualifiedTherapists]);
+
   const canSubmit =
     !isPending &&
     promoCheck.eligible &&
@@ -1099,7 +1143,7 @@ export function QuickWalkinModal({
         freeRooms.includes(Number(roomNumber)) &&
         !takenTherapists.has(therapistId) &&
         !unavailableTherapists.has(therapistId) &&
-        (!servicesLoaded || !!serviceTherapistMap.get(serviceId)?.has(therapistId))));
+        isCurrentTherapistQualified));
 
   function handleClose() {
     setStep("form");
@@ -1125,7 +1169,7 @@ export function QuickWalkinModal({
       setError(`That therapist is ${unavailableTherapists.get(therapistId)} on the selected date.`);
       return;
     }
-    if (isMassageService && servicesLoaded && !serviceTherapistMap.get(serviceId)?.has(therapistId)) {
+    if (isMassageService && servicesLoaded && !isCurrentTherapistQualified) {
       setError("The selected therapist does not offer this service.");
       return;
     }

@@ -22,10 +22,10 @@ export const WEEKEND_SLOTS = [
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-const ALL_THERAPIST_SERVICES = [
+export const ALL_THERAPIST_SERVICES = [
   "Combi Massage",
   "Signature Massage",
-  "Scrub",
+  "Prime Scrub Massage",
 ];
 
 function fmtDate(iso: string): string {
@@ -56,6 +56,7 @@ export interface TherapistCardProps {
   isTop?: boolean;
   selectedSlot?: string;
   onSelectSlot?: (slot: string) => void;
+  availableServices?: string[];
   onToggleDayOff: (day: string) => void;
   onToggleService: (service: string) => void;
   onRequestMarkAbsent: () => void;
@@ -82,6 +83,7 @@ export function TherapistCard({
   isTop = false,
   selectedSlot,
   onSelectSlot,
+  availableServices,
   isMenuOpen,
   onToggleMenu,
   onToggleDayOff,
@@ -593,8 +595,18 @@ export function TherapistCard({
             Services offered
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {ALL_THERAPIST_SERVICES.map((s) => {
-              const isOffered = meta.services.includes(s);
+            {(availableServices && availableServices.length > 0
+              ? availableServices
+              : ALL_THERAPIST_SERVICES
+            ).map((s) => {
+              const isOffered =
+                meta.services.includes(s) ||
+                (s === "Prime Scrub Massage" &&
+                  (meta.services.includes("Scrub") ||
+                    meta.services.includes("Scrub + Massage"))) ||
+                (s === "Scrub" &&
+                  (meta.services.includes("Prime Scrub Massage") ||
+                    meta.services.includes("Scrub + Massage")));
               return (
                 <button
                   key={s}

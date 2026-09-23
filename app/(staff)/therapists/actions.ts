@@ -78,9 +78,20 @@ export async function createTherapist(
   }
 
   if (serviceIds && serviceIds.length > 0) {
+    const scrubLegacy = [
+      "8c97c5db-eaa9-47b9-89c0-9db114000483",
+      "326e0b78-49cb-441c-aa03-e54453f2f67f",
+    ];
+    const normalizedServiceIds = Array.from(
+      new Set(
+        serviceIds.map((id) =>
+          scrubLegacy.includes(id) ? "d5f6ee31-309f-4933-85c5-f2f98f95afba" : id
+        )
+      )
+    );
     const { error: svcError } = await mutationClient
       .from("therapist_services")
-      .insert(serviceIds.map((service_id) => ({ therapist_id: data.id, service_id })));
+      .insert(normalizedServiceIds.map((service_id) => ({ therapist_id: data.id, service_id })));
     if (svcError) return fail(svcError);
   }
 
@@ -404,18 +415,37 @@ export async function toggleTherapistService(
     mutationClient = supabase;
   }
 
-  const { error } = offering
-    ? await mutationClient
-        .from("therapist_services")
-        .upsert(
-          { therapist_id: therapistId, service_id: serviceId },
-          { onConflict: "therapist_id,service_id", ignoreDuplicates: true }
-        )
-    : await mutationClient
-        .from("therapist_services")
-        .delete()
-        .eq("therapist_id", therapistId)
-        .eq("service_id", serviceId);
+  const scrubIds = [
+    "d5f6ee31-309f-4933-85c5-f2f98f95afba",
+    "8c97c5db-eaa9-47b9-89c0-9db114000483",
+    "326e0b78-49cb-441c-aa03-e54453f2f67f",
+  ];
+  const isScrub = scrubIds.includes(serviceId);
+  const effectiveServiceId = isScrub ? "d5f6ee31-309f-4933-85c5-f2f98f95afba" : serviceId;
+
+  let error: any = null;
+  if (offering) {
+    const res = await mutationClient
+      .from("therapist_services")
+      .upsert(
+        { therapist_id: therapistId, service_id: effectiveServiceId },
+        { onConflict: "therapist_id,service_id", ignoreDuplicates: true }
+      );
+    error = res.error;
+  } else {
+    const res = isScrub
+      ? await mutationClient
+          .from("therapist_services")
+          .delete()
+          .eq("therapist_id", therapistId)
+          .in("service_id", scrubIds)
+      : await mutationClient
+          .from("therapist_services")
+          .delete()
+          .eq("therapist_id", therapistId)
+          .eq("service_id", serviceId);
+    error = res.error;
+  }
 
   if (error) return fail(error);
 
