@@ -1330,7 +1330,7 @@ export function QuickWalkinModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
+      <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-4 sm:p-5 max-h-[90vh] overflow-y-auto">
         {step === "form" ? (
           <>
             <h2 className="text-base font-semibold text-foreground">Quick Walk-in</h2>
@@ -1338,15 +1338,15 @@ export function QuickWalkinModal({
               Service, therapist/room (if massage), locker, and payment.
             </p>
 
-        <div className="mt-5 space-y-4">
+        <div className="mt-3 sm:mt-4 space-y-2.5 sm:space-y-3">
           <div>
             <label className="text-xs text-muted" htmlFor="wk-client-search">
               Client <span className="opacity-70">(search if they already have an account)</span>
             </label>
             {clientId ? (
               <div className="space-y-2 mt-1">
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-                  <div className="flex flex-col gap-1 min-w-0 pr-2">
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 py-2 px-3">
+                  <div className="flex flex-col gap-0.5 min-w-0 pr-2">
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/30">
                         🟢 Linked Member
@@ -1359,7 +1359,7 @@ export function QuickWalkinModal({
                       )}
                     </div>
                     <div className="text-xs text-muted truncate">
-                      {clientPhone || selectedClient?.phone || "No phone"} · 🪙 {clientPointsBalance ?? (selectedClient as any)?.points_balance ?? 0} pts available
+                      {clientPhone || selectedClient?.phone || "No phone"} · ⭐ {clientPointsBalance ?? (selectedClient as any)?.points_balance ?? 0} pts available
                     </div>
                   </div>
                   <div className="shrink-0">
@@ -1397,11 +1397,11 @@ export function QuickWalkinModal({
                 </div>
 
                 {selectedClient && !selectedClient.has_portal_account && (
-                  <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
+                  <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 py-1.5 px-2.5 text-xs text-amber-200">
                     <span className="shrink-0 text-sm leading-none text-amber-400">ℹ</span>
                     <div className="space-y-0.5">
                       <p className="font-medium text-amber-300">No Portal Account</p>
-                      <p className="text-amber-200/90 leading-relaxed">
+                      <p className="text-amber-200/90 leading-relaxed text-[11px]">
                         Client has no online portal account — walk-in booking can be confirmed normally, but loyalty points cannot be earned or redeemed for this visit.
                       </p>
                     </div>
@@ -1418,7 +1418,7 @@ export function QuickWalkinModal({
                   onChange={(e) => {
                     setClientQuery(e.target.value);
                   }}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:border-gold outline-none"
                 />
                 {clientQuery && (
                   <div className="mt-1 max-h-48 overflow-y-auto rounded-md border border-border bg-background">
@@ -1498,7 +1498,7 @@ export function QuickWalkinModal({
                 placeholder="e.g. Guest at door"
                 value={guestName}
                 onChange={(e) => setGuestName(e.target.value)}
-                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
               />
             </div>
           )}
@@ -1512,7 +1512,7 @@ export function QuickWalkinModal({
                 id="wk-service"
                 value={serviceId}
                 onChange={(e) => onServiceChange(e.target.value)}
-                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
               >
                 {availableServices.length === 0 ? (
                   <option value="">— no services available —</option>
@@ -1551,7 +1551,7 @@ export function QuickWalkinModal({
                       }
                     }
                   }}
-                  className={`mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ${
+                  className={`mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground ${
                     !serviceId ? "opacity-50 cursor-not-allowed" : ""
                   }`}
                 >
@@ -1614,7 +1614,7 @@ export function QuickWalkinModal({
                           setSlotTime(s);
                           setRoomNumber("");
                         }}
-                        className={`min-h-[44px] sm:min-h-[38px] rounded-md border px-2 py-1 text-xs transition-all flex flex-col items-center justify-center ${
+                        className={`min-h-[40px] sm:min-h-[32px] rounded-md border px-2 py-0.5 sm:py-1 text-xs transition-all flex flex-col items-center justify-center ${
                           !isTherapistSelected
                             ? isPast
                               ? "border-border/40 bg-background/50 text-foreground/30 opacity-25 cursor-not-allowed"
@@ -1645,11 +1645,11 @@ export function QuickWalkinModal({
                   })}
                 </div>
                 {!isTherapistSelected ? (
-                  <p className="mt-1.5 text-xs text-muted">
+                  <p className="mt-1 text-[11px] text-muted">
                     Select a therapist first to see available slots
                   </p>
                 ) : (
-                  <p className="mt-1.5 text-[11px] text-muted">
+                  <p className="mt-1 text-[11px] text-muted">
                     Struck-through slots are already booked or on break. Past slots are disabled.
                   </p>
                 )}
@@ -1683,7 +1683,7 @@ export function QuickWalkinModal({
                       setCustomTime(e.target.value);
                       setRoomNumber("");
                     }}
-                    className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
                   />
                 )}
               </div>
@@ -1703,7 +1703,7 @@ export function QuickWalkinModal({
                     id="wk-room"
                     value={roomNumber}
                     onChange={(e) => setRoomNumber(e.target.value === "" ? "" : Number(e.target.value))}
-                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-50"
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground disabled:opacity-50"
                   >
                     <option value="">— select room —</option>
                     {effectiveRooms.map((r) => {
@@ -1720,7 +1720,7 @@ export function QuickWalkinModal({
                       );
                     })}
                   </select>
-                  <p className="mt-1 text-xs text-muted">
+                  <p className="mt-0.5 text-[11px] text-muted">
                     {freeRooms.length} room{freeRooms.length === 1 ? "" : "s"} free at this time.
                   </p>
                 </div>
@@ -1743,7 +1743,7 @@ export function QuickWalkinModal({
               id="wk-locker"
               value={lockerNumber}
               onChange={(e) => setLockerNumber(Number(e.target.value))}
-              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
             >
               <option value="">— select locker —</option>
               {lockers.map((n) => {
@@ -1787,7 +1787,7 @@ export function QuickWalkinModal({
                   setError(null);
                 }}
                 disabled={manualDiscountOn}
-                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-50"
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground disabled:opacity-50"
               >
                 <option value="none">No Promo</option>
                 {canRedeemLoyalty && (
@@ -1821,7 +1821,7 @@ export function QuickWalkinModal({
                 })}
               </select>
               {isLoyaltyRedemption && (
-                <div className="mt-1.5 flex items-center gap-1.5 text-xs text-gold font-medium">
+                <div className="mt-1 flex items-center gap-1.5 text-xs text-gold font-medium">
                   <span>🏅</span>
                   <span>
                     100 pts applied (-₱{combiCredit} credit). Upgrade fee: ₱{Math.max(0, (selectedService?.price ?? 0) - combiCredit)}
@@ -1829,7 +1829,7 @@ export function QuickWalkinModal({
                 </div>
               )}
               {promoId !== "none" && !isLoyaltyRedemption && !promoCheck.eligible && (
-                <div className="mt-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-300 font-medium">
+                <div className="mt-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-300 font-medium">
                   ⚠ {promoCheck.reason}
                 </div>
               )}
@@ -1862,7 +1862,7 @@ export function QuickWalkinModal({
                         setDiscountValue(20);
                       }
                     }}
-                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
                   >
                     <option value="pct">Percentage</option>
                     <option value="fixed">Fixed ₱</option>
@@ -1877,7 +1877,7 @@ export function QuickWalkinModal({
                     type="number"
                     value={discountValue}
                     onChange={(e) => setDiscountValue(Number(e.target.value))}
-                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
                   />
                 </div>
               </div>
@@ -1923,7 +1923,7 @@ export function QuickWalkinModal({
                       setLastEditedSplitField("cash");
                     }
                   }}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none"
+                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:border-gold outline-none"
                 >
                   <option value="Cash">Cash</option>
                   <option value="GCash">GCash</option>
@@ -1941,14 +1941,14 @@ export function QuickWalkinModal({
                     type="number"
                     value={amount}
                     disabled
-                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground opacity-70"
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground opacity-70"
                   />
                 </div>
               )}
             </div>
 
             {isSplitPayment && (
-              <div className="mt-3 space-y-3 rounded-md border border-border/80 bg-background/50 p-3">
+              <div className="mt-2.5 space-y-2 rounded-md border border-border/80 bg-background/50 p-2.5">
                 <div className="flex items-center justify-between text-xs text-muted">
                   <span>Total Required: <strong className="text-gold">₱{amount.toLocaleString()}</strong></span>
                   <span className="text-[10px] uppercase tracking-wide text-gold">Split Active</span>
@@ -1978,7 +1978,7 @@ export function QuickWalkinModal({
                           setLastEditedSplitField("cash");
                         }
                       }}
-                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none font-mono"
+                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:border-gold outline-none font-mono"
                     />
                   </div>
                   <div>
@@ -2004,7 +2004,7 @@ export function QuickWalkinModal({
                           setLastEditedSplitField("gcash");
                         }
                       }}
-                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-gold outline-none font-mono"
+                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:border-gold outline-none font-mono"
                     />
                   </div>
                 </div>
@@ -2029,7 +2029,7 @@ export function QuickWalkinModal({
                 placeholder="e.g. 1234567890"
                 value={gcashRef}
                 onChange={(e) => setGcashRef(e.target.value)}
-                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
               />
             </div>
           )}
@@ -2045,7 +2045,7 @@ export function QuickWalkinModal({
               placeholder="e.g. Vios ABC-123 blocking slot 2"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-stone-500 focus:border-gold outline-none"
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-stone-500 focus:border-gold outline-none"
             />
           </div>
 
@@ -2060,12 +2060,12 @@ export function QuickWalkinModal({
         </div>
 
         {/* Modal Actions */}
-        <div className="sticky bottom-0 sm:static mt-6 -mx-4 sm:mx-0 -mb-4 sm:mb-0 flex gap-3 bg-surface px-4 sm:px-0 py-4 sm:py-0">
+        <div className="sticky bottom-0 sm:static mt-4 sm:mt-5 -mx-4 sm:mx-0 -mb-4 sm:mb-0 flex gap-3 bg-surface px-4 sm:px-0 py-3 sm:py-0">
           <button
             type="button"
             onClick={handleClose}
             disabled={isPending}
-            className="flex-1 rounded-md border border-border px-4 py-2.5 text-sm text-foreground hover:border-gold/30 disabled:opacity-50"
+            className="flex-1 rounded-md border border-border px-4 py-2 text-sm text-foreground hover:border-gold/30 disabled:opacity-50"
           >
             Cancel
           </button>
@@ -2073,7 +2073,7 @@ export function QuickWalkinModal({
             type="button"
             onClick={handleProceedToReview}
             disabled={!canSubmit || isPending}
-            className="flex-[1.4] rounded-md border border-gold bg-gold px-4 py-2.5 text-sm font-semibold text-black hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-[1.4] rounded-md border border-gold bg-gold px-4 py-2 text-sm font-semibold text-black hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Review Booking →
           </button>
