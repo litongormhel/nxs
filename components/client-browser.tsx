@@ -204,6 +204,7 @@ export function ClientBrowser({
 
   // Modal states for Members
   const [selectedMemberForProfile, setSelectedMemberForProfile] = useState<Client | null>(null);
+  const [showClientQr, setShowClientQr] = useState(false);
   const [selectedMemberForHistory, setSelectedMemberForHistory] = useState<{
     client: Client;
     visits: MemberVisit[];
@@ -224,6 +225,7 @@ export function ClientBrowser({
 
   const handleOpenMemberProfile = (client: Client) => {
     setSelectedMemberForProfile(client);
+    setShowClientQr(false);
     setIsEditingNotes(false);
     setNotesError(null);
     setNoteDraft(clientNotesMap[client.id] !== undefined ? clientNotesMap[client.id] ?? "" : client.notes ?? "");
@@ -1431,10 +1433,11 @@ export function ClientBrowser({
           onClick={() => {
             setSelectedMemberForProfile(null);
             setIsEditingNotes(false);
+            setShowClientQr(false);
           }}
         >
           <div
-            className="w-full max-w-sm rounded-xl border border-border bg-surface p-5 space-y-4 shadow-2xl"
+            className="w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-surface p-5 space-y-3.5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header Section */}
@@ -1465,6 +1468,7 @@ export function ClientBrowser({
                 onClick={() => {
                   setSelectedMemberForProfile(null);
                   setIsEditingNotes(false);
+                  setShowClientQr(false);
                 }}
                 className="shrink-0 rounded-md p-1 text-muted hover:text-foreground hover:bg-surface-2 transition-colors cursor-pointer"
                 aria-label="Close"
@@ -1618,20 +1622,6 @@ export function ClientBrowser({
               </div>
             )}
 
-            {/* Compact QR Code Container */}
-            <div className="rounded-lg border border-border bg-surface-2 p-3.5 flex flex-col items-center gap-2.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted self-start">
-                Digital Member QR
-              </p>
-              {selectedMemberForProfile.qr_token ? (
-                <div className="p-2 bg-[#141210] rounded-lg border border-border/80 flex items-center justify-center">
-                  <QRImage value={selectedMemberForProfile.qr_token} size={130} />
-                </div>
-              ) : (
-                <p className="text-xs text-muted italic py-3">No QR token assigned</p>
-              )}
-            </div>
-
             {/* Action Group */}
             <div className="flex flex-col gap-2 pt-0.5">
               {/* Primary button: Redeem 100 Points for Free Massage */}
@@ -1643,15 +1633,16 @@ export function ClientBrowser({
                     setShowRedemptionWalkin(true);
                     setSelectedMemberForProfile(null);
                     setIsEditingNotes(false);
+                    setShowClientQr(false);
                   }}
                   disabled={services.length === 0 || staff.length === 0}
-                  className="w-full flex items-center justify-center gap-1.5 rounded-md border border-gold bg-gold hover:bg-gold-hover text-background px-4 py-2.5 text-xs font-bold shadow-[0_0_15px_rgba(200,155,60,0.3)] transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-1.5 rounded-md border border-gold bg-gold hover:bg-gold-hover text-background px-4 py-2 text-xs font-bold shadow-[0_0_15px_rgba(200,155,60,0.3)] transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <span>🎁</span> Redeem 100 Points for Free Massage
                 </button>
               )}
 
-              {/* Secondary button: + Log Visit for Member */}
+              {/* Secondary button: + Log Visit for Member (secondary dark button) */}
               <button
                 type="button"
                 onClick={() => {
@@ -1659,9 +1650,10 @@ export function ClientBrowser({
                   setShowLogVisit(true);
                   setSelectedMemberForProfile(null);
                   setIsEditingNotes(false);
+                  setShowClientQr(false);
                 }}
                 disabled={services.length === 0 || staff.length === 0}
-                className="w-full flex items-center justify-center gap-1.5 rounded-md border border-gold bg-gold/10 px-4 py-2 text-xs font-semibold text-gold hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
+                className="w-full flex items-center justify-center gap-1.5 rounded-md border border-border bg-surface-2 hover:bg-surface-accent text-foreground hover:border-gold/40 px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
               >
                 <span>+</span> Log Visit for Member
               </button>
@@ -1682,12 +1674,52 @@ export function ClientBrowser({
                 </button>
               )}
 
+              {/* Collapsible QR Code Section */}
+              {showClientQr && (
+                <div className="rounded-lg border border-border bg-surface-2 p-3 flex flex-col items-center gap-2 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                      Digital Member QR
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowClientQr(false)}
+                      className="text-[10px] text-muted hover:text-foreground cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {selectedMemberForProfile.qr_token ? (
+                    <div className="p-2 bg-[#141210] rounded-lg border border-border/80 flex items-center justify-center">
+                      <QRImage value={selectedMemberForProfile.qr_token} size={120} />
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted italic py-2">No QR token assigned</p>
+                  )}
+                  {selectedMemberForProfile.qr_token && (
+                    <p className="text-[10px] font-mono text-muted text-center break-all select-all">
+                      {selectedMemberForProfile.qr_token}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Secondary trigger link/button: View / Share Client QR */}
+              <button
+                type="button"
+                onClick={() => setShowClientQr((prev) => !prev)}
+                className="w-full flex items-center justify-center gap-1.5 py-1 text-xs text-muted hover:text-foreground transition-colors cursor-pointer"
+              >
+                <span>📱</span> {showClientQr ? "Hide Client QR" : "View / Share Client QR"}
+              </button>
+
               {/* Tertiary button: Close */}
               <button
                 type="button"
                 onClick={() => {
                   setSelectedMemberForProfile(null);
                   setIsEditingNotes(false);
+                  setShowClientQr(false);
                 }}
                 className="w-full rounded-md border border-border px-4 py-2 text-xs font-medium text-muted hover:text-foreground hover:border-gold/30 transition-colors cursor-pointer"
               >
