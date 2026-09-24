@@ -949,6 +949,7 @@ export async function importOfflineVisits(
     }
 
     // 5. Insert into point_transactions if member matched and pointsDelta > 0
+    // Single canonical points crediting pathway: points_balance is synchronized exactly once by DB trigger trg_apply_points_delta
     if (row.matchedClientId && (pointsDelta ?? 0) > 0) {
       const ptPayload: any = {
         client_id: row.matchedClientId,
