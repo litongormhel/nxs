@@ -8,12 +8,14 @@ export default async function StaffPage() {
     .from("staff")
     .select("id, name, position, comment, active, username")
     .eq("active", true)
+    .neq("position", "developer")
     .order("name", { ascending: true });
 
   const { data: archivedStaff } = await supabase
     .from("staff")
     .select("id, name, position, comment, active, username, archived_reason, archived_at, archived_by")
     .eq("active", false)
+    .neq("position", "developer")
     .order("archived_at", { ascending: false });
 
   const archiverIds = [...new Set((archivedStaff ?? []).map((s) => s.archived_by).filter(Boolean))] as string[];

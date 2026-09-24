@@ -153,7 +153,11 @@ export function SalesBrowser({
   const [pinModalError, setPinModalError] = useState<string | null>(null);
   const [pinModalBusy, setPinModalBusy] = useState(false);
 
-  const editAllowed = currentRole === "Supervisor" || currentRole === "Owner";
+  const editAllowed =
+    currentRole === "Supervisor" ||
+    currentRole === "Owner" ||
+    currentRole === "Developer" ||
+    currentRole === "developer";
 
   // Grouping sales rows into consolidated visits (preserving newest-first chronological order)
   const consolidatedSales = useMemo(() => {
@@ -761,7 +765,10 @@ export function SalesBrowser({
                   <>
                     {(() => {
                       const lapsed = s.sales.some((item) => isSaleLapsed(item.created_at));
-                      const isOwner = currentRole === "Owner";
+                      const isOwner =
+                        currentRole === "Owner" ||
+                        currentRole === "Developer" ||
+                        currentRole === "developer";
                       const editLocked = lapsed && !isOwner;
                       const voidLocked = lapsed && !isOwner;
                       return (

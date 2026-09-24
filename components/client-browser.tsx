@@ -187,13 +187,24 @@ export function ClientBrowser({
 }) {
   const router = useRouter();
   const { currentRole, sessionStaff } = useStaffSim();
-  const canReviewClaims = currentRole === "Supervisor" || currentRole === "Owner";
-  const isOwner = currentRole === "Owner" || currentRole?.toLowerCase() === "owner" || sessionStaff?.position?.toLowerCase() === "owner";
+  const canReviewClaims =
+    currentRole === "Supervisor" ||
+    currentRole === "Owner" ||
+    currentRole === "Developer" ||
+    currentRole === "developer";
+  const isOwner =
+    currentRole === "Owner" ||
+    currentRole?.toLowerCase() === "owner" ||
+    currentRole === "Developer" ||
+    currentRole?.toLowerCase() === "developer" ||
+    sessionStaff?.position?.toLowerCase() === "owner" ||
+    sessionStaff?.position?.toLowerCase() === "developer";
   const canImportOffline =
     canReviewClaims ||
     isOwner ||
     sessionStaff?.position === "Supervisor" ||
-    sessionStaff?.position === "Owner";
+    sessionStaff?.position === "Owner" ||
+    sessionStaff?.position === "developer";
 
   const [activeTab, setActiveTab] = useState<"members" | "walkins" | "claims">("members");
   const [search, setSearch] = useState("");

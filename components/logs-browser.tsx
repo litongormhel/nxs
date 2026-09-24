@@ -66,7 +66,7 @@ export function LogsBrowser({
     return filtered.slice(startIndex, startIndex + pageSize);
   }, [filtered, startIndex, pageSize]);
 
-  if (currentRole !== "Owner") {
+  if (currentRole !== "Owner" && currentRole !== "Developer" && currentRole !== "developer") {
     return (
       <div className="rounded-xl border border-border bg-surface p-6 text-sm text-muted max-w-md">
         Activity Logs is Owner-only. Sign in with an Owner account to view

@@ -328,7 +328,7 @@ export function Sidebar() {
         </div>
         <nav className="flex-1 overflow-y-auto py-3">
           {navItems
-            .filter((item) => !("ownerOnly" in item && item.ownerOnly) || currentRole === "Owner")
+            .filter((item) => !("ownerOnly" in item && item.ownerOnly) || currentRole === "Owner" || currentRole === "Developer" || currentRole === "developer")
             .map((item) => {
             const active =
               pathname === item.href || pathname?.startsWith(`${item.href}/`);

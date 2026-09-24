@@ -29,6 +29,8 @@ export function StaffSimProvider({
   const currentRole = sessionStaff
     ? sessionStaff.position === "Receptionist"
       ? "Front Desk"
+      : sessionStaff.position.toLowerCase() === "developer"
+      ? "Developer"
       : sessionStaff.position
     : null;
 

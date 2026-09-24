@@ -42,7 +42,7 @@ async function requireOwner(
     .eq("user_id", user.id)
     .single();
   if (error) return fail(error);
-  if (staff?.position !== "Owner") {
+  if (staff?.position !== "Owner" && staff?.position !== "developer") {
     return { ok: false, error: "Owner only." };
   }
   return null;
@@ -165,6 +165,10 @@ export async function archiveStaff(
 
   if (target.id === callerStaff.id || (target.user_id && target.user_id === user.id)) {
     return { ok: false, error: "You cannot archive your own account." };
+  }
+
+  if (target.position === "developer") {
+    return { ok: false, error: "Cannot archive developer account." };
   }
 
   if (target.position === "Owner") {

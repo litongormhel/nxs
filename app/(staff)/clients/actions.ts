@@ -237,7 +237,7 @@ export async function approveWalkinClaim(claimId: string): Promise<ClaimActionRe
     .eq("active", true)
     .maybeSingle();
 
-  if (!staffRow || !["Supervisor", "Owner"].includes(staffRow.position)) {
+  if (!staffRow || !["Supervisor", "Owner", "developer"].includes(staffRow.position)) {
     return { ok: false, error: "Unauthorized. Only Supervisors or Owners can approve claims." };
   }
 
@@ -371,7 +371,7 @@ export async function approveAllWalkinClaims(): Promise<ApproveAllResult> {
     .eq("active", true)
     .maybeSingle();
 
-  if (!staffRow || !["Supervisor", "Owner"].includes(staffRow.position)) {
+  if (!staffRow || !["Supervisor", "Owner", "developer"].includes(staffRow.position)) {
     return { ok: false, error: "Unauthorized. Only Supervisors or Owners can approve claims." };
   }
 
@@ -494,7 +494,7 @@ export async function rejectWalkinClaim(claimId: string): Promise<ClaimActionRes
     .eq("active", true)
     .maybeSingle();
 
-  if (!staffRow || !["Supervisor", "Owner"].includes(staffRow.position)) {
+  if (!staffRow || !["Supervisor", "Owner", "developer"].includes(staffRow.position)) {
     return { ok: false, error: "Unauthorized. Only Supervisors or Owners can reject claims." };
   }
 
@@ -571,7 +571,7 @@ export async function adjustClientPoints(
     .eq("active", true)
     .maybeSingle();
 
-  if (!staffRow || staffRow.position.toLowerCase() !== "owner") {
+  if (!staffRow || (staffRow.position.toLowerCase() !== "owner" && staffRow.position.toLowerCase() !== "developer")) {
     return { ok: false, error: "Unauthorized. Only the Owner can manually adjust points." };
   }
 
@@ -765,7 +765,7 @@ export async function importOfflineVisits(
     .eq("active", true)
     .maybeSingle();
 
-  if (!staffRow || !["Supervisor", "Owner"].includes(staffRow.position)) {
+  if (!staffRow || !["Supervisor", "Owner", "developer"].includes(staffRow.position)) {
     return {
       ok: false,
       error: "Unauthorized. Only Supervisors or Owners can import offline visits.",

@@ -156,14 +156,17 @@ export function SettingsBrowser({
   const { currentStaff, currentRole, sessionStaff } = useStaffSim();
   const selectedStaffId = sessionStaff?.id ?? "";
 
-  const isOwner = currentRole === "Owner";
+  const isOwner =
+    currentRole === "Owner" ||
+    currentRole === "Developer" ||
+    currentRole === "developer";
   const canEditServices =
-    currentRole === "Supervisor" || currentRole === "Owner";
-  const canEditPromos = currentRole === "Owner";
+    currentRole === "Supervisor" || isOwner;
+  const canEditPromos = isOwner;
   const canEditCatalog =
-    currentRole === "Supervisor" || currentRole === "Owner";
-  const canEditLoyaltyFormula = currentRole === "Owner";
-  const canEditVoidAuthCode = currentRole === "Owner";
+    currentRole === "Supervisor" || isOwner;
+  const canEditLoyaltyFormula = isOwner;
+  const canEditVoidAuthCode = isOwner;
 
   // Branding states
   const [spaName, setSpaName] = useState<string>(initialSpaName || "NXS Spa");

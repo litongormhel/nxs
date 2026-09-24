@@ -180,7 +180,7 @@ async function guardLapsedSale(
     return { ok: false, error: "Could not verify staff role." };
   }
 
-  if (staffRow.position !== "Owner") {
+  if (staffRow.position !== "Owner" && staffRow.position !== "developer") {
     return {
       ok: false,
       error: "Sales older than 3 days can only be modified or voided by the Owner.",

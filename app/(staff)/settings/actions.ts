@@ -57,7 +57,7 @@ async function requireOwner(
     .eq("user_id", user.id)
     .single();
   if (error) return fail(error);
-  if (staff?.position !== "Owner") {
+  if (staff?.position !== "Owner" && staff?.position !== "developer") {
     return { ok: false, error: "Owner only." };
   }
   return null;

@@ -165,7 +165,7 @@ function RateRow({ service }: { service: CommissionService }) {
 export function CommissionRatesBrowser({ services }: { services: CommissionService[] }) {
   const { currentRole } = useStaffSim();
 
-  if (currentRole !== "Owner") {
+  if (currentRole !== "Owner" && currentRole !== "Developer" && currentRole !== "developer") {
     return (
       <div className="rounded-xl border border-border bg-surface p-6 text-sm text-muted max-w-md">
         Commission is Owner-only. Sign in with an Owner account to view this
