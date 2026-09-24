@@ -225,6 +225,7 @@ export function ClientBrowser({
 
   const handleOpenMemberProfile = (client: Client) => {
     setSelectedMemberForProfile(client);
+    setIsOpeningAction(null);
     setShowClientQr(false);
     setIsEditingNotes(false);
     setNotesError(null);
@@ -280,6 +281,7 @@ export function ClientBrowser({
   // Quick Walk-in Modal for redemptions
   const [showRedemptionWalkin, setShowRedemptionWalkin] = useState(false);
   const [redemptionClient, setRedemptionClient] = useState<Client | null>(null);
+  const [isOpeningAction, setIsOpeningAction] = useState<"redeem" | "logVisit" | null>(null);
 
   // Claim actions and modal states
   const [approvingClaimId, setApprovingClaimId] = useState<string | null>(null);
@@ -598,6 +600,7 @@ export function ClientBrowser({
   }, [pendingClaims]);
 
   async function handleApproveSingle(claimId: string) {
+    if (approvingClaimId || rejectingClaimId) return;
     setApprovingClaimId(claimId);
     setActionFeedback(null);
     try {
@@ -616,6 +619,7 @@ export function ClientBrowser({
   }
 
   async function handleRejectSingle(claimId: string) {
+    if (approvingClaimId || rejectingClaimId) return;
     setRejectingClaimId(claimId);
     setActionFeedback(null);
     try {
@@ -634,6 +638,7 @@ export function ClientBrowser({
   }
 
   async function handleApproveAllConfirm() {
+    if (isApprovingAll) return;
     setIsApprovingAll(true);
     setBulkApproveFeedback(null);
     try {
@@ -659,6 +664,7 @@ export function ClientBrowser({
   }
 
   async function handleSubmitClaim() {
+    if (isSubmittingClaim) return;
     if (!selectedCandidate || !selectedMemberForProfile) return;
     if (!allowWalkinClaims) {
       setClaimFeedback({
@@ -734,6 +740,7 @@ export function ClientBrowser({
   };
 
   const handleConfirmAdjustment = async () => {
+    if (isSubmittingAdjust) return;
     if (!adjustTargetClient) return;
     const parsed = parseInt(adjustPointsInput, 10);
     if (isNaN(parsed) || parsed <= 0) {
@@ -1348,7 +1355,7 @@ export function ClientBrowser({
                                   type="button"
                                   onClick={() => handleApproveSingle(claim.id)}
                                   disabled={isApproving || isRejecting}
-                                  className="rounded border border-gold/60 bg-gold/10 px-2.5 py-1 text-xs font-semibold text-gold hover:bg-gold/20 disabled:opacity-50 transition-colors cursor-pointer"
+                                  className="rounded border border-gold/60 bg-gold/10 px-2.5 py-1 text-xs font-semibold text-gold hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
                                 >
                                   {isApproving ? "Approving..." : "Approve"}
                                 </button>
@@ -1356,7 +1363,7 @@ export function ClientBrowser({
                                   type="button"
                                   onClick={() => handleRejectSingle(claim.id)}
                                   disabled={isApproving || isRejecting}
-                                  className="rounded border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition-colors cursor-pointer"
+                                  className="rounded border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
                                 >
                                   {isRejecting ? "Rejecting..." : "Reject"}
                                 </button>
@@ -1629,16 +1636,27 @@ export function ClientBrowser({
                 <button
                   type="button"
                   onClick={() => {
+                    if (isOpeningAction) return;
+                    setIsOpeningAction("redeem");
                     setRedemptionClient(selectedMemberForProfile);
                     setShowRedemptionWalkin(true);
                     setSelectedMemberForProfile(null);
                     setIsEditingNotes(false);
                     setShowClientQr(false);
                   }}
-                  disabled={services.length === 0 || staff.length === 0}
+                  disabled={services.length === 0 || staff.length === 0 || !!isOpeningAction}
                   className="w-full flex items-center justify-center gap-1.5 rounded-md border border-gold bg-gold hover:bg-gold-hover text-background px-4 py-2 text-xs font-bold shadow-[0_0_15px_rgba(200,155,60,0.3)] transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <span>🎁</span> Redeem 100 Points for Free Massage
+                  {isOpeningAction === "redeem" ? (
+                    <>
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                      Opening…
+                    </>
+                  ) : (
+                    <>
+                      <span>🎁</span> Redeem 100 Points for Free Massage
+                    </>
+                  )}
                 </button>
               )}
 
@@ -1646,16 +1664,27 @@ export function ClientBrowser({
               <button
                 type="button"
                 onClick={() => {
+                  if (isOpeningAction) return;
+                  setIsOpeningAction("logVisit");
                   setLogVisitClient(selectedMemberForProfile);
                   setShowLogVisit(true);
                   setSelectedMemberForProfile(null);
                   setIsEditingNotes(false);
                   setShowClientQr(false);
                 }}
-                disabled={services.length === 0 || staff.length === 0}
+                disabled={services.length === 0 || staff.length === 0 || !!isOpeningAction}
                 className="w-full flex items-center justify-center gap-1.5 rounded-md border border-border bg-surface-2 hover:bg-surface-accent text-foreground hover:border-gold/40 px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"
               >
-                <span>+</span> Log Visit for Member
+                {isOpeningAction === "logVisit" ? (
+                  <>
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+                    Opening…
+                  </>
+                ) : (
+                  <>
+                    <span>+</span> Log Visit for Member
+                  </>
+                )}
               </button>
 
               {/* Secondary button: Claim Past Walk-in Visit */}
@@ -2042,10 +2071,12 @@ export function ClientBrowser({
           onClose={() => {
             setShowRedemptionWalkin(false);
             setRedemptionClient(null);
+            setIsOpeningAction(null);
           }}
           onCreated={() => {
             setShowRedemptionWalkin(false);
             setRedemptionClient(null);
+            setIsOpeningAction(null);
             router.refresh();
           }}
         />
@@ -2065,10 +2096,12 @@ export function ClientBrowser({
           onClose={() => {
             setShowLogVisit(false);
             setLogVisitClient(null);
+            setIsOpeningAction(null);
           }}
           onLogged={() => {
             setShowLogVisit(false);
             setLogVisitClient(null);
+            setIsOpeningAction(null);
             router.refresh();
           }}
         />

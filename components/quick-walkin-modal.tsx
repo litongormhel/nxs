@@ -1146,12 +1146,14 @@ export function QuickWalkinModal({
         isCurrentTherapistQualified));
 
   function handleClose() {
+    if (isPending) return;
     setStep("form");
     setError(null);
     onClose();
   }
 
   function handleProceedToReview() {
+    if (isPending) return;
     setError(null);
     if (!clientId && !guestName.trim()) {
       setError("Please select a client or enter a guest name.");
@@ -1223,6 +1225,7 @@ export function QuickWalkinModal({
   }
 
   function handleSubmit() {
+    if (isPending) return;
     setError(null);
     if (!promoCheck.eligible) {
       setError(promoCheck.reason || "The selected promo cannot be applied to this booking.");
@@ -2109,7 +2112,7 @@ export function QuickWalkinModal({
             type="button"
             onClick={handleClose}
             disabled={isPending}
-            className="flex-1 rounded-md border border-border px-4 py-2 text-sm text-foreground hover:border-gold/30 disabled:opacity-50"
+            className="flex-1 rounded-md border border-border px-4 py-2 text-sm text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancel
           </button>
@@ -2310,11 +2313,12 @@ export function QuickWalkinModal({
           <button
             type="button"
             onClick={() => {
+              if (isPending) return;
               setError(null);
               setStep("form");
             }}
             disabled={isPending}
-            className="flex-1 rounded-md border border-border px-4 py-2.5 text-sm text-foreground hover:border-gold/30 disabled:opacity-50"
+            className="flex-1 rounded-md border border-border px-4 py-2.5 text-sm text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-50"
           >
             ← Back / Edit
           </button>

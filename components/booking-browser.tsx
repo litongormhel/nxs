@@ -245,6 +245,7 @@ export function BookingBrowser({
   const [reassignStartTime, setReassignStartTime] = useState("");
   const [reassignError, setReassignError] = useState<string | null>(null);
   const [reassignSaving, setReassignSaving] = useState(false);
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
   const [smsConfirmationTarget, setSmsConfirmationTarget] = useState<SmsConfirmationTarget | null>(
     () => getCachedSmsTarget()
   );
@@ -438,9 +439,15 @@ export function BookingBrowser({
   }, [rowsForTab, selectedTimeSlot, searchQuery, clients]);
 
   async function handleSetStatus(id: string, status: Database["public"]["Enums"]["booking_status"]) {
-    await updateBookingStatus(id, status);
-    reload();
-    router.refresh();
+    if (updatingStatusId) return;
+    setUpdatingStatusId(id);
+    try {
+      await updateBookingStatus(id, status);
+      reload();
+      router.refresh();
+    } finally {
+      setUpdatingStatusId(null);
+    }
   }
 
   // Scanning a Member QR resolves a client, then hands off into whichever of
@@ -525,23 +532,29 @@ export function BookingBrowser({
   }, [reassignBooking, reassignTherapistId, timeSlots]);
 
   async function handleConfirmReassign() {
-    if (!reassignBooking || !reassignTherapistId || !reassignStartTime || !sessionStaff) return;
+    if (reassignSaving || !reassignBooking || !reassignTherapistId || !reassignStartTime || !sessionStaff) return;
     setReassignSaving(true);
     setReassignError(null);
-    const res = await changeBookingTherapist(
-      reassignBooking.id,
-      reassignTherapistId,
-      sessionStaff.id,
-      reassignStartTime
-    );
-    setReassignSaving(false);
-    if (!res.ok) {
-      setReassignError(res.error);
-      return;
+    try {
+      const res = await changeBookingTherapist(
+        reassignBooking.id,
+        reassignTherapistId,
+        sessionStaff.id,
+        reassignStartTime
+      );
+      if (!res.ok) {
+        setReassignError(res.error);
+        setReassignSaving(false);
+        return;
+      }
+      setReassignSaving(false);
+      setReassignBooking(null);
+      reload();
+      router.refresh();
+    } catch (err: any) {
+      setReassignError(err?.message || "Failed to reassign booking.");
+      setReassignSaving(false);
     }
-    setReassignBooking(null);
-    reload();
-    router.refresh();
   }
 
   function openCancel(row: BookingRow) {
@@ -551,51 +564,63 @@ export function BookingBrowser({
   }
 
   async function handleConfirmCancel() {
-    if (!cancelBookingRow) return;
+    if (cancelSaving || !cancelBookingRow) return;
     setCancelSaving(true);
     setCancelError(null);
-    const res = await cancelBooking(cancelBookingRow.id, sessionStaff?.id, cancelReason);
-    setCancelSaving(false);
-    if (!res.ok) {
-      setCancelError(res.error);
-      return;
+    try {
+      const res = await cancelBooking(cancelBookingRow.id, sessionStaff?.id, cancelReason);
+      if (!res.ok) {
+        setCancelError(res.error);
+        setCancelSaving(false);
+        return;
+      }
+      setCancelSaving(false);
+      setCancelBookingRow(null);
+      reload();
+      router.refresh();
+    } catch (err: any) {
+      setCancelError(err?.message || "Failed to cancel booking.");
+      setCancelSaving(false);
     }
-    setCancelBookingRow(null);
-    reload();
-    router.refresh();
   }
 
   async function handleConfirmBulkCancel() {
-    if (upcomingRows.length === 0) return;
+    if (bulkCancelSaving || upcomingRows.length === 0) return;
     const idsToCancel = upcomingRows.map((r) => r.id);
 
     setBulkCancelSaving(true);
     setBulkCancelError(null);
 
-    // Optimistically mark target bookings as Cancelled in dayBookings state
-    setDayBookings((prev) =>
-      prev.map((b) => (idsToCancel.includes(b.id) ? { ...b, status: "Cancelled" as const } : b))
-    );
-    setShowBulkCancelModal(false);
+    try {
+      const res = await bulkCancelLapsedBookings(idsToCancel, date, sessionStaff?.id);
+      if (!res.ok) {
+        setBulkCancelError(res.error);
+        setBulkCancelSaving(false);
+        reload();
+        return;
+      }
 
-    const res = await bulkCancelLapsedBookings(idsToCancel, date, sessionStaff?.id);
-    setBulkCancelSaving(false);
-
-    if (!res.ok) {
-      setBulkCancelError(res.error);
-      setShowBulkCancelModal(true);
+      setDayBookings((prev) =>
+        prev.map((b) => (idsToCancel.includes(b.id) ? { ...b, status: "Cancelled" as const } : b))
+      );
+      setShowBulkCancelModal(false);
+      setBulkCancelSaving(false);
       reload();
-      return;
+      router.refresh();
+    } catch (err: any) {
+      setBulkCancelError(err?.message || "Failed to cancel lapsed bookings.");
+      setBulkCancelSaving(false);
+      reload();
     }
-
-    reload();
-    router.refresh();
   }
 
   function renderActions(row: BookingRow) {
     const isNonTherapist = isNonTherapistBooking(row);
     const canEarnRedeem =
       !row.client_id || (clients.find((c) => c.id === row.client_id)?.has_portal_account ?? false);
+    const isUpdatingThis = updatingStatusId === row.id;
+    const isAnyUpdating = !!updatingStatusId;
+
     return (
       <div className="flex items-center gap-1.5">
         {row.status === "Booked" && (
@@ -603,7 +628,7 @@ export function BookingBrowser({
             <button
               type="button"
               onClick={() => setLogVisitBooking(row)}
-              disabled={!canEarnRedeem}
+              disabled={!canEarnRedeem || isAnyUpdating}
               title={canEarnRedeem ? undefined : "Walang portal account — hindi pa mag-eearn/redeem ng points."}
               className="rounded-md border border-[#a97e2e] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-gold hover:brightness-125 transition-all disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -611,17 +636,19 @@ export function BookingBrowser({
             </button>
             <button
               type="button"
+              disabled={isAnyUpdating}
               onClick={() => handleSetStatus(row.id, "No-show")}
-              className="rounded-md border border-[#5e3c3c] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-red hover:brightness-125 transition-all"
+              className="rounded-md border border-[#5e3c3c] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-red hover:brightness-125 transition-all disabled:cursor-not-allowed disabled:opacity-50"
             >
-              No-show
+              {isUpdatingThis ? "Updating…" : "No-show"}
             </button>
             <button
               type="button"
+              disabled={isAnyUpdating}
               onClick={() => handleSetStatus(row.id, "Cancelled")}
-              className="rounded-md border border-border bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-muted hover:brightness-125 transition-all"
+              className="rounded-md border border-border bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-muted hover:brightness-125 transition-all disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Cancel
+              {isUpdatingThis ? "Cancelling…" : "Cancel"}
             </button>
           </>
         )}
@@ -629,15 +656,17 @@ export function BookingBrowser({
           <>
             <button
               type="button"
+              disabled={isAnyUpdating}
               onClick={() => openReassign(row)}
-              className="rounded-md border border-[#6b4f1f] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-amber hover:brightness-125 transition-all"
+              className="rounded-md border border-[#6b4f1f] bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-accent-amber hover:brightness-125 transition-all disabled:cursor-not-allowed disabled:opacity-50"
             >
               Reassign
             </button>
             <button
               type="button"
+              disabled={isAnyUpdating}
               onClick={() => openCancel(row)}
-              className="rounded border border-red-500/30 px-2 py-1 text-xs text-red-400 hover:bg-red-500/10"
+              className="rounded border border-red-500/30 px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Cancel
             </button>
@@ -646,8 +675,9 @@ export function BookingBrowser({
         {!isNonTherapist && (row.status === "Booked" || row.status === "No-show") && (
           <button
             type="button"
+            disabled={isAnyUpdating}
             onClick={() => openReassign(row)}
-            className="rounded-md border border-border bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-muted hover:brightness-125 transition-all"
+            className="rounded-md border border-border bg-surface-2 px-2.5 py-1 text-[10px] font-bold text-muted hover:brightness-125 transition-all disabled:cursor-not-allowed disabled:opacity-50"
           >
             Change
           </button>
@@ -829,12 +859,16 @@ export function BookingBrowser({
             <div className="sm:ml-auto">
               <button
                 type="button"
-                onClick={() => setShowBulkCancelModal(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 px-3 py-1.5 text-xs font-bold transition-all shadow-sm active:scale-95"
+                onClick={() => {
+                  if (bulkCancelSaving) return;
+                  setShowBulkCancelModal(true);
+                }}
+                disabled={bulkCancelSaving}
+                className="flex items-center gap-1.5 rounded-lg border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 px-3 py-1.5 text-xs font-bold transition-all shadow-sm active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
                 title={`Cancel all ${upcomingRows.length} unattended bookings for ${date}`}
               >
                 <span>🧹</span>
-                <span>Cancel All Lapsed ({upcomingRows.length})</span>
+                <span>{bulkCancelSaving ? "Cancelling…" : `Cancel All Lapsed (${upcomingRows.length})`}</span>
               </button>
             </div>
           )}
@@ -1129,8 +1163,12 @@ export function BookingBrowser({
             <div className="flex gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setReassignBooking(null)}
-                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground"
+                disabled={reassignSaving}
+                onClick={() => {
+                  if (reassignSaving) return;
+                  setReassignBooking(null);
+                }}
+                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -1197,8 +1235,12 @@ export function BookingBrowser({
             <div className="flex gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setCancelBookingRow(null)}
-                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground"
+                disabled={cancelSaving}
+                onClick={() => {
+                  if (cancelSaving) return;
+                  setCancelBookingRow(null);
+                }}
+                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Back
               </button>
@@ -1230,10 +1272,11 @@ export function BookingBrowser({
                 type="button"
                 disabled={bulkCancelSaving}
                 onClick={() => {
+                  if (bulkCancelSaving) return;
                   setShowBulkCancelModal(false);
                   setBulkCancelError(null);
                 }}
-                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground"
+                className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Back
               </button>

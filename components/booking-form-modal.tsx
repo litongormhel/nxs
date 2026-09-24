@@ -660,12 +660,14 @@ export function BookingFormModal({
         freeRooms.includes(roomNumber)));
 
   function handleClose() {
+    if (isPending) return;
     setStep("form");
     setError(null);
     onClose();
   }
 
   function handleProceedToReview() {
+    if (isPending) return;
     setError(null);
     if (isPastDate) {
       setError("Cannot book a date in the past.");
@@ -746,6 +748,7 @@ export function BookingFormModal({
   }
 
   function handleSubmit() {
+    if (isPending) return;
     setError(null);
     if (isPastDate) {
       setError("Cannot book a date in the past.");
@@ -1318,7 +1321,7 @@ export function BookingFormModal({
             type="button"
             onClick={handleClose}
             disabled={isPending}
-            className="flex-1 rounded-md border border-border px-4 py-2.5 text-sm text-foreground hover:border-gold/30 disabled:opacity-50"
+            className="flex-1 rounded-md border border-border px-4 py-2.5 text-sm text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancel
           </button>
@@ -1484,11 +1487,12 @@ export function BookingFormModal({
           <button
             type="button"
             onClick={() => {
+              if (isPending) return;
               setError(null);
               setStep("form");
             }}
             disabled={isPending}
-            className="flex-1 rounded-md border border-border px-4 py-2.5 text-sm text-foreground hover:border-gold/30 disabled:opacity-50"
+            className="flex-1 rounded-md border border-border px-4 py-2.5 text-sm text-foreground hover:border-gold/30 disabled:cursor-not-allowed disabled:opacity-50"
           >
             ← Back / Edit
           </button>

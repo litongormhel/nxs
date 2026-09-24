@@ -43,18 +43,23 @@ export function CheckoutConfirmModal({
   const isEarlyOrPreMassage = !isWetArea && (slotStatus === "upcoming" || slotStatus === "ongoing");
 
   const handleConfirm = async () => {
+    if (loading) return;
     setLoading(true);
     setError(null);
-    const res = await checkOutLocker(target.occupancyId, sessionStaff?.id ?? "");
-    setLoading(false);
+    try {
+      const res = await checkOutLocker(target.occupancyId, sessionStaff?.id ?? "");
+      if (!res.ok) {
+        setError(res.error);
+        setLoading(false);
+        return;
+      }
 
-    if (!res.ok) {
-      setError(res.error);
-      return;
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || "Failed to check out locker.");
+      setLoading(false);
     }
-
-    onSuccess();
-    onClose();
   };
 
   const formattedStartTime = target.startTime ? fmtTime(target.startTime) : "scheduled time";
@@ -68,8 +73,11 @@ export function CheckoutConfirmModal({
           <button
             type="button"
             disabled={loading}
-            onClick={onClose}
-            className="text-muted hover:text-foreground text-sm font-bold disabled:opacity-50"
+            onClick={() => {
+              if (loading) return;
+              onClose();
+            }}
+            className="text-muted hover:text-foreground text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
           >
             ✕
           </button>
@@ -117,8 +125,11 @@ export function CheckoutConfirmModal({
           <button
             type="button"
             disabled={loading}
-            onClick={onClose}
-            className="flex-1 rounded-lg border border-border py-2.5 text-xs font-bold text-muted hover:text-foreground transition-all disabled:opacity-50"
+            onClick={() => {
+              if (loading) return;
+              onClose();
+            }}
+            className="flex-1 rounded-lg border border-border py-2.5 text-xs font-bold text-muted hover:text-foreground transition-all disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancel
           </button>
@@ -126,7 +137,7 @@ export function CheckoutConfirmModal({
             type="button"
             disabled={loading}
             onClick={handleConfirm}
-            className="flex-1 rounded-lg border border-[#5e3c3c] bg-accent-red/20 py-2.5 text-xs font-bold text-accent-red hover:bg-accent-red/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            className="flex-1 rounded-lg border border-[#5e3c3c] bg-accent-red/20 py-2.5 text-xs font-bold text-accent-red hover:bg-accent-red/30 transition-all disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
