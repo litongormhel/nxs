@@ -42,6 +42,7 @@ export type ParsedOfflineRow = {
   amount: number;
   promoCode?: string;
   notes: string;
+  pointsDelta: number;
   pointsToCredit: number;
   status: "matched_member" | "walk_in" | "invalid_service";
   validationError?: string;
@@ -327,7 +328,7 @@ export function OfflineCsvImportModal({
           }
 
           // 5. Strict Amount-Based Loyalty Points Computation
-          let pointsToCredit = 0;
+          let pointsDelta = 0;
           let status: "matched_member" | "walk_in" | "invalid_service" = "walk_in";
           let validationError: string | undefined = undefined;
 
@@ -340,12 +341,12 @@ export function OfflineCsvImportModal({
           } else if (matchedClient) {
             status = "matched_member";
             if (isWetArea) {
-              pointsToCredit = WET_AREA_POINTS;
+              pointsDelta = WET_AREA_POINTS;
             } else if (parsedAmount <= 0) {
-              pointsToCredit = 0;
+              pointsDelta = 0;
             } else {
               const mode = (loyaltySettings.mode ?? "proportional") as LoyaltyFormulaMode;
-              pointsToCredit = computeLoyaltyPoints(
+              pointsDelta = computeLoyaltyPoints(
                 mode,
                 parsedAmount,
                 Number(resolvedSvc.price),
@@ -355,7 +356,7 @@ export function OfflineCsvImportModal({
             }
           } else {
             status = "walk_in";
-            pointsToCredit = 0;
+            pointsDelta = 0;
           }
 
           return {
@@ -376,7 +377,8 @@ export function OfflineCsvImportModal({
             amount: parsedAmount,
             promoCode: rawPromo || undefined,
             notes: rawNotes,
-            pointsToCredit,
+            pointsDelta,
+            pointsToCredit: pointsDelta,
             status,
             validationError,
           };
@@ -422,7 +424,7 @@ export function OfflineCsvImportModal({
     const walkInCount = rowsWithResolvedDate.filter((r) => r.status === "walk_in").length;
     const invalidCount = rowsWithResolvedDate.filter((r) => r.status === "invalid_service").length;
     const totalSales = validRows.reduce((sum, r) => sum + r.amount, 0);
-    const totalPoints = validRows.reduce((sum, r) => sum + r.pointsToCredit, 0);
+    const totalPoints = validRows.reduce((sum, r) => sum + (r.pointsDelta ?? r.pointsToCredit), 0);
 
     return {
       totalVisits: rowsWithResolvedDate.length,
@@ -459,7 +461,8 @@ export function OfflineCsvImportModal({
         amount: r.amount,
         promoCode: r.promoCode,
         notes: r.notes,
-        pointsToCredit: r.pointsToCredit,
+        pointsDelta: r.pointsDelta ?? r.pointsToCredit,
+        pointsToCredit: r.pointsDelta ?? r.pointsToCredit,
       }));
 
       const res = await importOfflineVisits(payload);
@@ -833,9 +836,9 @@ export function OfflineCsvImportModal({
                           </td>
                           <td className="px-3.5 py-2.5 text-right font-medium">
                             {row.status === "matched_member" ? (
-                              row.pointsToCredit > 0 ? (
+                              (row.pointsDelta ?? row.pointsToCredit) > 0 ? (
                                 <div>
-                                  <span className="text-gold font-bold">+{row.pointsToCredit} pts</span>
+                                  <span className="text-gold font-bold">+{row.pointsDelta ?? row.pointsToCredit} pts</span>
                                   <div className="text-[10px] text-muted">
                                     {row.resolvedServiceName === "Wet Area" ? "facility rule" : `from ₱${row.amount.toLocaleString()}`}
                                   </div>

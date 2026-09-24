@@ -731,7 +731,8 @@ export type ParsedOfflineRowInput = {
   amount: number;
   promoCode?: string;
   notes: string;
-  pointsToCredit: number;
+  pointsDelta?: number;
+  pointsToCredit?: number;
 };
 
 export type ImportOfflineVisitsResult =
@@ -778,6 +779,26 @@ export async function importOfflineVisits(
     db = supabase;
   }
 
+  // Pre-fetch services and app_settings once for fallback points computation
+  type ServiceFallbackInfo = {
+    id: string;
+    name: string;
+    price: number | string;
+    points_earned: number | string;
+  };
+  const { data: servicesData } = await db
+    .from("services")
+    .select("id, name, price, points_earned");
+  const servicesMap = new Map<string, ServiceFallbackInfo>(
+    ((servicesData ?? []) as any[]).map((s: any) => [s.id, s as ServiceFallbackInfo])
+  );
+
+  const { data: settingsData } = await (db as any)
+    .from("app_settings")
+    .select("loyalty_formula_mode, peso_per_point")
+    .eq("id", true)
+    .maybeSingle();
+
   let importedCount = 0;
   let skippedCount = 0;
   let pointsTotal = 0;
@@ -809,6 +830,28 @@ export async function importOfflineVisits(
       continue;
     }
 
+    // Resolve pointsDelta directly from parsed row (do NOT overwrite or recalculate if provided)
+    let pointsDelta = row.pointsDelta ?? row.pointsToCredit;
+    if (pointsDelta == null && row.matchedClientId) {
+      // Fallback calculation strictly from row.amount (e.g. ₱550 yields +3 pts, not 0 pts)
+      const svc = servicesMap.get(row.serviceId);
+      const isWetAreaSvc = row.serviceName === "Wet Area" || svc?.name === "Wet Area";
+      if (isWetAreaSvc) {
+        pointsDelta = WET_AREA_POINTS;
+      } else if (svc && Number(row.amount) > 0) {
+        const mode = (settingsData?.loyalty_formula_mode ?? "proportional") as LoyaltyFormulaMode;
+        pointsDelta = computeLoyaltyPoints(
+          mode,
+          Number(row.amount),
+          Number(svc.price),
+          Number(svc.points_earned),
+          settingsData?.peso_per_point ?? null
+        );
+      } else {
+        pointsDelta = 0;
+      }
+    }
+
     const isWetArea = row.serviceName === "Wet Area";
     const cleanPromo = row.promoCode?.trim() || "";
     const promoTag = cleanPromo ? `[PROMO: ${cleanPromo}]` : "";
@@ -822,7 +865,6 @@ export async function importOfflineVisits(
     const notesWithTag = notesParts.join(" ");
 
     const bookingId = crypto.randomUUID();
-    const saleId = crypto.randomUUID();
     const visitTimestamp = `${resolvedDate}T${row.time}:00+08:00`;
 
     // 1. Insert into bookings (ensuring start_ts and resolved booking_date)
@@ -862,68 +904,70 @@ export async function importOfflineVisits(
       });
     }
 
-    // 3. Insert into sales (ingesting promo_code or appending to sales.notes/payment_ref)
-    const salePayload: any = {
-      id: saleId,
+    // 3. Normalize payment method to match DB check constraint ('Cash' | 'GCash' | 'Card' | 'Points')
+    let normalizedPaymentMethod: "Cash" | "GCash" | "Card" | "Points" = "Cash";
+    const rawPm = (row.paymentMethod || "").trim().toLowerCase();
+    if (rawPm === "gcash") normalizedPaymentMethod = "GCash";
+    else if (rawPm === "card") normalizedPaymentMethod = "Card";
+    else if (rawPm === "points") normalizedPaymentMethod = "Points";
+    else normalizedPaymentMethod = "Cash";
+
+    // 4. Insert into sales with clean schema columns
+    const generatedSaleId = crypto.randomUUID();
+    const salePayload = {
+      id: generatedSaleId,
       client_id: row.matchedClientId || null,
       guest_label: row.matchedClientId ? null : (row.clientIdentifier || "Walk-in Guest"),
       booking_id: bookingId,
       service_id: row.serviceId,
       therapist_id: isWetArea ? null : (row.therapistId || null),
-      amount: row.amount,
-      payment_method: row.paymentMethod || "Cash",
+      amount: Number(row.amount) || 0,
+      payment_method: normalizedPaymentMethod,
       payment_ref: notesWithTag,
       processed_by: staffRow.id,
       created_at: visitTimestamp,
     };
 
-    // Try inserting with promo_code and notes column, falling back gracefully if columns are not present in schema
-    let { error: sErr } = await db.from("sales").insert({
-      ...salePayload,
-      promo_code: cleanPromo || null,
-      notes: notesWithTag,
-    });
-
-    if (sErr && sErr.message?.includes('column "promo_code" of relation "sales" does not exist')) {
-      sErr = (await db.from("sales").insert({
-        ...salePayload,
-        notes: notesWithTag,
-      })).error;
-    }
-
-    if (sErr && sErr.message?.includes('column "notes" of relation "sales" does not exist')) {
-      sErr = (await db.from("sales").insert(salePayload)).error;
-    }
+    const { data: insertedSale, error: sErr } = await db
+      .from("sales")
+      .insert(salePayload)
+      .select("id")
+      .maybeSingle();
 
     if (sErr) {
       console.error("Failed to insert sales row for offline visit:", sErr);
     }
 
-    // 4. Insert into point_transactions if member matched and points > 0
-    if (row.matchedClientId && row.pointsToCredit > 0) {
+    const saleId = insertedSale?.id || generatedSaleId;
+
+    // Link returned sale.id to the created booking record (bookings.sale_id = sale.id)
+    if (saleId) {
+      await (db as any)
+        .from("bookings")
+        .update({ sale_id: saleId })
+        .eq("id", bookingId);
+    }
+
+    // 5. Insert into point_transactions if member matched and pointsDelta > 0
+    if (row.matchedClientId && (pointsDelta ?? 0) > 0) {
       const ptPayload: any = {
         client_id: row.matchedClientId,
         booking_id: bookingId,
         sale_id: saleId,
-        points_delta: row.pointsToCredit,
+        points_delta: pointsDelta,
         entry_type: "EARN",
-        source: "OFFLINE_FALLBACK",
+        source: "STAFF_MANUAL",
         processed_by: staffRow.id,
         notes: notesWithTag,
         created_at: visitTimestamp,
         idempotency_key: `offline_${row.matchedClientId}_${row.serviceId}_${resolvedDate}_${row.time}`,
       };
 
-      let { error: ptErr } = await db.from("point_transactions").insert(ptPayload);
-      if (ptErr && (ptErr.message?.includes("ledger_source") || ptErr.message?.includes("enum"))) {
-        ptPayload.source = "STAFF_MANUAL";
-        ptErr = (await db.from("point_transactions").insert(ptPayload)).error;
-      }
-
+      const { error: ptErr } = await db.from("point_transactions").insert(ptPayload);
       if (ptErr) {
         console.warn("Failed to insert point_transactions for offline visit:", ptErr);
       } else {
-        pointsTotal += row.pointsToCredit;
+        pointsTotal += pointsDelta!;
       }
     }
 
