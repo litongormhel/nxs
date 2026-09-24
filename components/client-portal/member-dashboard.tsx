@@ -22,11 +22,36 @@ export type PastVisit = {
   serviceName: string;
   therapistName: string | null;
   status: string;
+  pointsDelta?: number | null;
+  pointsEntryType?: string | null;
 };
 
 interface MemberDashboardProps {
   member: MemberProfile;
   pastVisits: PastVisit[];
+}
+
+function renderPointsDelta(visit: PastVisit) {
+  const normStatus = (visit.status ?? "").toLowerCase();
+  const isPending = normStatus === "in progress" || normStatus === "pending" || normStatus === "confirmed";
+
+  if (visit.pointsEntryType === "EARN") {
+    const delta = visit.pointsDelta ?? 0;
+    const prefix = delta > 0 ? `+${delta}` : `${delta}`;
+    return <span className="text-amber-400 font-medium">{prefix} pts</span>;
+  }
+
+  if (visit.pointsEntryType === "REDEEM") {
+    const delta = visit.pointsDelta ?? -100;
+    const formattedDelta = delta < 0 ? delta : `-${delta}`;
+    return <span className="text-rose-400/90 font-medium">{formattedDelta} pts (Reward Visit)</span>;
+  }
+
+  if (isPending) {
+    return <span className="text-neutral-500">Pending checkout</span>;
+  }
+
+  return <span className="text-neutral-500">—</span>;
 }
 
 function formatDate(dateStr: string): string {
@@ -193,6 +218,7 @@ export function MemberDashboard({ member, pastVisits }: MemberDashboardProps) {
                     <th className="pb-3 pl-1">Date & Time</th>
                     <th className="pb-3 px-3">Service</th>
                     <th className="pb-3 px-3">Therapist</th>
+                    <th className="pb-3 px-3 text-right">Points</th>
                     <th className="pb-3 pr-1 text-right">Status</th>
                   </tr>
                 </thead>
@@ -213,6 +239,9 @@ export function MemberDashboard({ member, pastVisits }: MemberDashboardProps) {
                           <span className="text-muted italic text-xs">None (Wet Area)</span>
                         )}
                       </td>
+                      <td className="py-3 px-3 text-right text-xs whitespace-nowrap">
+                        {renderPointsDelta(visit)}
+                      </td>
                       <td className="py-3 pr-1 text-right">
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-[#8a9a76]/10 text-[#8a9a76] border border-[#8a9a76]/30">
                           {visit.status}
@@ -227,28 +256,36 @@ export function MemberDashboard({ member, pastVisits }: MemberDashboardProps) {
             {/* Mobile Card List View */}
             <div className="sm:hidden divide-y divide-border/60">
               {pastVisits.map((visit) => (
-                <div key={visit.id} className="py-3 first:pt-0 last:pb-0 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <div className="font-medium text-sm text-foreground">
-                      {formatDate(visit.bookingDate)}
+                <div key={visit.id} className="py-3.5 first:pt-0 last:pb-0 space-y-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm text-foreground">
+                        {formatDate(visit.bookingDate)}
+                      </span>
+                      <span className="text-xs text-muted">
+                        {formatTime(visit.startTime)}
+                      </span>
                     </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-gold">{visit.serviceName}</span>
+                      <span className="text-muted">
+                        Therapist:{" "}
+                        {visit.therapistName ? (
+                          <span className="text-foreground">{visit.therapistName}</span>
+                        ) : (
+                          <span className="italic">None (Wet Area)</span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-neutral-800" />
+
+                  <div className="flex items-center justify-between text-xs">
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#8a9a76]/10 text-[#8a9a76] border border-[#8a9a76]/30">
                       {visit.status}
                     </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-gold">{visit.serviceName}</span>
-                    <span className="text-muted">{formatTime(visit.startTime)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-muted pt-0.5">
-                    <span>
-                      Therapist:{" "}
-                      {visit.therapistName ? (
-                        <span className="text-foreground">{visit.therapistName}</span>
-                      ) : (
-                        <span className="italic">None (Wet Area)</span>
-                      )}
-                    </span>
+                    <div>{renderPointsDelta(visit)}</div>
                   </div>
                 </div>
               ))}

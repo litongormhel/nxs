@@ -18,6 +18,7 @@ type TherapistRelation = {
 type PointTransactionRelation = {
   id: string;
   entry_type: string;
+  points_delta: number | null;
 } | null;
 
 type SaleRelation = {
@@ -73,7 +74,7 @@ export default async function MemberPortalPage() {
         created_at,
         services ( name, duration_minutes ),
         therapists ( name ),
-        point_transactions ( id, entry_type ),
+        point_transactions ( id, entry_type, points_delta ),
         sales ( id, voided )
       `)
       .eq("client_id", account.client_id)
@@ -108,13 +109,13 @@ export default async function MemberPortalPage() {
   const verifiedBookings = rawBookings.filter((b) => {
     const normStatus = (b.status ?? "").trim().toLowerCase();
 
-    // Check for associated EARN point transactions
+    // Check for associated point transactions (EARN or REDEEM)
     const txList = Array.isArray(b.point_transactions)
       ? b.point_transactions
       : b.point_transactions
         ? [b.point_transactions]
         : [];
-    const hasEarnPoints = txList.some((tx) => tx?.entry_type === "EARN");
+    const hasPointsTx = txList.some((tx) => tx?.entry_type === "EARN" || tx?.entry_type === "REDEEM");
 
     // Check for associated active sales
     const salesList = Array.isArray(b.sales)
@@ -129,8 +130,8 @@ export default async function MemberPortalPage() {
       return true;
     }
 
-    // If booking earned points or has a valid sale, it's a verified completed/availed visit
-    if (hasEarnPoints || hasActiveSale) {
+    // If booking earned/redeemed points or has a valid sale, it's a verified completed/availed visit
+    if (hasPointsTx || hasActiveSale) {
       return true;
     }
 
@@ -151,6 +152,18 @@ export default async function MemberPortalPage() {
       const serviceObj = Array.isArray(b.services) ? b.services[0] : b.services;
       const therapistObj = Array.isArray(b.therapists) ? b.therapists[0] : b.therapists;
 
+      const txList = Array.isArray(b.point_transactions)
+        ? b.point_transactions
+        : b.point_transactions
+          ? [b.point_transactions]
+          : [];
+      const pt = txList.find((tx) => tx?.entry_type === "EARN" || tx?.entry_type === "REDEEM") ?? txList[0] ?? null;
+
+      const rawStatus = (b.status ?? "Completed").trim();
+      const displayStatus = rawStatus.toLowerCase() === "completed"
+        ? "Completed"
+        : rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+
       return {
         id: b.id,
         bookingDate: b.booking_date,
@@ -158,7 +171,9 @@ export default async function MemberPortalPage() {
         durationMinutes: b.duration_minutes ?? serviceObj?.duration_minutes ?? null,
         serviceName: serviceObj?.name ?? "Spa Service",
         therapistName: therapistObj?.name ?? null,
-        status: "Completed",
+        status: displayStatus,
+        pointsDelta: pt?.points_delta ?? null,
+        pointsEntryType: pt?.entry_type ?? null,
       };
     });
 
