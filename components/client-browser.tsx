@@ -8,6 +8,7 @@ import { QuickWalkinModal } from "@/components/quick-walkin-modal";
 import { useStaffSim } from "@/lib/staff-context";
 import { computeLoyaltyPoints, WET_AREA_POINTS, type LoyaltyFormulaMode } from "@/lib/loyalty";
 import { showBookingToast } from "@/components/booking-form-modal";
+import { OfflineCsvImportModal } from "@/components/offline-csv-import-modal";
 import {
   requestWalkinClaim,
   approveWalkinClaim,
@@ -188,9 +189,15 @@ export function ClientBrowser({
   const { currentRole, sessionStaff } = useStaffSim();
   const canReviewClaims = currentRole === "Supervisor" || currentRole === "Owner";
   const isOwner = currentRole === "Owner" || currentRole?.toLowerCase() === "owner" || sessionStaff?.position?.toLowerCase() === "owner";
+  const canImportOffline =
+    canReviewClaims ||
+    isOwner ||
+    sessionStaff?.position === "Supervisor" ||
+    sessionStaff?.position === "Owner";
 
   const [activeTab, setActiveTab] = useState<"members" | "walkins" | "claims">("members");
   const [search, setSearch] = useState("");
+  const [showOfflineCsvModal, setShowOfflineCsvModal] = useState(false);
 
   // Pagination states
   const [membersPageSize, setMembersPageSize] = useState<number>(10);
@@ -869,30 +876,42 @@ export function ClientBrowser({
         </button>
       </div>
 
-      {/* Search bar */}
-      <div className="relative max-w-sm">
-        <svg
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-        </svg>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={
-            activeTab === "members"
-              ? "Search by codename, phone, or @username..."
-              : activeTab === "walkins"
-              ? "Search by guest codename (e.g. Wax, Marky) or date..."
-              : "Search claims by member, codename, staff, or service..."
-          }
-          className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-4 text-sm text-foreground placeholder:text-muted focus:border-gold/50 focus:outline-none"
-        />
+      {/* Search and Action Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="relative max-w-sm flex-1">
+          <svg
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={
+              activeTab === "members"
+                ? "Search by codename, phone, or @username..."
+                : activeTab === "walkins"
+                ? "Search by guest codename (e.g. Wax, Marky) or date..."
+                : "Search claims by member, codename, staff, or service..."
+            }
+            className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-4 text-sm text-foreground placeholder:text-muted focus:border-gold/50 focus:outline-none"
+          />
+        </div>
+
+        {canImportOffline && (
+          <button
+            type="button"
+            onClick={() => setShowOfflineCsvModal(true)}
+            className="flex items-center gap-2 rounded-lg border border-gold/40 bg-gold/10 px-3.5 py-2 text-xs font-semibold text-gold hover:bg-gold/20 hover:border-gold transition-colors cursor-pointer self-start sm:self-auto shrink-0 shadow-sm"
+          >
+            <span>📥 Import Offline CSV</span>
+          </button>
+        )}
       </div>
 
       {/* MEMBERS TAB */}
@@ -2615,6 +2634,25 @@ export function ClientBrowser({
             )}
           </div>
         </div>
+      )}
+
+      {/* Offline Fallback CSV Import Modal */}
+      {showOfflineCsvModal && (
+        <OfflineCsvImportModal
+          isOpen={showOfflineCsvModal}
+          onClose={() => setShowOfflineCsvModal(false)}
+          clients={clients}
+          services={services}
+          therapists={therapists}
+          loyaltySettings={loyaltySettings}
+          onSuccess={(res) => {
+            showBookingToast({
+              title: "CSV Ingestion Successful",
+              description: `Ingested ${res.importedCount} visits (+${res.pointsTotal} pts credited, ${res.skippedCount} skipped).`,
+            });
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );

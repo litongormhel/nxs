@@ -713,3 +713,231 @@ export async function updateClientNotes(
   return { ok: true, notes: cleanedNotes };
 }
 
+// -------------------------------------------------------------
+// Offline CSV Fallback Ingestion Action
+// -------------------------------------------------------------
+
+export type ParsedOfflineRowInput = {
+  date: string;
+  time: string;
+  clientIdentifier: string;
+  matchedClientId?: string | null;
+  serviceId: string;
+  serviceName: string;
+  therapistId?: string | null;
+  roomNumber?: number | null;
+  lockerNumber?: number | null;
+  paymentMethod: string;
+  amount: number;
+  notes: string;
+  pointsToCredit: number;
+};
+
+export type ImportOfflineVisitsResult =
+  | {
+      ok: true;
+      importedCount: number;
+      skippedCount: number;
+      pointsTotal: number;
+      salesTotal: number;
+    }
+  | { ok: false; error: string };
+
+export async function importOfflineVisits(
+  rows: ParsedOfflineRowInput[]
+): Promise<ImportOfflineVisitsResult> {
+  const supabase = await createClient();
+
+  // 1. Session identity verification: Supervisor or Owner
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Not authenticated." };
+  }
+
+  const { data: staffRow } = await supabase
+    .from("staff")
+    .select("id, name, position")
+    .eq("user_id", user.id)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (!staffRow || !["Supervisor", "Owner"].includes(staffRow.position)) {
+    return {
+      ok: false,
+      error: "Unauthorized. Only Supervisors or Owners can import offline visits.",
+    };
+  }
+
+  let db: any = supabase;
+  try {
+    db = createServiceClient();
+  } catch {
+    db = supabase;
+  }
+
+  let importedCount = 0;
+  let skippedCount = 0;
+  let pointsTotal = 0;
+  let salesTotal = 0;
+
+  for (const row of rows) {
+    if (!row.serviceId || !row.date) continue;
+
+    // Idempotency guard: Skip insertion if an identical client_id + service_id + date + time record already exists
+    let bkQuery = db
+      .from("bookings")
+      .select("id")
+      .eq("service_id", row.serviceId)
+      .eq("booking_date", row.date)
+      .eq("start_time", row.time);
+
+    if (row.matchedClientId) {
+      bkQuery = bkQuery.eq("client_id", row.matchedClientId);
+    } else {
+      bkQuery = bkQuery
+        .is("client_id", null)
+        .eq("guest_label", row.clientIdentifier || "Walk-in Guest");
+    }
+
+    const { data: existingBooking } = await bkQuery.maybeSingle();
+    if (existingBooking) {
+      skippedCount++;
+      continue;
+    }
+
+    const isWetArea = row.serviceName === "Wet Area";
+    const notesWithTag = row.notes?.trim()
+      ? `${row.notes.trim()} [OFFLINE_FALLBACK]`
+      : "[OFFLINE_FALLBACK]";
+
+    const bookingId = crypto.randomUUID();
+    const saleId = crypto.randomUUID();
+    const visitTimestamp = `${row.date}T${row.time}:00+08:00`;
+
+    // 1. Insert into bookings
+    const { error: bkErr } = await db.from("bookings").insert({
+      id: bookingId,
+      client_id: row.matchedClientId || null,
+      guest_label: row.matchedClientId ? null : (row.clientIdentifier || "Walk-in Guest"),
+      service_id: row.serviceId,
+      therapist_id: isWetArea ? null : (row.therapistId || null),
+      room_number: isWetArea ? null : (row.roomNumber || null),
+      booking_date: row.date,
+      start_time: row.time,
+      status: "Completed",
+      notes: notesWithTag,
+      created_by: staffRow.id,
+      created_at: visitTimestamp,
+    });
+
+    if (bkErr) {
+      console.warn("Failed to insert booking for offline visit:", bkErr);
+    }
+
+    // 2. Insert into locker_occupancy if locker provided
+    if (row.lockerNumber) {
+      await db.from("locker_occupancy").insert({
+        locker_number: row.lockerNumber,
+        client_id: row.matchedClientId || null,
+        guest_label: row.matchedClientId ? null : (row.clientIdentifier || "Walk-in Guest"),
+        service_id: row.serviceId,
+        room_number: isWetArea ? null : (row.roomNumber || null),
+        booking_id: bookingId,
+        checked_in_at: visitTimestamp,
+        checked_out_at: visitTimestamp,
+        checked_in_by: staffRow.id,
+        checked_out_by: staffRow.id,
+      });
+    }
+
+    // 3. Insert into sales
+    const salePayload: any = {
+      id: saleId,
+      client_id: row.matchedClientId || null,
+      guest_label: row.matchedClientId ? null : (row.clientIdentifier || "Walk-in Guest"),
+      booking_id: bookingId,
+      service_id: row.serviceId,
+      therapist_id: isWetArea ? null : (row.therapistId || null),
+      amount: row.amount,
+      payment_method: row.paymentMethod || "Cash",
+      payment_ref: notesWithTag,
+      processed_by: staffRow.id,
+      created_at: visitTimestamp,
+    };
+
+    // Try inserting with notes column, falling back without it if column is not yet present
+    let { error: sErr } = await db.from("sales").insert({
+      ...salePayload,
+      notes: notesWithTag,
+    });
+    if (sErr && sErr.message?.includes('column "notes" of relation "sales" does not exist')) {
+      sErr = (await db.from("sales").insert(salePayload)).error;
+    }
+
+    if (sErr) {
+      console.error("Failed to insert sales row for offline visit:", sErr);
+    }
+
+    // 4. Insert into point_transactions if member matched and points > 0
+    if (row.matchedClientId && row.pointsToCredit > 0) {
+      const ptPayload: any = {
+        client_id: row.matchedClientId,
+        booking_id: bookingId,
+        sale_id: saleId,
+        points_delta: row.pointsToCredit,
+        entry_type: "EARN",
+        source: "OFFLINE_FALLBACK",
+        processed_by: staffRow.id,
+        notes: notesWithTag,
+        created_at: visitTimestamp,
+        idempotency_key: `offline_${row.matchedClientId}_${row.serviceId}_${row.date}_${row.time}`,
+      };
+
+      let { error: ptErr } = await db.from("point_transactions").insert(ptPayload);
+      if (ptErr && (ptErr.message?.includes("ledger_source") || ptErr.message?.includes("enum"))) {
+        ptPayload.source = "STAFF_MANUAL";
+        ptErr = (await db.from("point_transactions").insert(ptPayload)).error;
+      }
+
+      if (ptErr) {
+        console.warn("Failed to insert point_transactions for offline visit:", ptErr);
+      } else {
+        pointsTotal += row.pointsToCredit;
+      }
+    }
+
+    importedCount++;
+    salesTotal += Number(row.amount) || 0;
+  }
+
+  // 5. Action logging
+  try {
+    await db.from("action_logs").insert({
+      staff_id: staffRow.id,
+      action: "offline_csv_imported",
+      detail: `Staff ${staffRow.name} imported ${importedCount} offline visits (${pointsTotal} pts credited, ${skippedCount} skipped, ₱${salesTotal} sales).`,
+    });
+  } catch (logErr) {
+    console.warn("Failed to write to action_logs:", logErr);
+  }
+
+  // 6. Revalidate all relevant paths
+  revalidatePath("/clients");
+  revalidatePath("/bookings");
+  revalidatePath("/sales");
+  revalidatePath("/portal");
+  revalidatePath("/lockers");
+  revalidatePath("/call-sheet");
+
+  return {
+    ok: true,
+    importedCount,
+    skippedCount,
+    pointsTotal,
+    salesTotal,
+  };
+}
+
+
