@@ -24,9 +24,9 @@ export function ClientCombobox({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 1. All passed clients are active (inactive clients are purged from DB)
+  // 1. Ensure only active members with a portal account appear in the dropdown
   const activeMembers = useMemo(() => {
-    return clients ?? [];
+    return (clients ?? []).filter((c) => c.has_portal_account);
   }, [clients]);
 
   // Selected member object

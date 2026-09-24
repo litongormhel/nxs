@@ -920,7 +920,7 @@ export function BookingFormModal({
             </label>
             <ClientCombobox
               id="bClient"
-              clients={clients}
+              clients={clients.filter((c) => c.has_portal_account)}
               value={clientSelectValue}
               onChange={(val) => {
                 setClientSelectValue(val);

@@ -32,10 +32,25 @@ export default async function BookingsPage() {
     { data: dbDaysOff },
     { data: dbBreaks },
   ] = await Promise.all([
-    supabase
-      .from("clients")
-      .select("id, codename, username, member_code")
-      .order("codename", { ascending: true }),
+    (async () => {
+      const fullRes = await (supabase.from("clients") as any)
+        .select(
+          "id, codename, username, member_code, client_portal_accounts!client_portal_accounts_client_id_fkey!inner(client_id)"
+        )
+        .order("codename", { ascending: true });
+      if (fullRes.error) {
+        const fallbackRes = await (supabase.from("clients") as any)
+          .select("id, codename, username, member_code, client_portal_accounts!inner(client_id)")
+          .order("codename", { ascending: true });
+        if (!fallbackRes.error) return fallbackRes;
+        const directRes = await supabase
+          .from("clients")
+          .select("id, codename, username, member_code")
+          .order("codename", { ascending: true });
+        return directRes;
+      }
+      return fullRes;
+    })(),
     supabase
       .from("services")
       .select("id, name, price, duration_minutes, points_earned")
@@ -175,12 +190,23 @@ export default async function BookingsPage() {
 
   const timeSlots = sortSlotTimes((weekendSlots ?? []).map((s) => s.slot_time.slice(0, 5)));
 
-  // Which clients can EARN/REDEEM points — must have a client_portal_accounts row
+  // Restrict client selector to active members with a registered client_portal_accounts row
   const portalAccountClientIds = new Set((portalAccounts ?? []).map((p) => p.client_id));
-  const clientsWithPortalFlag = (clients ?? []).map((c) => ({
-    ...c,
-    has_portal_account: portalAccountClientIds.has(c.id),
-  }));
+  const clientsWithPortalFlag = (clients ?? [])
+    .filter((c: any) => {
+      if (c.client_portal_accounts) {
+        const cpa = c.client_portal_accounts;
+        return Array.isArray(cpa) ? cpa.length > 0 : Boolean(cpa?.client_id);
+      }
+      return portalAccountClientIds.has(c.id);
+    })
+    .map((c: any) => ({
+      id: c.id,
+      codename: c.codename,
+      username: c.username,
+      member_code: c.member_code ?? undefined,
+      has_portal_account: true,
+    }));
 
   const activeRooms =
     rooms && rooms.length > 0
