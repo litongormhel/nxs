@@ -26,6 +26,7 @@ export type TherapistCandidate = {
 
 export type ParsedOfflineRow = {
   rowNumber: number;
+  rawDate: string;
   date: string;
   time: string;
   clientIdentifier: string;
@@ -39,6 +40,7 @@ export type ParsedOfflineRow = {
   lockerNumber: number | null;
   paymentMethod: string;
   amount: number;
+  promoCode?: string;
   notes: string;
   pointsToCredit: number;
   status: "matched_member" | "walk_in" | "invalid_service";
@@ -133,6 +135,7 @@ export function OfflineCsvImportModal({
 }: OfflineCsvImportModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [parsedRows, setParsedRows] = useState<ParsedOfflineRow[]>([]);
+  const [targetDateOverride, setTargetDateOverride] = useState<string>("");
   const [parseError, setParseError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [importResult, setImportResult] = useState<{
@@ -148,11 +151,11 @@ export function OfflineCsvImportModal({
 
   // Download template CSV helper
   const handleDownloadTemplate = () => {
-    const headers = "date,time,client_identifier,service_name,therapist_name,room_number,locker_number,payment_method,amount,notes";
+    const headers = "date,time,client_identifier,service_name,therapist_name,room_number,locker_number,payment_method,amount,promo_code,notes";
     const sampleRows = [
-      "2026-09-24,17:00,09171234567,Combi Massage,Ron,1,12,Cash,1200,Regular member visit",
-      "2026-09-24,18:30,guest_mike,Wet Area,,,15,GCash,500,Offline walkin sauna",
-      "2026-09-24,19:15,alex_c,Prime Scrub Massage,Kiko,2,8,Card,1800,Offline fallback entry",
+      "2026-09-24,17:00,09171234567,Combi Massage,Ron,1,12,Cash,1200,SEPTREAT,Regular member visit",
+      "2026-09-24,18:30,guest_mike,Wet Area,,,15,GCash,500,,Offline walkin sauna",
+      "2026-09-24,19:15,alex_c,Prime Scrub Massage,Kiko,2,8,Card,1800,PRIME200,Offline fallback entry",
     ];
     const csvContent = "data:text/csv;charset=utf-8," + [headers, ...sampleRows].join("\n");
     const encodedUri = encodeURI(csvContent);
@@ -197,10 +200,11 @@ export function OfflineCsvImportModal({
         const lockerIdx = headers.findIndex((h) => ["lockernumber", "locker"].includes(h));
         const paymentIdx = headers.findIndex((h) => ["paymentmethod", "payment"].includes(h));
         const amountIdx = headers.findIndex((h) => ["amount", "price", "paid"].includes(h));
+        const promoIdx = headers.findIndex((h) => ["promocode", "promo", "code", "voucher"].includes(h));
         const notesIdx = headers.findIndex((h) => ["notes", "note", "remarks"].includes(h));
 
-        if (dateIdx === -1 || serviceIdx === -1) {
-          setParseError("CSV must contain at least 'date' and 'service_name' header columns.");
+        if ((dateIdx === -1 && !targetDateOverride) || serviceIdx === -1) {
+          setParseError("CSV must contain at least 'date' and 'service_name' header columns (or set a Target Spa Date Override).");
           return;
         }
 
@@ -210,7 +214,9 @@ export function OfflineCsvImportModal({
 
         const parsed: ParsedOfflineRow[] = rows.map((row, idx) => {
           const rowNum = idx + 2; // 1-indexed, skipping header
-          const rawDate = (row[dateIdx] ?? "").trim();
+          const rawDate = (dateIdx !== -1 ? row[dateIdx] ?? "" : "").trim();
+          const effectiveDate = targetDateOverride.trim() || rawDate;
+
           let rawTime = (timeIdx !== -1 ? row[timeIdx] ?? "" : "").trim();
           if (rawTime.length === 4 && rawTime.includes(":")) {
             rawTime = "0" + rawTime;
@@ -225,6 +231,7 @@ export function OfflineCsvImportModal({
           const rawLocker = (lockerIdx !== -1 ? row[lockerIdx] ?? "" : "").trim();
           const rawPayment = (paymentIdx !== -1 ? row[paymentIdx] ?? "" : "").trim() || "Cash";
           const rawAmount = (amountIdx !== -1 ? row[amountIdx] ?? "" : "").trim();
+          const rawPromo = (promoIdx !== -1 ? row[promoIdx] ?? "" : "").trim();
           const rawNotes = (notesIdx !== -1 ? row[notesIdx] ?? "" : "").trim();
 
           // 1. Client Matching: phone (exact or sanitized), codename, username (case-insensitive)
@@ -310,13 +317,16 @@ export function OfflineCsvImportModal({
           const parsedLocker = parseInt(rawLocker, 10);
           const lockerNumber = isNaN(parsedLocker) ? null : parsedLocker;
 
-          // 4. Amount Resolution
-          let parsedAmount = parseFloat(rawAmount.replace(/[^0-9.]/g, ""));
-          if (isNaN(parsedAmount) || parsedAmount <= 0) {
+          // 4. Strict Amount Resolution: preserve explicitly entered amounts (including 0)
+          const cleanedAmount = rawAmount.replace(/[^0-9.]/g, "");
+          let parsedAmount = rawAmount !== "" && cleanedAmount !== "" ? parseFloat(cleanedAmount) : NaN;
+          if (isNaN(parsedAmount)) {
             parsedAmount = resolvedSvc ? Number(resolvedSvc.price) : 0;
+          } else if (parsedAmount < 0) {
+            parsedAmount = 0;
           }
 
-          // 5. Loyalty Points Computation
+          // 5. Strict Amount-Based Loyalty Points Computation
           let pointsToCredit = 0;
           let status: "matched_member" | "walk_in" | "invalid_service" = "walk_in";
           let validationError: string | undefined = undefined;
@@ -324,10 +334,15 @@ export function OfflineCsvImportModal({
           if (!resolvedSvc) {
             status = "invalid_service";
             validationError = `Unrecognized service: "${rawService}"`;
+          } else if (!effectiveDate) {
+            status = "invalid_service";
+            validationError = "Missing visit date";
           } else if (matchedClient) {
             status = "matched_member";
             if (isWetArea) {
               pointsToCredit = WET_AREA_POINTS;
+            } else if (parsedAmount <= 0) {
+              pointsToCredit = 0;
             } else {
               const mode = (loyaltySettings.mode ?? "proportional") as LoyaltyFormulaMode;
               pointsToCredit = computeLoyaltyPoints(
@@ -345,7 +360,8 @@ export function OfflineCsvImportModal({
 
           return {
             rowNumber: rowNum,
-            date: rawDate,
+            rawDate,
+            date: effectiveDate,
             time: rawTime,
             clientIdentifier: rawClient,
             matchedClient,
@@ -358,6 +374,7 @@ export function OfflineCsvImportModal({
             lockerNumber,
             paymentMethod: rawPayment,
             amount: parsedAmount,
+            promoCode: rawPromo || undefined,
             notes: rawNotes,
             pointsToCredit,
             status,
@@ -373,17 +390,42 @@ export function OfflineCsvImportModal({
     reader.readAsText(selectedFile);
   };
 
+  // Dynamically resolve row dates when targetDateOverride changes
+  const rowsWithResolvedDate = useMemo(() => {
+    return parsedRows.map((r) => {
+      const effectiveDate = targetDateOverride.trim() || r.rawDate;
+      const isMissingDate = !effectiveDate;
+      let status = r.status;
+      let validationError = r.validationError;
+
+      if (isMissingDate && status !== "invalid_service") {
+        status = "invalid_service";
+        validationError = "Missing visit date";
+      } else if (!isMissingDate && validationError === "Missing visit date") {
+        status = r.matchedClient ? "matched_member" : "walk_in";
+        validationError = undefined;
+      }
+
+      return {
+        ...r,
+        date: effectiveDate,
+        status,
+        validationError,
+      };
+    });
+  }, [parsedRows, targetDateOverride]);
+
   // Summary Metrics calculations
   const metrics = useMemo(() => {
-    const validRows = parsedRows.filter((r) => r.status !== "invalid_service");
-    const matchedCount = parsedRows.filter((r) => r.status === "matched_member").length;
-    const walkInCount = parsedRows.filter((r) => r.status === "walk_in").length;
-    const invalidCount = parsedRows.filter((r) => r.status === "invalid_service").length;
+    const validRows = rowsWithResolvedDate.filter((r) => r.status !== "invalid_service");
+    const matchedCount = rowsWithResolvedDate.filter((r) => r.status === "matched_member").length;
+    const walkInCount = rowsWithResolvedDate.filter((r) => r.status === "walk_in").length;
+    const invalidCount = rowsWithResolvedDate.filter((r) => r.status === "invalid_service").length;
     const totalSales = validRows.reduce((sum, r) => sum + r.amount, 0);
     const totalPoints = validRows.reduce((sum, r) => sum + r.pointsToCredit, 0);
 
     return {
-      totalVisits: parsedRows.length,
+      totalVisits: rowsWithResolvedDate.length,
       validVisits: validRows.length,
       matchedCount,
       walkInCount,
@@ -391,12 +433,12 @@ export function OfflineCsvImportModal({
       totalSales,
       totalPoints,
     };
-  }, [parsedRows]);
+  }, [rowsWithResolvedDate]);
 
   // Execute Ingestion
   const handleConfirmIngest = async () => {
     if (isPending) return;
-    const validRows = parsedRows.filter((r) => r.status !== "invalid_service" && r.serviceId != null);
+    const validRows = rowsWithResolvedDate.filter((r) => r.status !== "invalid_service" && r.serviceId != null);
     if (validRows.length === 0) return;
 
     setIsPending(true);
@@ -415,6 +457,7 @@ export function OfflineCsvImportModal({
         lockerNumber: r.lockerNumber,
         paymentMethod: r.paymentMethod,
         amount: r.amount,
+        promoCode: r.promoCode,
         notes: r.notes,
         pointsToCredit: r.pointsToCredit,
       }));
@@ -461,6 +504,7 @@ export function OfflineCsvImportModal({
     setParsedRows([]);
     setParseError(null);
     setImportResult(null);
+    setTargetDateOverride("");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -494,6 +538,45 @@ export function OfflineCsvImportModal({
 
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Target Ingestion Date Selector (Override) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3 shadow-sm">
+            <div>
+              <label htmlFor="target-spa-date-override" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <span>📅</span>
+                <span>Target Spa Date (Override)</span>
+                {targetDateOverride && (
+                  <span className="ml-1 rounded bg-gold/15 px-1.5 py-0.5 text-[10px] font-semibold text-gold">
+                    Active Override
+                  </span>
+                )}
+              </label>
+              <p className="text-[11px] text-muted mt-0.5">
+                If populated, applies this date to all rows (or fills empty dates). If blank, respects individual CSV row dates.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                id="target-spa-date-override"
+                type="date"
+                value={targetDateOverride}
+                onChange={(e) => setTargetDateOverride(e.target.value)}
+                disabled={isPending}
+                className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-xs text-foreground focus:border-gold focus:outline-none disabled:opacity-50"
+              />
+              {targetDateOverride && (
+                <button
+                  type="button"
+                  onClick={() => setTargetDateOverride("")}
+                  disabled={isPending}
+                  className="rounded px-2 py-1 text-[11px] text-muted hover:text-foreground hover:bg-surface-accent transition-colors cursor-pointer"
+                  title="Clear date override"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Post-Import Result Feedback */}
           {importResult && (
             <div
@@ -603,7 +686,7 @@ export function OfflineCsvImportModal({
           )}
 
           {/* STEP 2: Dry-Run Preview Table & Summary Metrics */}
-          {parsedRows.length > 0 && (
+          {rowsWithResolvedDate.length > 0 && (
             <div className="space-y-5">
               {/* Summary Metrics Banner */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -654,17 +737,20 @@ export function OfflineCsvImportModal({
                     <thead className="sticky top-0 z-10 border-b border-border bg-surface-2 text-muted uppercase tracking-wider font-semibold">
                       <tr>
                         <th className="px-3.5 py-2.5">#</th>
-                        <th className="px-3.5 py-2.5">Date / Time</th>
+                        <th className="px-3.5 py-2.5">
+                          Date / Time {targetDateOverride && <span className="text-gold lowercase font-normal">(override)</span>}
+                        </th>
                         <th className="px-3.5 py-2.5">Identifier & Status</th>
                         <th className="px-3.5 py-2.5">Service</th>
                         <th className="px-3.5 py-2.5">Therapist / Room</th>
                         <th className="px-3.5 py-2.5">Locker</th>
                         <th className="px-3.5 py-2.5">Amount (Method)</th>
+                        <th className="px-3.5 py-2.5">Promo</th>
                         <th className="px-3.5 py-2.5 text-right">Points</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {parsedRows.map((row) => (
+                      {rowsWithResolvedDate.map((row) => (
                         <tr
                           key={row.rowNumber}
                           className={`hover:bg-surface-accent/40 transition-colors ${
@@ -673,7 +759,12 @@ export function OfflineCsvImportModal({
                         >
                           <td className="px-3.5 py-2.5 font-mono text-muted">{row.rowNumber}</td>
                           <td className="px-3.5 py-2.5">
-                            <div className="font-medium text-foreground">{row.date}</div>
+                            <div className="font-medium text-foreground flex items-center gap-1.5">
+                              <span>{row.date || <span className="text-red-400 italic">No date</span>}</span>
+                              {targetDateOverride && row.rawDate && row.rawDate !== row.date && (
+                                <span className="text-[10px] text-muted font-normal line-through">({row.rawDate})</span>
+                              )}
+                            </div>
                             <div className="font-mono text-[11px] text-muted">{row.time}</div>
                           </td>
                           <td className="px-3.5 py-2.5">
@@ -731,9 +822,27 @@ export function OfflineCsvImportModal({
                             <div className="font-semibold text-foreground">₱{row.amount.toLocaleString()}</div>
                             <div className="text-[11px] text-muted">{row.paymentMethod}</div>
                           </td>
+                          <td className="px-3.5 py-2.5">
+                            {row.promoCode ? (
+                              <span className="inline-flex items-center rounded border border-gold/40 bg-gold/15 px-2 py-0.5 font-mono text-[11px] font-semibold text-gold">
+                                {row.promoCode}
+                              </span>
+                            ) : (
+                              <span className="text-muted">—</span>
+                            )}
+                          </td>
                           <td className="px-3.5 py-2.5 text-right font-medium">
-                            {row.pointsToCredit > 0 ? (
-                              <span className="text-gold font-bold">+{row.pointsToCredit} pts</span>
+                            {row.status === "matched_member" ? (
+                              row.pointsToCredit > 0 ? (
+                                <div>
+                                  <span className="text-gold font-bold">+{row.pointsToCredit} pts</span>
+                                  <div className="text-[10px] text-muted">
+                                    {row.resolvedServiceName === "Wet Area" ? "facility rule" : `from ₱${row.amount.toLocaleString()}`}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-muted font-normal">0 pts</span>
+                              )
                             ) : (
                               <span className="text-muted">—</span>
                             )}
@@ -751,7 +860,7 @@ export function OfflineCsvImportModal({
         {/* Modal Footer / Action Bar */}
         <div className="flex items-center justify-between border-t border-border px-6 py-4 bg-surface">
           <div>
-            {parsedRows.length > 0 && !importResult?.ok && (
+            {rowsWithResolvedDate.length > 0 && !importResult?.ok && (
               <button
                 type="button"
                 onClick={handleReset}
@@ -773,7 +882,7 @@ export function OfflineCsvImportModal({
               {importResult?.ok ? "Close" : "Cancel"}
             </button>
 
-            {parsedRows.length > 0 && !importResult?.ok && (
+            {rowsWithResolvedDate.length > 0 && !importResult?.ok && (
               <button
                 type="button"
                 onClick={handleConfirmIngest}
