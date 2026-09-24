@@ -805,21 +805,8 @@ export async function quickWalkin(
           console.warn("[quickWalkin] redemption points insert warning:", ptsErr);
           return { ok: false, error: ptsErr.message };
         }
-      } else if (pointsAwarded != null) {
-        const { error: ptsErr } = await supabase.from("point_transactions").insert({
-          client_id: input.clientId,
-          booking_id: bookingId,
-          sale_id: saleId,
-          points_delta: pointsAwarded,
-          entry_type: "EARN",
-          source: "STAFF_MANUAL",
-          processed_by: input.staffId,
-          notes: `Visit: ${svc?.name ?? "Service"}`,
-        });
-        if (ptsErr) {
-          console.warn("[quickWalkin] points insert warning:", ptsErr);
-        }
       }
+      // Note: EARN points crediting is deferred exclusively to client checkout
     }
 
     // Safely link the new booking to the existing active locker assignment
@@ -865,7 +852,7 @@ export async function quickWalkin(
 
     const pointsLogNote = isRedemption
       ? " points_redeemed=100"
-      : ` points_awarded=${pointsAwarded ?? (input.clientId ? "NONE:formula_not_configured" : "n/a")}`;
+      : ` points_awarded=DEFERRED_TO_CHECKOUT (estimated: ${pointsAwarded ?? (input.clientId ? "NONE:formula_not_configured" : "n/a")})`;
 
     await supabase.from("action_logs").insert({
       staff_id: input.staffId,
@@ -898,7 +885,7 @@ export async function quickWalkin(
     p_payment_method: primaryMethod,
     p_payment_ref: primaryPaymentRef,
     p_staff_id: input.staffId,
-    p_points_earned: isRedemption ? null : pointsAwarded,
+    p_points_earned: null, // EARN points crediting deferred exclusively to client checkout
     p_notes: effectiveNotes,
   };
 
@@ -2083,14 +2070,10 @@ export async function logVisitBooking(
     }
   }
 
-  // 6. Insert Points Transaction (for registered clients)
+  // 6. Insert Points Transaction (for registered clients - redemption only; EARN deferred to checkout)
   let ledgerId: string | null = null;
-  if (input.clientId && (isRedemption || earnedPoints !== null)) {
-    const pointsDelta = isRedemption ? -100 : (earnedPoints as number);
-    const entryType = isRedemption ? "REDEEM" : "EARN";
-    const notes = isRedemption
-      ? `Redemption: ${service.name}${input.upgradeTo ? ` → ${input.upgradeTo} (upgrade)` : ""}`
-      : `Visit: ${service.name}`;
+  if (input.clientId && isRedemption) {
+    const notes = `Redemption: ${service.name}${input.upgradeTo ? ` → ${input.upgradeTo} (upgrade)` : ""}`;
 
     const { data: ledgerData, error: ledgerErr } = await supabase
       .from("point_transactions")
@@ -2098,8 +2081,8 @@ export async function logVisitBooking(
         client_id: input.clientId,
         booking_id: input.bookingId,
         sale_id: saleId,
-        points_delta: pointsDelta,
-        entry_type: entryType,
+        points_delta: -100,
+        entry_type: "REDEEM",
         source: "STAFF_MANUAL",
         processed_by: input.staffId,
         notes,
@@ -2116,7 +2099,7 @@ export async function logVisitBooking(
   // 7. Insert Action Log
   const pointsLogNote =
     input.clientId && !isRedemption
-      ? ` points_awarded=${earnedPoints === null ? "NONE:formula_not_configured" : earnedPoints}`
+      ? ` points_awarded=DEFERRED_TO_CHECKOUT (estimated: ${earnedPoints === null ? "NONE:formula_not_configured" : earnedPoints})`
       : "";
   const payDetail = isSplit ? `split_cash=${cashAmt} split_gcash=${gcashAmt}` : `method=${input.paymentMethod}`;
   await supabase.from("action_logs").insert({
