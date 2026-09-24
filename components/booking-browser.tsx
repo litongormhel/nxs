@@ -79,6 +79,8 @@ export type Service = {
   price: number;
   duration_minutes: number;
   points_earned: number;
+  requires_therapist?: boolean;
+  therapist_required?: boolean;
 };
 export type Therapist = { id: string; name: string };
 export type Staff = { id: string; name: string; position: string };
@@ -131,6 +133,8 @@ type BookingRow = {
   pax_count: number | null;
   notes?: string | null;
   locker_occupancy: LockerOccupancyRow[] | null;
+  service?: { name?: string; requires_therapist?: boolean; therapist_required?: boolean } | null;
+  services?: { name?: string; requires_therapist?: boolean; therapist_required?: boolean } | null;
 };
 
 const ACTIVE_STATUSES: Database["public"]["Enums"]["booking_status"][] = [
@@ -338,6 +342,30 @@ export function BookingBrowser({
     return services.find((s) => s.id === id)?.name ?? "Unknown service";
   }
 
+  function isNonTherapistService(serviceId: string | null | undefined): boolean {
+    if (!serviceId) return false;
+    const svc = services.find((s) => s.id === serviceId);
+    if (!svc) return false;
+    if (svc.requires_therapist === false || svc.therapist_required === false) {
+      return true;
+    }
+    const name = svc.name?.toLowerCase() ?? "";
+    return name.includes("wet area");
+  }
+
+  function isNonTherapistBooking(row: BookingRow): boolean {
+    const svcObj = row.service ?? row.services;
+    if (svcObj) {
+      if (svcObj.requires_therapist === false || svcObj.therapist_required === false) {
+        return true;
+      }
+      if (svcObj.name && svcObj.name.toLowerCase().includes("wet area")) {
+        return true;
+      }
+    }
+    return isNonTherapistService(row.service_id);
+  }
+
   function therapistName(id: string | null) {
     if (!id) return "—";
     return therapists.find((t) => t.id === id)?.name ?? "—";
@@ -444,6 +472,7 @@ export function BookingBrowser({
   }
 
   function openReassign(row: BookingRow) {
+    if (isNonTherapistBooking(row)) return;
     setReassignBooking(row);
     setReassignTherapistId("");
     setReassignStartTime("");
@@ -564,6 +593,7 @@ export function BookingBrowser({
   }
 
   function renderActions(row: BookingRow) {
+    const isNonTherapist = isNonTherapistBooking(row);
     const canEarnRedeem =
       !row.client_id || (clients.find((c) => c.id === row.client_id)?.has_portal_account ?? false);
     return (
@@ -595,7 +625,7 @@ export function BookingBrowser({
             </button>
           </>
         )}
-        {row.status === "Needs Reassignment" && (
+        {!isNonTherapist && row.status === "Needs Reassignment" && (
           <>
             <button
               type="button"
@@ -613,7 +643,7 @@ export function BookingBrowser({
             </button>
           </>
         )}
-        {(row.status === "Booked" || row.status === "No-show") && (
+        {!isNonTherapist && (row.status === "Booked" || row.status === "No-show") && (
           <button
             type="button"
             onClick={() => openReassign(row)}
@@ -855,9 +885,11 @@ export function BookingBrowser({
               </thead>
               <tbody>
                 {filteredRows.map((row) => {
+                  const isNonTherapist = isNonTherapistBooking(row);
                   const flagged =
-                    row.status === "Needs Reassignment" ||
-                    (tab === "checkin" && !row.therapist_id);
+                    !isNonTherapist &&
+                    (row.status === "Needs Reassignment" ||
+                      (tab === "checkin" && !row.therapist_id));
                   const occ = occupancyOf(row);
                   return (
                     <tr
@@ -877,7 +909,7 @@ export function BookingBrowser({
                             >
                               Edit
                             </button>
-                            {(row.status === "Needs Reassignment" || !row.therapist_id) && (
+                            {!isNonTherapist && (row.status === "Needs Reassignment" || !row.therapist_id) && (
                               <button
                                 type="button"
                                 onClick={() => openReassign(row)}
@@ -909,7 +941,13 @@ export function BookingBrowser({
                       <td className="px-3.5 py-3 text-muted">{serviceName(row.service_id)}</td>
                       <td className="px-3.5 py-3">{renderRoomPill(row)}</td>
                       <td className="px-3.5 py-3 text-muted">
-                        {tab === "checkin" && (row.status === "Needs Reassignment" || !row.therapist_id) ? (
+                        {isNonTherapist ? (
+                          <span className="text-muted/70 italic">
+                            {serviceName(row.service_id).toLowerCase().includes("wet area")
+                              ? "None (Wet Area)"
+                              : "—"}
+                          </span>
+                        ) : tab === "checkin" && (row.status === "Needs Reassignment" || !row.therapist_id) ? (
                           <div className="flex flex-col items-start gap-1">
                             <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-accent-amber">
                               ⚠️ Needs Reassignment

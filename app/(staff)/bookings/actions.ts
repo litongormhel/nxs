@@ -154,6 +154,23 @@ export async function createBooking(
 ): Promise<CreateBookingResult> {
   const supabase = await createClient();
 
+  if (input.status === "Needs Reassignment") {
+    const { data: service } = await (supabase.from("services") as any)
+      .select("name, requires_therapist")
+      .eq("id", input.serviceId)
+      .maybeSingle();
+    if (service) {
+      const svcName = service.name?.toLowerCase() ?? "";
+      const requiresTherapist = service.requires_therapist;
+      if (requiresTherapist === false || svcName.includes("wet area")) {
+        return {
+          ok: false,
+          error: "Bookings for services that do not require a therapist cannot be created with Needs Reassignment status.",
+        };
+      }
+    }
+  }
+
   if (input.promoId) {
     const promoCheck = await verifyPromoConstraint(
       supabase,
@@ -1014,6 +1031,25 @@ export async function updateBookingStatus(
   status: BookingStatus
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
+
+  if (status === "Needs Reassignment") {
+    const { data: booking } = await (supabase.from("bookings") as any)
+      .select("service_id, services(name, requires_therapist)")
+      .eq("id", bookingId)
+      .maybeSingle();
+
+    if (booking) {
+      const svcName = booking.services?.name?.toLowerCase() ?? "";
+      const requiresTherapist = booking.services?.requires_therapist;
+      if (requiresTherapist === false || svcName.includes("wet area")) {
+        return {
+          ok: false,
+          error: "Bookings for services that do not require a therapist cannot be set to Needs Reassignment.",
+        };
+      }
+    }
+  }
+
   const { error } = await supabase
     .from("bookings")
     .update({ status })
@@ -1043,13 +1079,21 @@ export async function changeBookingTherapist(
   const { data: booking, error: fetchErr } = await (supabase
     .from("bookings") as any)
     .select(
-      "status, therapist_id, booking_date, start_time, locker_occupancy(id, checked_in_at, checked_out_at, locker_number)"
+      "status, therapist_id, booking_date, start_time, service_id, services(name, requires_therapist), locker_occupancy(id, checked_in_at, checked_out_at, locker_number)"
     )
     .eq("id", bookingId)
     .single();
 
   if (fetchErr || !booking) {
     return { ok: false, error: fetchErr?.message ?? "Booking not found." };
+  }
+
+  const svcName = booking.services?.name?.toLowerCase() ?? "";
+  if (booking.services?.requires_therapist === false || svcName.includes("wet area")) {
+    return {
+      ok: false,
+      error: "Cannot assign a therapist to a service that does not require one.",
+    };
   }
 
   const occupancies = (booking.locker_occupancy as any[]) ?? [];
