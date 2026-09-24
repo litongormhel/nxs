@@ -254,9 +254,12 @@ export function MemberDashboard({ member, pastVisits }: MemberDashboardProps) {
             </div>
 
             {/* Mobile Card List View */}
-            <div className="sm:hidden divide-y divide-border/60">
+            <div className="sm:hidden space-y-3">
               {pastVisits.map((visit) => (
-                <div key={visit.id} className="py-3.5 first:pt-0 last:pb-0 space-y-2">
+                <div
+                  key={visit.id}
+                  className="rounded-xl bg-neutral-900/60 border border-neutral-800 p-3.5 space-y-2.5"
+                >
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-sm text-foreground">
@@ -279,9 +282,7 @@ export function MemberDashboard({ member, pastVisits }: MemberDashboardProps) {
                     </div>
                   </div>
 
-                  <div className="border-t border-neutral-800" />
-
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between pt-2 border-t border-neutral-800/60 text-xs">
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#8a9a76]/10 text-[#8a9a76] border border-[#8a9a76]/30">
                       {visit.status}
                     </span>
