@@ -279,7 +279,7 @@ export type Database = {
           email?: string | null
           id?: string
           investor?: boolean
-          member_code: string
+          member_code?: string
           notes?: string | null
           password_hash?: string | null
           phone?: string | null

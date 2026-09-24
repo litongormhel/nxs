@@ -443,14 +443,18 @@ export function ClientBrowser({
     return map;
   }, [memberTransactions, memberBookings]);
 
-  // Filter clients for search (by codename, phone, or username)
+  // Filter clients for search (by codename, phone, username, or member_code)
   const filteredClients = useMemo(() => {
     if (!search.trim()) return clients;
     const q = search.toLowerCase();
+    const cleanQ = q.startsWith("#") ? q.slice(1) : q;
     return clients.filter((c) =>
       c.codename.toLowerCase().includes(q) ||
       c.username.toLowerCase().includes(q) ||
-      (c.phone && c.phone.toLowerCase().includes(q))
+      (c.phone && c.phone.toLowerCase().includes(q)) ||
+      (c.member_code &&
+        (c.member_code.toLowerCase().includes(q) ||
+          c.member_code.toLowerCase().includes(cleanQ)))
     );
   }, [clients, search]);
 
@@ -575,11 +579,13 @@ export function ClientBrowser({
   const filteredPendingClaims = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return pendingClaims;
+    const cleanQ = q.startsWith("#") ? q.slice(1) : q;
     return pendingClaims.filter((c) => {
       return (
         c.target_client_codename.toLowerCase().includes(q) ||
         c.target_client_username.toLowerCase().includes(q) ||
         c.target_client_member_code.toLowerCase().includes(q) ||
+        c.target_client_member_code.toLowerCase().includes(cleanQ) ||
         (c.walkin_codename && c.walkin_codename.toLowerCase().includes(q)) ||
         (c.guest_label && c.guest_label.toLowerCase().includes(q)) ||
         c.requested_by_staff_name.toLowerCase().includes(q) ||

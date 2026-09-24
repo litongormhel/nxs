@@ -239,7 +239,7 @@ export function OfflineCsvImportModal({
           let matchedClient: ClientCandidate | null = null;
           if (rawClient) {
             const rawSanitizedPhone = sanitizePhone(rawClient);
-            const searchId = rawClient.toLowerCase().replace(/^@/, "");
+            const searchId = rawClient.toLowerCase().replace(/^[@#]/, "");
 
             matchedClient =
               clients.find((c) => {
@@ -255,7 +255,8 @@ export function OfflineCsvImportModal({
                 if (c.username.trim().toLowerCase().replace(/^@/, "") === searchId) {
                   return true;
                 }
-                if (c.member_code.trim().toLowerCase() === searchId) {
+                const cleanCode = c.member_code.trim().toLowerCase().replace(/^#/, "");
+                if (cleanCode === searchId || c.member_code.trim().toLowerCase() === rawClient.trim().toLowerCase()) {
                   return true;
                 }
                 return false;

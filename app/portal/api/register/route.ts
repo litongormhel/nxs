@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/portal/service-client";
 import { hashPassword, MIN_PASSWORD_LENGTH } from "@/lib/portal/password";
-import { generateMemberCode } from "@/lib/portal/codes";
 import { isUsernameTaken, isValidUsername } from "@/lib/portal/username";
 import { setPortalSession } from "@/lib/portal/session";
 import { checkLockout, clientIp, recordFailure } from "@/lib/portal/rate-limit";
@@ -111,7 +110,6 @@ export async function POST(request: Request) {
             codename: name,
             phone,
             username: cleanUsername,
-            member_code: generateMemberCode(),
           })
           .select("id")
           .single();
@@ -119,6 +117,7 @@ export async function POST(request: Request) {
         if (!error) {
           created = data;
         } else if (error.code !== "23505") {
+          console.error("[portal/register] Could not create client record:", error);
           return NextResponse.json({ error: "Could not create client record." }, { status: 500 });
         }
       }

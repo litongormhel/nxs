@@ -39,11 +39,14 @@ export function ClientCombobox({
   const filteredMembers = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return activeMembers;
+    const cleanQ = q.startsWith("#") ? q.slice(1) : q;
     return activeMembers.filter(
       (c) =>
         c.codename.toLowerCase().includes(q) ||
         c.username.toLowerCase().includes(q) ||
-        (c.member_code && c.member_code.toLowerCase().includes(q))
+        (c.member_code &&
+          (c.member_code.toLowerCase().includes(q) ||
+            c.member_code.toLowerCase().includes(cleanQ)))
     );
   }, [activeMembers, query]);
 
@@ -194,7 +197,7 @@ export function ClientCombobox({
                 >
                   <span className="truncate">{option.label}</span>
                   {option.memberCode && (
-                    <span className="text-xs text-muted font-mono ml-2">#{option.memberCode}</span>
+                    <span className="text-xs text-muted font-mono ml-2">{option.memberCode}</span>
                   )}
                 </div>
               );
